@@ -3,7 +3,7 @@ import type { ReactElement } from 'react'
 
 import type { MissionApprovalDecision, MissionApprovalRequest, MissionQuestion } from '../../../shared/ipc.js'
 import { runtimeDisplayName } from '../../../shared/runtimes.js'
-import { dataSentLine } from '../../../shared/approval-data.js'
+import { COMMAND_EFFECTS_UNKNOWN, commandEffectsUnknown, dataSentLine } from '../../../shared/approval-data.js'
 import { commandReach } from '../../../shared/command-reach.js'
 import { Icon } from './Icon.js'
 import { RuntimeMark } from './RuntimeMark.js'
@@ -275,6 +275,8 @@ export function ApprovalCard({
   // arena's `taskkill //F //IM python.exe` stops every Python on the computer,
   // and the card said only "Run a command". See shared/command-reach.ts.
   const reach = request.kind === 'command' ? commandReach(request.detail) : undefined
+  // Both rows would say Unknown: one row says it once (0.735, shared/approval-data.ts).
+  const effectsUnknown = commandEffectsUnknown(request)
 
   // A card that waits on the person is brought into view when it appears.
   // Its buttons sat below the fold while the run said "waiting on you"
@@ -346,13 +348,19 @@ export function ApprovalCard({
         )}
         <dt>Where</dt>
         <dd className="lc-mono">{request.cwd ?? 'the project folder'}</dd>
-        {dataSent !== undefined && (
+        {effectsUnknown && (
+          <>
+            <dt>Effects</dt>
+            <dd>{COMMAND_EFFECTS_UNKNOWN}</dd>
+          </>
+        )}
+        {!effectsUnknown && dataSent !== undefined && (
           <>
             <dt>Data sent</dt>
             <dd>{dataSent}</dd>
           </>
         )}
-        {!isQuestion && (
+        {!isQuestion && !effectsUnknown && (
           <>
             <dt>Reversible</dt>
             <dd>{reversible}</dd>

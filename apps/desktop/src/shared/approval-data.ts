@@ -97,6 +97,21 @@ export function dataSentLine(kind: string, command: string): string | undefined 
 }
 
 /**
+ * ONE ROW FOR A COMMAND LOCUST CANNOT READ (0.735).
+ *
+ * An ordinary command's card said "Unknown" twice -- under Data sent and
+ * again under Reversible, each ending "anything the sandbox allows" -- on the
+ * card a person sees most. When neither row knows anything, they are one row
+ * saying both; whenever either knows something (a network tool, a route's own
+ * words), both rows are drawn as before.
+ */
+export function commandEffectsUnknown(request: { readonly kind: string; readonly detail: string; readonly dataSentSays?: string; readonly reversibleSays?: string }): boolean {
+  return request.kind === 'command' && request.dataSentSays === undefined && request.reversibleSays === undefined && !commandReachesNetwork(request.detail)
+}
+
+export const COMMAND_EFFECTS_UNKNOWN = 'Unknown. Locust cannot tell what a command sends or undo what it does; it can do anything the sandbox allows.'
+
+/**
  * A FILE OUTSIDE THE PROJECT FOLDER (QA-2026-09-29 round 2, R15).
  *
  * Absolute and not under the folder, or relative and climbing out of it.
