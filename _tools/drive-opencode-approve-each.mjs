@@ -13,7 +13,7 @@ import { existsSync } from 'node:fs'
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 
-import { conversationRows, openTeammateScript, say, scratchRepository, sleep, startDrive, recordRoot } from './drive-lib.mjs'
+import { FREE_ROUTE, conversationRows, openTeammateScript, say, scratchRepository, sleep, startDrive, recordRoot } from './drive-lib.mjs'
 
 const arg = (name) => (process.argv.includes(name) ? process.argv[process.argv.indexOf(name) + 1] : undefined)
 const packaged = arg('--packaged')
@@ -22,8 +22,15 @@ const outPath = tag === undefined ? undefined : join(recordRoot('beta-fixes-2026
 if (outPath !== undefined) await mkdir(outPath, { recursive: true })
 
 const workspace = await scratchRepository('locust-drive-oc-approve-ws-')
-// The free model, by default the one the drive was written on; Ling is often busy.
-const MODEL = process.env.LOCUST_FREE_MODEL ?? 'opencode/ling-3.0-flash-fin-free'
+// The free model every drive uses. It was Ling, which was written on but is often busy upstream
+// (0.734: "Upstream request failed" before any card).
+const MODEL = FREE_ROUTE.model
+// A failed check fails the drive: the exit code is what a script gates on.
+let failures = 0
+const verdict = (ok, what) => {
+  if (!ok) failures += 1
+  say(`  [${ok ? 'PASS' : 'FAIL'}] ${what}`)
+}
 /*
  * LAUNCHED ELSEWHERE (0.378). Launched IN the workspace, this drive passed
  * while OpenCode's server was started with no folder of its own: it stood
@@ -110,10 +117,11 @@ try {
   const inAppFolder = existsSync(join(drive.profile, 'approved.txt'))
   await drive.capture('where the approved command wrote its file', () =>
     `in the workspace: ${inWorkspace ? 'PRESENT' : 'ABSENT'} · where the app stands: ${inAppFolder ? 'PRESENT' : 'ABSENT'}`)
-  say(`  [${inWorkspace && !inAppFolder ? 'PASS' : 'FAIL'}] the approved command ran IN the workspace, not where the app stands`)
+  verdict(inWorkspace && !inAppFolder, 'the approved command ran IN the workspace, not where the app stands')
   await drive.capture('a shell command, declined', () =>
     drive.evaluate(ask('Run exactly this shell command with your bash tool: echo DENIED-RUN > denied.txt   If it is declined, do not try another way; say so in one sentence.', 'deny')))
   await drive.capture('the file the declined command would have written', () => `denied.txt: ${existsSync(join(workspace, 'denied.txt')) ? 'PRESENT' : 'ABSENT'}`)
+  verdict(!existsSync(join(workspace, 'denied.txt')), 'the declined command did not run')
   /*
    * AFTER A RELAUNCH (0.568, docs/DESIGN-durable-pause-2026-10.md): the
    * declines are kept in the run's memory, so a reopened conversation may
@@ -128,10 +136,12 @@ try {
   await drive.evaluate(`(async () => { ${conversationRows()}[0]?.click(); await new Promise((r) => setTimeout(r, 1500)) })()`)
   await sleep(500)
   const after = JSON.parse(String(await drive.capture('opened again: the same turns', () => drive.evaluate(rowsOf))))
-  say(`  [${before.some((row) => /declined/i.test(row)) ? 'PASS' : 'FAIL'}] live, the declined call reads declined -- ${JSON.stringify(before)}`)
-  say(`  [${JSON.stringify(after) === JSON.stringify(before) ? 'PASS' : 'FAIL'}] after a relaunch the turns read as they did -- ${JSON.stringify(before)} -> ${JSON.stringify(after)}`)
+  verdict(before.some((row) => /declined/i.test(row)), `live, the declined call reads declined -- ${JSON.stringify(before)}`)
+  verdict(JSON.stringify(after) === JSON.stringify(before), `after a relaunch the turns read as they did -- ${JSON.stringify(before)} -> ${JSON.stringify(after)}`)
 } catch (error) {
+  failures += 1
   say(`drive failed: ${error instanceof Error ? error.message : String(error)}`)
 } finally {
   await drive.finish({ intro: `Build: ${packaged ?? 'whatever pnpm build last wrote to out/'}. Wren on OpenCode / ${MODEL}, Approve each action, the app launched outside the workspace; one shell command approved once, one declined.` })
 }
+process.exit(failures === 0 ? 0 : 1)
