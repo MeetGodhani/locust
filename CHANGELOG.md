@@ -15,7 +15,7 @@ heading: the home screen then shows it once, as a splash.
 
 ### Fixed
 
-- **A Codex command that never started says why.** On Windows, while the Codex desktop app is open, Codex's sandbox can fail to set itself up, and every command in Ask, Edit or Approve each fails before it starts. The turn now says "Codex's sandbox did not start", and the command explains it: quit the Codex app and ask again, or use Auto, which runs without the sandbox.
+- **A Codex command that never started says why.** On Windows, while the Codex desktop app is open, Codex's sandbox can fail to set itself up, and every command fails before it starts in any mode but Auto. The turn now says "Codex's sandbox did not start", and the command explains it: quit the Codex app and ask again, or use Auto, which runs without the sandbox.
 
 ## 0.735.0 - 2026-10-10
 
