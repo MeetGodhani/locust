@@ -4,6 +4,7 @@ import { providerErrorSentence } from '@teammate/runtime-adapters/provider-error
 import { SUBAGENT_TOOL } from './faceState.js'
 import { EVENT_WINDOW, TRIMMED_TURN_LINE, windowEvents } from '../../shared/event-window.js'
 import { isImagePath } from '../../shared/image-files.js'
+import { codexSandboxDidNotStart } from '../../shared/codex-sandbox.js'
 import { READ_TOOL_WORDS, byHelper, editToolName, isEditCommand, isShellTool } from '../../shared/tool-kinds.js'
 import { LARGE_FILE_LINES, fileCounts, parseUnifiedDiff } from './diff.js'
 import type { DiffCounts, DiffFile } from './diff.js'
@@ -2292,6 +2293,8 @@ export function stepsLine(details: readonly ActivityDetail[], finished: boolean,
     phrases.set(kind, held)
   }
   let failed = 0
+  // Of those, commands Codex's Windows sandbox never started (0.736, shared/codex-sandbox.ts).
+  let sandboxFailed = 0
   let refused = 0
   let declined = 0
   let silent = 0
@@ -2332,6 +2335,7 @@ export function stepsLine(details: readonly ActivityDetail[], finished: boolean,
     }
     if (detail.kind === 'shell') {
       if (detail.failed === true || (detail.exitCode !== undefined && detail.exitCode !== 0)) failed += 1
+      if (detail.failed === true && codexSandboxDidNotStart(detail.output)) sandboxFailed += 1
       const looked = commandLooksAt(detail.name)
       if (looked === 'read' && commandTargets(detail.name).length > 1) for (const name of commandTargets(detail.name)) note('read', name)
       else if (looked === 'search' && /[\\/]/.test(commandPattern(detail.name) ?? '')) note('searchedIn', commandPattern(detail.name)!.split(/[\\/]/).filter((part) => part.length > 0).at(-1))
@@ -2474,6 +2478,8 @@ export function stepsLine(details: readonly ActivityDetail[], finished: boolean,
         : words[0]!
   const segments: TraceSegment[] = [{ key: 'what', text: `${sentence.charAt(0).toUpperCase()}${sentence.slice(1)}`, ...(loneFailed ? { tone: 'amber' as const } : {}) }]
   if (failed > 0 && !loneFailed) segments.push({ key: 'failed', text: `${String(failed)} failed`, tone: 'amber' })
+  // Every failure was the sandbox not starting: the line says so, not only the row (the look drive, 2026-10-10).
+  if (sandboxFailed > 0 && sandboxFailed === failed) segments.push({ key: 'sandbox', text: 'Codex’s sandbox did not start', tone: 'amber' })
   if (working > 0) segments.push({ key: 'working', text: `${String(working)} working in the background` })
   if (silent > 0) segments.push({ key: 'silent', text: `${String(silent)} did not report`, tone: 'amber' })
   if (refused > 0) segments.push({ key: 'refused', text: `${String(refused)} refused`, tone: 'amber' })

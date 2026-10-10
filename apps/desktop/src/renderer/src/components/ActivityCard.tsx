@@ -52,6 +52,7 @@ import { Icon } from './Icon.js'
 import { AgentText, PlanSteps } from './ThreadItems.js'
 import { runtimeDisplayName } from '../../../shared/runtimes.js'
 import { commandReach } from '../../../shared/command-reach.js'
+import { CODEX_SANDBOX_DID_NOT_START, codexSandboxDidNotStart } from '../../../shared/codex-sandbox.js'
 
 /** A changed file's whole text, for its row's Copy; refused in words when it cannot be had as text. */
 async function readWholeFile(path: string, workspacePath: string | undefined): Promise<string | { readonly refused: string }> {
@@ -746,6 +747,7 @@ export function ActivityCard({
                         */}
                       <BackgroundBadge entry={entry} />
                       <ReachBadge entry={entry} />
+                      <SandboxBadge entry={entry} />
                       {entry.output !== undefined && entry.output.trim() === '' && entry.settled && (
                         <span className="lc-filerow__result is-muted">no output</span>
                       )}
@@ -757,6 +759,7 @@ export function ActivityCard({
                     {isOpen(entry) && (
                       <>
                         {entry.title !== undefined && <pre className="lc-shellcommand lc-mono">{entry.command}</pre>}
+                        {entry.failed === true && codexSandboxDidNotStart(entry.output) && <div className="lc-shellwhy">{CODEX_SANDBOX_DID_NOT_START}</div>}
                         {entry.output !== undefined && entry.output.trim() !== '' && (
                           <ShellOutput output={entry.output} failed={entry.failed === true} />
                         )}
@@ -1229,6 +1232,16 @@ function ReachBadge({ entry }: { readonly entry: Extract<ActivityEntry, { kind: 
   return (
     <span className="lc-shellbadge is-reach lc-mono" title={reach.said} data-reach={reach.kind}>
       {reach.short}
+    </span>
+  )
+}
+
+/* Codex's Windows sandbox did not start, so the command never ran (0.736, shared/codex-sandbox.ts). */
+function SandboxBadge({ entry }: { readonly entry: Extract<ActivityEntry, { kind: 'shell' }> }) {
+  if (entry.failed !== true || !codexSandboxDidNotStart(entry.output)) return null
+  return (
+    <span className="lc-shellbadge is-reach lc-mono" title={CODEX_SANDBOX_DID_NOT_START}>
+      sandbox did not start
     </span>
   )
 }
