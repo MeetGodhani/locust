@@ -11,6 +11,12 @@ Settings shows this file as What's new. An entry may group its changes under
 about when they arrive on it carries `<!-- big -->` on the line under its
 heading: the home screen then shows it once, as a splash.
 
+## 0.736.0 - 2026-10-10
+
+### Fixed
+
+- **A Codex command that never started says why.** On Windows, while the Codex desktop app is open, Codex's sandbox can fail to set itself up, and every command in Ask, Edit or Approve each fails before it starts. The turn now says "Codex's sandbox did not start", and the command explains it: quit the Codex app and ask again, or use Auto, which runs without the sandbox.
+
 ## 0.735.0 - 2026-10-10
 
 ### Improved
