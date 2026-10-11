@@ -85,7 +85,13 @@ export function LocustMcpSettings({ heading, api = typeof window === 'undefined'
         {claudeApp.kind === 'added' && <button type="button" className="lc-control" disabled={busy} onClick={() => { void pressClaude('remove') }}>Remove</button>}
       </span>
     </div>}
-    {state?.enabled && <div className="lc-settings__note">
+    {/*
+      * By hand, folded (0.743): with the Claude app one press away, two blocks of paths open under the switch were
+      * the loudest thing on General. They are for Claude Code and Codex, which take a command or a config entry.
+      */}
+    {state?.enabled && <details className="lc-settings__fold lc-mcp-byhand">
+      <summary>Add Locust to Claude Code or Codex by hand</summary>
+      <div className="lc-settings__note">
       {/* A Copy on each (0.691): the lines run to three paths, and selecting a wrapped block by hand is fiddly. */}
       <p>Claude Code — run this in PowerShell:</p>
       <div className="lc-mcp-setupwrap"><pre className="lc-mcp-setup lc-mono">{state.claudeCommand}</pre>
@@ -94,7 +100,8 @@ export function LocustMcpSettings({ heading, api = typeof window === 'undefined'
       <div className="lc-mcp-setupwrap"><pre className="lc-mcp-setup lc-mono">{state.codexConfig}</pre>
         {state.codexConfig !== undefined && <CopyButton className="lc-mcp-setup__copy" label="the Codex settings" text={state.codexConfig} />}</div>
       <p>Locust changes another app’s settings only when you press Add to the Claude app; it keeps a copy of the file first, and Remove takes its entry out again. Turning this off stops new requests, not turns already running.</p>
-    </div>}
+      </div>
+    </details>}
     {(failure || state?.message) && <p className="lc-settings__note" role="status">{failure || state?.message}</p>}
   </>
 }

@@ -19,6 +19,8 @@ import { FREE_ROUTE, scratchRepository, startDrive } from './drive-lib.mjs'
 const arg = (name) => (process.argv.includes(name) ? process.argv[process.argv.indexOf(name) + 1] : undefined)
 const packaged = arg('--packaged')
 const outPath = arg('--out')
+// --width: the window's width, to see the pages narrow (0.743); 1215 when not given, as before.
+const width = arg('--width')
 
 const workspace = await scratchRepository()
 const drive = await startDrive({
@@ -43,6 +45,7 @@ const PAGES = ['General', 'Appearance', 'Privacy & data', 'Teammates', 'Memory',
 
 try {
   await drive.capture('launch', () => drive.ready())
+  if (width !== undefined) await drive.resize(Number(width), 800)
   await drive.capture('open Settings', () => drive.evaluate(`(async () => {
     document.querySelector('button[title="Settings (Ctrl 3)"]').click()
     await new Promise(r => setTimeout(r, 900))

@@ -1829,6 +1829,16 @@ export function SettingsScreen({
         </nav>
         <div className="lc-settings__pane" ref={pane}>
         {/*
+          * A PAGE THAT OPENS ON SWITCHES OPENS WITH ITS NAME (0.743). Colin, 2026-10-11: "the actual contents of the
+          * settings menu is kind of trashy compared to the rest of the app". On General, Teammates and Appearance
+          * the first settings were rows of 13px names, and the first 16px heading came further down -- Startup,
+          * Skills from GitHub, Send button -- so a section mid-page outranked everything above it. Claude's own
+          * settings open each group with its name at that size. The other pages already open on a heading.
+          */}
+        {(shownPage === 'app' || shownPage === 'teammates' || shownPage === 'appearance') && (
+          <p className="lc-settings__pagehead">{SETTINGS_PAGES.find((entry) => entry.id === shownPage)?.label}</p>
+        )}
+        {/*
           * Where the teammates work. A workspace-wide fact, so it sits with
           * the other workspace-wide settings rather than on the intro screen
           * (Colin, 2026-09-05). The composer carries a chip for the same
@@ -3160,15 +3170,26 @@ export function SettingsScreen({
               * 0.618 (the PRD's R22): it left out the pet gallery and the agents Locust installs,
               * two of its own connections. docs/NETWORK.md lists every one, and a test keeps it so.
               */}
+            {/*
+              * One line, then the rest behind a row you open (0.743): it was a fourteen-line paragraph in a column
+              * of short values, the longest thing on any Settings page. Claude's own Privacy page keeps the detail
+              * behind "How we use your data ›".
+              */}
             <dd>
-              The window makes no requests of its own. Locust checks for and downloads its own updates,
+              The window makes no requests of its own; Locust&rsquo;s own connections are each listed.
+              <details className="lc-settings__fold">
+              <summary>What reaches the network</summary>
+              <p>
+              Locust checks for and downloads its own updates,
               installs the AI agents you ask it to and keeps Codex CLI and Copilot CLI current, reads the
               pet gallery when you open it, and asks the address of a model of your own about it when you
               press Test. Voice typing downloads its checked files only when you choose Download;
               local recordings stay on this computer. If you choose Your OpenAI account and allow it, voice typing
-              sends recordings to api.openai.com using your API key. A voice call you start with Talk, beside the microphone, connects this window to OpenAI's voice service for as long as it lasts; Codex places it with your ChatGPT sign-in. Each AI agent talks to its own service. A web page a teammate made
+              sends recordings to api.openai.com using your API key. A voice call you start with Talk, beside the microphone, connects this window to OpenAI's voice service for as long as it lasts; Codex places it with your ChatGPT sign-in, and the call can use your online connectors, asking before one changes anything. Each AI agent talks to its own service. A web page a teammate made
               may load libraries and fonts from the common public hosts and reach no other site, so what it
               reads in your folder cannot be sent anywhere. <NetworkListLink />
+              </p>
+              </details>
             </dd>
           </dl>
           <More>

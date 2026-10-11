@@ -11,6 +11,12 @@ Settings shows this file as What's new. An entry may group its changes under
 about when they arrive on it carries `<!-- big -->` on the line under its
 heading: the home screen then shows it once, as a splash.
 
+## 0.743.0 - 2026-10-11
+
+### Improved
+
+- **Settings reads cleaner.** Every page opens with its name, so no heading further down outranks the settings above it. The long network paragraph on Privacy is one line, with the rest under "What reaches the network". The steps for adding Locust to Claude Code or Codex by hand are folded away. GitHub and your connectors sit as rows like the rest of Settings, not boxes. Labels that were in code capitals are plain words.
+
 ## 0.742.0 - 2026-10-11
 <!-- big -->
 

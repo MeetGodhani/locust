@@ -11901,6 +11901,139 @@ textarea {
   letter-spacing: 0;
 }
 
+/*
+ * SETTINGS, TOUCHED UP TO CLAUDE'S OWN (0.743). Colin, 2026-10-11: "the actual contents of the settings menu is
+ * kind of trashy compared to the rest of the app". Held beside claude.ai's settings the same day: one heading
+ * size, each setting a name and a short muted line with its control at the right, anything longer behind a row
+ * you open, and no boxes. The hairline rows Colin chose in 0.393 stay; this takes out what had grown around them.
+ */
+
+/* A page that opens on switches opens with its name, the size of every other heading on the page. */
+.lc-settings__pagehead {
+  max-width: 720px;
+  margin: 0 0 var(--lc-space-3);
+  font-size: var(--lc-text-section);
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  color: var(--lc-text-primary);
+}
+
+.lc-settings__pane .lc-settings__pagehead + .lc-settings__section--line {
+  padding-top: var(--lc-space-2);
+  border-top: 0;
+}
+
+/* "How it works" sits right under its line, not a row of its own below it. */
+.lc-settings__pane .lc-settings__section--line .lc-settings__more {
+  margin-top: 2px;
+}
+
+/* A list of facts labels them in words, not machine capitals. */
+.lc-settings__pane .lc-receipt dt {
+  padding-top: 0;
+  font-family: inherit;
+  font-size: var(--lc-text-description);
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+/* An agent's skills and commands: a line you open, said in sentence case. */
+.lc-settings__pane .lc-cliartifacts__summary {
+  font-family: inherit;
+  font-size: var(--lc-text-description);
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+/* Something longer, behind a row you open: Claude's "How we use your data ›". */
+.lc-settings__fold {
+  margin-top: var(--lc-space-3);
+}
+
+.lc-settings__fold > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  list-style: none;
+  font-size: var(--lc-text-description);
+  color: var(--lc-text-secondary);
+  user-select: none;
+}
+
+.lc-settings__fold > summary::-webkit-details-marker {
+  display: none;
+}
+
+.lc-settings__fold > summary::after {
+  content: '\203A';
+  transition: transform 120ms ease;
+}
+
+.lc-settings__fold[open] > summary::after {
+  transform: rotate(90deg);
+}
+
+.lc-settings__fold > summary:hover {
+  color: var(--lc-text-primary);
+}
+
+.lc-settings__fold > summary:focus-visible {
+  outline: 2px solid var(--lc-focus-ring);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.lc-settings__fold > :not(summary) {
+  margin-top: var(--lc-space-3);
+}
+
+/* The Claude app is the next setting in the list, a hairline above it like any other. */
+.lc-settings__pane .lc-claudeapp {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--lc-border-hairline);
+}
+
+/* Adding Locust to Claude Code or Codex by hand: the last row of the list, folded. */
+.lc-mcp-byhand {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--lc-border-hairline);
+}
+
+/* GitHub and the connectors: rows on the pane, not raised boxes. */
+.lc-settings__pane .lc-github {
+  padding: 12px 0;
+  border-top: 1px solid var(--lc-border-hairline);
+  border-bottom: 1px solid var(--lc-border-hairline);
+  border-radius: 0;
+  background: transparent;
+}
+
+.lc-settings__pane .lc-connectorhealth__list {
+  gap: 0;
+  border-top: 1px solid var(--lc-border-hairline);
+}
+
+/* What an agent has set up reads as a sentence: names of things, not code. */
+.lc-settings__pane .lc-runtimerow__setup {
+  font-family: inherit;
+  font-size: var(--lc-text-description);
+}
+
+.lc-settings__pane .lc-connectorhealth__row {
+  align-items: baseline;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--lc-border-hairline);
+  border-radius: 0;
+  background: transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lc-settings__fold > summary::after { transition: none; }
+}
+
 /* --- Command palette --------------------------------------------------- */
 
 .lc-scrim--top {
