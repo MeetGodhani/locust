@@ -114,7 +114,7 @@ try {
   check('at 860 the strip is whole, above the chat box, and nothing scrolls sideways', narrow.left >= 0 && narrow.right <= narrow.width && narrow.bottom <= narrow.boxTop && narrow.overflow <= 0, JSON.stringify(narrow))
   await drive.resize(1215, 800)
   await sleep(400)
-  check('the question is heard, as a line of yours', state.lines.some((line) => /^You/.test(line) && /two plus two/i.test(line)), state.lines.join(' | '))
+  check('the question is heard, as a line of yours', state.lines.some((line) => /^You/.test(line) && /two plus two|2\s*\+\s*2/i.test(line)), state.lines.join(' | '))
   check('ChatGPT answers out loud, and the strip says it: four', state.lines.some((line) => /^ChatGPT/.test(line) && /\bfour\b|\b4\b/i.test(line)), state.lines.join(' | '))
   check('no error on the way', state.message === '', state.message)
 
