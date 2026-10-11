@@ -11,6 +11,14 @@ Settings shows this file as What's new. An entry may group its changes under
 about when they arrive on it carries `<!-- big -->` on the line under its
 heading: the home screen then shows it once, as a splash.
 
+## 0.738.0 - 2026-10-11
+
+### Fixed
+
+- **A voice call is sealed off more tightly.** Starting Talk no longer wakes up your Codex add-ons just to list them. The call's Codex now starts with every add-on, plugin and hook switched off, and Locust won't place the call if it can't read your Codex settings or if Codex is set to send voice calls somewhere other than OpenAI.
+- **End always ends the call**, even while it's still connecting, and closing Locust to the tray ends it too. Pressing Talk twice quickly no longer starts two calls.
+- **A call that can't connect says so** after 15 seconds instead of waiting, and one that drops tells you it dropped.
+
 ## 0.737.0 - 2026-10-11
 <!-- big -->
 
