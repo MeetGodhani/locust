@@ -143,14 +143,28 @@ in the background after the window is closed.
 you, Working, Ready to look at, Done -- across every runtime at once. It opens
 from the bottom bar, beside Settings.
 
+**Talk.** A voice call with ChatGPT's own voice, beside the chat box's
+microphone, placed by the Codex CLI with your ChatGPT sign-in (Windows, for
+now). The voice reads your folder with read-only tools, uses your connectors
+for quick things -- one that would send, change or buy something waits for
+your Allow in the call -- and hands bigger work to a teammate after saying back
+who will do what. You choose its voice from the nine ChatGPT offers.
+
+**Other apps.** Your other AI apps can ask your teammates through a local MCP
+server that is off until you turn it on, listens on 127.0.0.1 only, and starts
+turns in Ask mode unless you say otherwise. The Claude app is added in one
+press (a copy of its settings is kept first); Claude Code and Codex get the
+command or config entry to paste.
+
 **Compare.** The same mission on two or three models at once, each in its own
 copy of the folder, side by side; keep the one you like. Blind hides the names
 until you choose. ([Three models building the same game,
 blind](https://locust.lol/arena/).)
 
-**Updates.** The Windows installer updates itself from GitHub Releases with a
-differential download, and Settings says which build you are on. The installer
-is not signed yet; see the policy below.
+**Updates.** Locust updates itself from GitHub Releases, on Windows with a
+differential download, and every release carries Windows and Mac builds
+(Apple silicon and Intel). Settings says which build you are on. Neither build
+is signed yet; see the policy below.
 
 What is still open, in the order the authors would take it, is in
 `CHANGELOG.md`'s most recent entries and the issues here. The roadmap documents
@@ -174,7 +188,7 @@ Run all checks:
 pnpm check
 ```
 
-This builds every workspace package, runs TypeScript checks, and runs the complete test suite (about 10,700 tests across the desktop app, the adapters and the ledger, as of 0.692).
+This builds every workspace package, runs TypeScript checks, and runs the complete test suite (about 11,400 tests across the desktop app, the adapters and the ledger, as of 0.745).
 
 Green tests are not the evidence here. Each package carries a mutation
 control (`test/mutation-control.mjs`) that breaks one behaviour at a time and
