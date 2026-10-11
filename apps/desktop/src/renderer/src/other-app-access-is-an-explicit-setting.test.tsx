@@ -50,7 +50,8 @@ describe('other-app access is an explicit setting', () => {
     expect(html).toContain('with no automatic teammate handoffs')
     expect(html).toContain('Locust must be running')
     expect(html).toContain('monthly limits still apply')
-    expect(html).toContain('Locust never writes another app&#x27;s configuration')
+    // Since 0.740 it changes one app's settings, the Claude app's, and only on Add (claude-app-connection.ts).
+    expect(html).toContain('Locust changes another app’s settings only when you press Add to the Claude app')
   })
   it('turns the server off and removes the setup text when the host confirms it', async () => {
     const api = { settings: vi.fn(async () => enabled), setEnabled: vi.fn(async () => ({ enabled: false, ownMode: false })), setOwnMode: vi.fn(async () => enabled) }

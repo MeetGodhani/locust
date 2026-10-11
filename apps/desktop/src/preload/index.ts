@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import { LOCUST_MCP_GET, LOCUST_MCP_SET, LOCUST_MCP_SET_OWN_MODE } from '../shared/locust-mcp.js'
+import { LOCUST_MCP_CLAUDE_APP, LOCUST_MCP_CLAUDE_APP_RESTART, LOCUST_MCP_CLAUDE_APP_SET, LOCUST_MCP_GET, LOCUST_MCP_SET, LOCUST_MCP_SET_OWN_MODE } from '../shared/locust-mcp.js'
 import { VOICE_READY, VOICE_DOWNLOAD, VOICE_TRANSCRIBE, VOICE_CANCEL, VOICE_PROGRESS, VOICE_SETTINGS_READ, VOICE_SETTINGS_SAVE, VOICE_OPENAI_CONSENT } from '../shared/voice.js'
 import { VOICE_CALL_AVAILABLE, VOICE_CALL_EVENT, VOICE_CALL_START, VOICE_CALL_STOP } from '../shared/voice-call.js'
 import type { VoiceCallEvent } from '../shared/voice-call.js'
@@ -402,7 +402,10 @@ const desktopApi: DesktopApi = {
   locustMcp: {
     settings: () => ipcRenderer.invoke(LOCUST_MCP_GET),
     setEnabled: (enabled) => ipcRenderer.invoke(LOCUST_MCP_SET, enabled),
-    setOwnMode: (ownMode) => ipcRenderer.invoke(LOCUST_MCP_SET_OWN_MODE, ownMode)
+    setOwnMode: (ownMode) => ipcRenderer.invoke(LOCUST_MCP_SET_OWN_MODE, ownMode),
+    claudeApp: () => ipcRenderer.invoke(LOCUST_MCP_CLAUDE_APP),
+    setClaudeApp: (added) => ipcRenderer.invoke(LOCUST_MCP_CLAUDE_APP_SET, added),
+    restartClaudeApp: () => ipcRenderer.invoke(LOCUST_MCP_CLAUDE_APP_RESTART)
   },
   voice: {
     settings: () => ipcRenderer.invoke(VOICE_SETTINGS_READ),

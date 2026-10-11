@@ -14,8 +14,9 @@ import { VOICE_CALL_AVAILABLE, VOICE_CALL_EVENT, VOICE_CALL_START, VOICE_CALL_ST
 import { createVoiceCalls } from './voice-call.js'
 import { createVoiceSettingsStore } from './voice-settings.js'
 import { MCP_CONNECTION_FILE, createLocustMcpHost } from './locust-mcp-host.js'
+import { claudeAppConfigFile, claudeAppRunning, createClaudeAppConnector, relaunchClaudeApp } from './claude-app-connection.js'
 import { createLocustMcpTools } from './locust-mcp-tools.js'
-import { LOCUST_MCP_GET, LOCUST_MCP_SET, LOCUST_MCP_SET_OWN_MODE } from '../shared/locust-mcp.js'
+import { LOCUST_MCP_CLAUDE_APP, LOCUST_MCP_CLAUDE_APP_RESTART, LOCUST_MCP_CLAUDE_APP_SET, LOCUST_MCP_GET, LOCUST_MCP_SET, LOCUST_MCP_SET_OWN_MODE } from '../shared/locust-mcp.js'
 import { createPageServer, fromPagePreview, pageMayReach, PAGE_SCHEME } from './page-preview.js'
 import { CANCEL_SCRIPT, captureRectOf, pageFrameOf, pickInFrame } from './page-pick.js'
 import { createRuntimeCommands } from './runtime-commands.js'
@@ -7706,6 +7707,31 @@ if (!ownsSingleInstanceLock) {
     ipcMain.handle(LOCUST_MCP_GET, event => fromOwnWindow(event) ? mcpHost.settings() : { enabled: false, ownMode: false })
     ipcMain.handle(LOCUST_MCP_SET, (event, enabled: unknown) => fromOwnWindow(event) ? mcpHost.setEnabled(enabled) : { enabled: false, ownMode: false })
     ipcMain.handle(LOCUST_MCP_SET_OWN_MODE, (event, ownMode: unknown) => fromOwnWindow(event) ? mcpHost.setOwnMode(ownMode) : { enabled: false, ownMode: false })
+    // Locust in the Claude app's tools, in one press (0.740): Add turns the local server on and writes the one entry.
+    const mcpBridge = app.isPackaged ? join(process.resourcesPath, 'locust-mcp-bridge.mjs') : join(__dirname, '../../resources/locust-mcp-bridge.mjs')
+    const claudeApp = createClaudeAppConnector({
+      file: claudeAppConfigFile(process.platform, process.env.APPDATA, homedir()),
+      entry: () => ({ command: process.execPath, args: [mcpBridge, join(app.getPath('userData'), MCP_CONNECTION_FILE)], env: { ELECTRON_RUN_AS_NODE: '1' } }),
+      running: () => claudeAppRunning(process.platform),
+      relaunch: () => relaunchClaudeApp(process.platform)
+    })
+    ipcMain.handle(LOCUST_MCP_CLAUDE_APP_RESTART, async (event) => {
+      if (!fromOwnWindow(event)) return { connection: await claudeApp.status(), message: 'Claude was not restarted.' }
+      const done = await claudeApp.restart()
+      return { connection: await claudeApp.status(), ...(done.ok ? {} : { message: done.message }) }
+    })
+    ipcMain.handle(LOCUST_MCP_CLAUDE_APP, (event) => fromOwnWindow(event) ? claudeApp.status() : { kind: 'no-app' })
+    ipcMain.handle(LOCUST_MCP_CLAUDE_APP_SET, async (event, added: unknown) => {
+      if (!fromOwnWindow(event) || typeof added !== 'boolean') return { connection: await claudeApp.status(), message: 'That setting was not changed.' }
+      if (!added) {
+        const removed = await claudeApp.remove()
+        return { connection: await claudeApp.status(), ...(removed.ok ? {} : { message: removed.message }) }
+      }
+      const state = await mcpHost.setEnabled(true)
+      if (!state.enabled) return { connection: await claudeApp.status(), state, message: state.message ?? 'The local server could not be turned on, so the Claude app was not changed.' }
+      const done = await claudeApp.add()
+      return { connection: await claudeApp.status(), state, ...(done.ok ? {} : { message: done.message }) }
+    })
 
     ipcMain.handle(CODEX_MISSION_CANCEL_CHANNEL, (event, request: unknown) => {
       const owner = BrowserWindow.fromWebContents(event.sender)

@@ -20940,6 +20940,9 @@ textarea {
 .lc-call__line.is-you .lc-call__who { color: var(--lc-text-secondary); }
 .lc-call__line.is-voice .lc-call__who { color: var(--lc-lime-text); }
 .lc-call__line.is-handed { color: var(--lc-text-secondary); }
+/* The Claude app line in Settings (0.740): a line of its own, spaced from the sub-setting above it, and its buttons side by side. */
+.lc-claudeapp { margin-top: var(--lc-space-4); }
+.lc-claudeapp__acts { display: inline-flex; align-items: center; gap: var(--lc-space-2); flex: 0 0 auto; }
 .lc-call__line.is-handed .lc-call__who { color: var(--lc-text-primary); }
 .lc-call__who { margin-right: 6px; font-size: 12px; font-weight: 600; }
 .lc-call__message { margin: 0; font-size: 12px; color: var(--lc-amber-text); }
