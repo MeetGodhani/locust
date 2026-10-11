@@ -7,9 +7,15 @@ export const LOCUST_MCP_CLAUDE_APP_SET = 'locust-mcp:claude-app-set'
 export const LOCUST_MCP_CLAUDE_APP_RESTART = 'locust-mcp:claude-app-restart'
 export type ClaudeAppConnection =
   | { readonly kind: 'no-app' }
-  | { readonly kind: 'not-added' }
-  /** `restart`: Claude was open when Locust was added, and reads its settings only when it starts. */
-  | { readonly kind: 'added'; readonly restart?: boolean }
+  /** `restart`: Locust was removed while Claude was open, and Claude keeps it until it restarts. */
+  | { readonly kind: 'not-added'; readonly restart?: boolean }
+  /**
+   * `restart`: Claude was open when Locust was added, and reads its settings only when it starts.
+   * `stale`: the entry runs a Locust that is not this one, or files that are gone (0.741) -- Update fixes it.
+   */
+  | { readonly kind: 'added'; readonly restart?: boolean; readonly stale?: boolean }
+  /** A different add-on of the person's is named "locust": left alone, never changed or removed (0.741). */
+  | { readonly kind: 'taken'; readonly message: string }
   | { readonly kind: 'unreadable'; readonly message: string }
 export interface ClaudeAppResult {
   readonly connection: ClaudeAppConnection

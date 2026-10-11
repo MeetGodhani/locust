@@ -86,6 +86,9 @@ try {
   check('and turned the server for other apps on', after.server === 'true', after.server)
   check('the line says it is added, and what is left to do', /^Added\./.test(after.lede) && after.buttons.includes('Remove'), JSON.stringify(after))
   check('the connection file the entry names exists now', existsSync(written.mcpServers.locust.args[1]), written.mcpServers.locust.args[1])
+  // 0.741: the real Claude app may be open on this machine. If the line says to restart it, the button is there
+  // (never pressed here); either way the line names one state, not two.
+  check('a line asking for a restart has the button for it, and only then', /restart it to finish/.test(after.lede) === after.buttons.includes('Restart Claude'), JSON.stringify(after))
 
   say(`remove: ${String(await press('Remove'))}`)
   const removed = JSON.parse(String(await drive.capture('removed', () => drive.evaluate(LINE))))

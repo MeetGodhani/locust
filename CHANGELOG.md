@@ -11,6 +11,12 @@ Settings shows this file as What's new. An entry may group its changes under
 about when they arrive on it carries `<!-- big -->` on the line under its
 heading: the home screen then shows it once, as a splash.
 
+## 0.741.0 - 2026-10-11
+
+### Fixed
+
+- **Adding Locust to the Claude app is safer.** If Claude changes its settings at the same moment, Locust starts over and keeps both changes. Locust never touches another add-on you named "locust". The copy it keeps is always your original settings. If Locust has moved, the line offers Update. The Restart Claude prompt is still there after Locust restarts, and it also appears after Remove. Restart closes only the Claude app.
+
 ## 0.740.0 - 2026-10-11
 
 ### New

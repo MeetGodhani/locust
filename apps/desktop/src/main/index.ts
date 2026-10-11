@@ -14,7 +14,7 @@ import { VOICE_CALL_AVAILABLE, VOICE_CALL_EVENT, VOICE_CALL_START, VOICE_CALL_ST
 import { createVoiceCalls } from './voice-call.js'
 import { createVoiceSettingsStore } from './voice-settings.js'
 import { MCP_CONNECTION_FILE, createLocustMcpHost } from './locust-mcp-host.js'
-import { claudeAppConfigFile, claudeAppRunning, createClaudeAppConnector, relaunchClaudeApp } from './claude-app-connection.js'
+import { claudeAppConfigFile, claudeAppStartedAt, createClaudeAppConnector, relaunchClaudeApp } from './claude-app-connection.js'
 import { createLocustMcpTools } from './locust-mcp-tools.js'
 import { LOCUST_MCP_CLAUDE_APP, LOCUST_MCP_CLAUDE_APP_RESTART, LOCUST_MCP_CLAUDE_APP_SET, LOCUST_MCP_GET, LOCUST_MCP_SET, LOCUST_MCP_SET_OWN_MODE } from '../shared/locust-mcp.js'
 import { createPageServer, fromPagePreview, pageMayReach, PAGE_SCHEME } from './page-preview.js'
@@ -7712,8 +7712,16 @@ if (!ownsSingleInstanceLock) {
     const claudeApp = createClaudeAppConnector({
       file: claudeAppConfigFile(process.platform, process.env.APPDATA, homedir()),
       entry: () => ({ command: process.execPath, args: [mcpBridge, join(app.getPath('userData'), MCP_CONNECTION_FILE)], env: { ELECTRON_RUN_AS_NODE: '1' } }),
-      running: () => claudeAppRunning(process.platform),
-      relaunch: () => relaunchClaudeApp(process.platform)
+      startedAt: () => claudeAppStartedAt(process.platform),
+      relaunch: () => relaunchClaudeApp(process.platform),
+      // When Locust last changed Claude's settings and last restarted Claude, kept across a Locust restart.
+      marks: {
+        read: async () => {
+          const saved = JSON.parse(await readFile(join(app.getPath('userData'), 'claude-app.json'), 'utf8').catch(() => '{}')) as { changedAt?: unknown; restartedAt?: unknown }
+          return { ...(typeof saved.changedAt === 'number' ? { changedAt: saved.changedAt } : {}), ...(typeof saved.restartedAt === 'number' ? { restartedAt: saved.restartedAt } : {}) }
+        },
+        write: (marks) => writeFile(join(app.getPath('userData'), 'claude-app.json'), JSON.stringify(marks), 'utf8')
+      }
     })
     ipcMain.handle(LOCUST_MCP_CLAUDE_APP_RESTART, async (event) => {
       if (!fromOwnWindow(event)) return { connection: await claudeApp.status(), message: 'Claude was not restarted.' }
