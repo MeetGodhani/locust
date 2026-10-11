@@ -35,6 +35,9 @@ describe('who the GitHub CLI is signed in as', () => {
 
   it('takes the code only with GitHub’s own device page', () => {
     expect(githubSignInCodeOf(PRINTED)).toEqual({ code: 'AB12-CD34', url: 'https://github.com/login/device' })
+    // gh 2.102's wording (0.739, measured 2026-10-11): the code in brackets, copied to the clipboard.
+    expect(githubSignInCodeOf('! One-time code (AB12-CD34) copied to clipboard\nOpen this URL to continue in your web browser: https://github.com/login/device')).toEqual({ code: 'AB12-CD34', url: 'https://github.com/login/device' })
+    expect(githubSignInCodeOf('! One-time code (AB12-CD34) copied to clipboard\nOpen this URL to continue in your web browser: https://evil.example/login/device')).toBeUndefined()
     expect(githubSignInCodeOf('! First copy your one-time code: AB12-CD34\nOpen https://evil.example/login/device')).toBeUndefined()
     expect(githubSignInCodeOf('! First copy your one-time code: AB12')).toBeUndefined()
   })

@@ -166,7 +166,7 @@ export function createGithubAccount(options: GithubAccountOptions = {}) {
       }
       if (ended === 'missing') return { ok: false, message: 'The GitHub CLI is not on this computer.' }
       if (ended !== 0) {
-        const said = printed.split('\n').map((line) => line.trim()).filter((line) => line.length > 0 && !line.includes('one-time code')).pop()
+        const said = printed.split('\n').map((line) => line.trim()).filter((line) => line.length > 0 && !/one-time code/i.test(line)).pop()
         return { ok: false, message: running === undefined ? 'Sign-in stopped.' : `GitHub did not sign you in${said === undefined ? '.' : `: ${said.slice(0, 200)}`}` }
       }
       return { ok: true, account: await read() }

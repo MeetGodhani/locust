@@ -2656,6 +2656,9 @@ if (!ownsSingleInstanceLock) {
         discoveryCache = undefined
         runtimeDiscovery.invalidate()
         modelCatalog.forget()
+        // And the window is told, as a newly listed Claude model tells it: forgetting alone left the picker on the
+        // old list until something else asked (0.738 sweep, drive-agents-kept-current: no GPT-6-Sol after 0.153 -> 0.162.1).
+        sendToWindow({ kind: 'models-changed' })
       },
       changed: () => {
         void runtimeUpdates.state().then(toldHere).then((state) => {
@@ -3731,7 +3734,16 @@ if (!ownsSingleInstanceLock) {
       spawn: (executablePath, args, env) => spawnAppServer(executablePath, args, env),
       folder: () => (workspaceChosen ? workspacePath : undefined),
       send: (update) => {
-        if (voiceCallWindow !== undefined && !voiceCallWindow.isDestroyed()) voiceCallWindow.send(VOICE_CALL_EVENT, update)
+        const deliver = (said: typeof update): void => {
+          if (voiceCallWindow !== undefined && !voiceCallWindow.isDestroyed()) voiceCallWindow.send(VOICE_CALL_EVENT, said)
+        }
+        if (update.kind !== 'handed') { deliver(update); return }
+        // The voice names a teammate by its id (it read list_teammates): the strip says the name (the drive's
+        // first live hand-off read "Handed to tm_wren").
+        void listTeammates().then((list) => {
+          const named = list.ok ? list.data.teammates.find((teammate) => teammate.teammateId === update.to || teammate.name.toLowerCase() === update.to.toLowerCase()) : undefined
+          deliver(named === undefined ? update : { ...update, to: named.name })
+        }).catch(() => deliver(update))
       },
       version: app.getVersion()
     })

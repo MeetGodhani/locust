@@ -106,9 +106,15 @@ export function githubAccountOfText(text: string, signedIn: boolean): GithubAcco
   return login !== undefined && LOGIN.test(login) ? { kind: 'signed-in', login, scopes: [] } : { kind: 'unknown', message: 'The GitHub CLI says it is signed in but did not say as whom.' }
 }
 
-/** The one-time code and the page gh printed, once both have arrived; GitHub's own device page only. */
+/**
+ * The one-time code and the page gh printed, once both have arrived; GitHub's own device page only.
+ *
+ * In either of gh's wordings (0.739): "! First copy your one-time code: AB12-CD34" until about 2.100, and from
+ * 2.102 "! One-time code (AB12-CD34) copied to clipboard" with the page on its own line. The 0.738 sweep's
+ * drive-your-github-signs-in waited 45 s for a code gh 2.102 had already printed: Sign in had stopped working.
+ */
 export function githubSignInCodeOf(text: string): GithubSignInCode | undefined {
-  const code = /one-time code:\s*([A-Z0-9]{4}-[A-Z0-9]{4})\b/.exec(text)?.[1]
+  const code = /one-time code(?::\s*|\s*\(\s*)([A-Z0-9]{4}-[A-Z0-9]{4})\b/i.exec(text)?.[1]
   const url = /(https:\/\/github\.com\/login\/device)\b/.exec(text)?.[1]
   return code === undefined || url === undefined ? undefined : { code, url }
 }
