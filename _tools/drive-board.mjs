@@ -96,18 +96,24 @@ try {
     await new Promise(r => setTimeout(r, 1500))
     return ${board}
   })()`))
-  await drive.capture('press Done on the other task, by hand', () => drive.evaluate(`(async () => {
+  await drive.capture('mark the other task done, by hand', () => drive.evaluate(`(async () => {
     const task = [...document.querySelectorAll('.lc-task')].find(t => /version string/.test(t.innerText))
-    const done = task && [...task.querySelectorAll('button')].find(b => b.innerText.trim() === 'Done')
-    if (!done) return 'no Done: ' + (task ? [...task.querySelectorAll('button')].map(b => b.innerText.trim()).join('/') : 'no task')
+    if (!task) return 'no task'
+    task.querySelector('button[aria-haspopup="menu"]')?.click()
+    await new Promise(r => setTimeout(r, 400))
+    const done = [...document.querySelectorAll('.lc-menu button, [role=menu] button')].find(b => /^Mark done$/.test(b.innerText.trim()))
+    if (!done) return 'no Mark done: ' + [...document.querySelectorAll('.lc-menu button, [role=menu] button')].map(b => b.innerText.trim()).join('/')
     done.click()
     await new Promise(r => setTimeout(r, 700))
     return ${board}
   })()`))
-  await drive.capture('Open on the moved task goes to the reply that moved it', () => drive.evaluate(`(async () => {
+  await drive.capture('Open the conversation, on the moved task, goes to the reply that moved it', () => drive.evaluate(`(async () => {
     const task = [...document.querySelectorAll('.lc-task')].find(t => /release notes/.test(t.innerText))
-    const open = task && [...task.querySelectorAll('button')].find(b => b.innerText.trim() === 'Open')
-    if (!open) return 'no Open on the task'
+    if (!task) return 'no task'
+    task.querySelector('button[aria-haspopup="menu"]')?.click()
+    await new Promise(r => setTimeout(r, 400))
+    const open = [...document.querySelectorAll('.lc-menu button, [role=menu] button')].find(b => /^Open the conversation$/.test(b.innerText.trim()))
+    if (!open) return 'no Open the conversation: ' + [...document.querySelectorAll('.lc-menu button, [role=menu] button')].map(b => b.innerText.trim()).join('/')
     open.click()
     await new Promise(r => setTimeout(r, 800))
     return document.querySelector('.lc-workroom__header')?.innerText.replace(/\\s+/g, ' ').slice(0, 160) ?? 'no workroom'
