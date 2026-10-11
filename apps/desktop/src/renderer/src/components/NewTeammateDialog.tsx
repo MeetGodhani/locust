@@ -22,6 +22,7 @@ import { branchNameFor } from '../../../shared/worktree-name.js'
 import { dollars, isMonthlyLimit } from '../../../shared/spend.js'
 import type { Spend } from '../../../shared/spend.js'
 import { agentNamed } from '../../../shared/runtimes.js'
+import { CHATGPT_VOICES, voiceName } from '../../../shared/voice-call.js'
 
 /** What the dialog hands back. A limit is `null` when an edit removes one. */
 export interface TeammateDraft {
@@ -35,6 +36,8 @@ export interface TeammateDraft {
   readonly monthlyLimitUsd?: number | null
   /** Its own standing instructions (0.706); `null` when an edit clears them. */
   readonly instructions?: string | null
+  /** Its voice in a call (0.746): one of ChatGPT's nine; `null` when an edit goes back to Talk's own. */
+  readonly voice?: string | null
 }
 
 /**
@@ -282,6 +285,8 @@ export function NewTeammateDialog({
   const limit = parsedLimit(limitText)
   // THIS TEAMMATE'S OWN INSTRUCTIONS (0.706, from the Paperclip scrub): what a group's are, for one teammate.
   const [instructions, setInstructions] = useState(initial?.instructions ?? '')
+  // ITS VOICE IN A CALL (0.746): Talk pressed in its conversation speaks as it, in this voice.
+  const [voice, setVoice] = useState(initial?.voice ?? '')
   /*
    * THE TEAMMATE'S OWN MODEL, chosen here (0.311). Colin, 2026-09-24: "do we
    * have the ability to switch a teammates model? like not when youre in the
@@ -872,6 +877,17 @@ export function NewTeammateDialog({
             </span>
           </label>
 
+          <label className="lc-field">
+            <span className="lc-fieldlabel lc-mono">Voice</span>
+            <select className="lc-input" aria-label="Voice for this teammate" value={voice} onChange={(event) => setVoice(event.target.value)}>
+              <option value="">Talk’s own voice, from Settings</option>
+              {CHATGPT_VOICES.map((entry) => <option key={entry.id} value={entry.id}>{voiceName(entry.id)} — {entry.about}</option>)}
+            </select>
+            <span className="lc-field__hint">
+              {`How ${trimmed.length === 0 ? 'this teammate' : trimmed} sounds when you press Talk in ${trimmed.length === 0 ? 'its' : `${trimmed}’s`} conversation. ChatGPT’s voices, on your ChatGPT plan; the work stays on its own AI agent.`}
+            </span>
+          </label>
+
           <div className="lc-dialog__summary">
             {/*
               * The mode the next mission will ACTUALLY run in. This said
@@ -918,7 +934,9 @@ export function NewTeammateDialog({
                   // teammate only says when there is an amount.
                   ...(typeof limit === 'number' ? { monthlyLimitUsd: limit } : editing ? { monthlyLimitUsd: null } : {}),
                   // The same rule as the limit: an edit always says (null clears); a new teammate only when there are some.
-                  ...(instructions.trim().length > 0 ? { instructions: instructions.trim() } : editing ? { instructions: null } : {})
+                  ...(instructions.trim().length > 0 ? { instructions: instructions.trim() } : editing ? { instructions: null } : {}),
+                  // The same again: an edit always says (null goes back to Talk's own); a new teammate only when one is picked.
+                  ...(voice !== '' ? { voice } : editing ? { voice: null } : {})
                 })
               ).finally(() => {
                 pressed.current = false

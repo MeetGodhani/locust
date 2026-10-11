@@ -10,7 +10,7 @@ import { app, BrowserWindow, crashReporter, dialog, ipcMain, Menu, nativeImage, 
 import { createVoiceHost } from './voice-host.js'
 import { voicePermission } from './voice-permission.js'
 import { VOICE_READY, VOICE_DOWNLOAD, VOICE_TRANSCRIBE, VOICE_CANCEL, VOICE_PROGRESS, VOICE_SETTINGS_READ, VOICE_SETTINGS_SAVE, VOICE_OPENAI_CONSENT } from '../shared/voice.js'
-import { DEFAULT_CHATGPT_VOICE, VOICE_CALL_ANSWER, VOICE_CALL_AVAILABLE, VOICE_CALL_EVENT, VOICE_CALL_SET_VOICE, VOICE_CALL_START, VOICE_CALL_STOP, VOICE_CALL_TOOLS, VOICE_CALL_VOICES, isChatGptVoice, isVoiceCallOffer, type ChatGptVoice, type VoiceAddOn } from '../shared/voice-call.js'
+import { DEFAULT_CHATGPT_VOICE, VOICE_CALL_ANSWER, VOICE_CALL_AVAILABLE, VOICE_CALL_EVENT, VOICE_CALL_SET_VOICE, VOICE_CALL_START, VOICE_CALL_STOP, VOICE_CALL_TOOLS, VOICE_CALL_VOICES, isChatGptVoice, isVoiceCallOffer, isVoiceCallTarget, type ChatGptVoice, type VoiceAddOn, type VoiceCallTarget } from '../shared/voice-call.js'
 import { createVoiceCalls } from './voice-call.js'
 import { CALL_FOLDER_TOOLS, callFolderTools } from './voice-call-folder.js'
 import { createVoiceSettingsStore } from './voice-settings.js'
@@ -3724,6 +3724,8 @@ if (!ownsSingleInstanceLock) {
     let voiceCallWindow: Electron.WebContents | undefined
     /** Locust's own add-on server, a private copy for each call (0.739); set once the tools exist, below. */
     let voiceCallAddOn: { readonly open: () => Promise<VoiceAddOn | undefined>; readonly close: () => Promise<void> } | undefined
+    // The conversation a call with a teammate may continue (0.746), while that call is on.
+    let voiceCallHere: VoiceCallTarget | undefined
     // Talk's voice (0.745), kept in the profile: a preference, picked again in a moment after a restore.
     const voiceCallVoiceFile = join(app.getPath('userData'), 'voice-call.json')
     const voiceCallVoice = async (): Promise<ChatGptVoice> => {
@@ -3736,6 +3738,25 @@ if (!ownsSingleInstanceLock) {
     }
     const voiceCalls = createVoiceCalls({
       voice: voiceCallVoice,
+      // Talk pressed in a teammate's conversation is a call with that teammate (0.746): its name, role, runtime and voice.
+      teammate: async (target) => {
+        const list = await listTeammates()
+        const found = list.ok ? list.data.teammates.find((teammate) => teammate.teammateId === target.teammateId) : undefined
+        if (found === undefined) return undefined
+        // The conversation must be this teammate's: a call never continues anyone else's.
+        const owner = target.conversationId === undefined ? undefined : (await teammates.missionOwners().catch(() => ({}) as Record<string, string>))[target.conversationId]
+        const conversationId = owner === found.teammateId ? target.conversationId : undefined
+        const role = found.roleTitle ?? (found.role === 'Custom' ? undefined : found.role)
+        return {
+          teammateId: found.teammateId,
+          name: found.name,
+          ...(role === undefined ? {} : { role }),
+          runtime: found.route === undefined ? 'its own AI agent' : runtimeDisplayName(found.route.runtime),
+          ...(conversationId === undefined ? {} : { conversationId }),
+          ...(found.voice === undefined ? {} : { voice: found.voice })
+        }
+      },
+      onTarget: (target) => { voiceCallHere = target },
       // The person's connectors are the call's too; one that would change something asks in the strip (0.742).
       connectors: true,
       // A drive's throwaway server, in a development build only: LOCUST_VOICE_TEST_SERVER is the path of its script.
@@ -3770,7 +3791,7 @@ if (!ownsSingleInstanceLock) {
     ipcMain.handle(VOICE_CALL_AVAILABLE, (event) => fromVoiceWindow(event) && process.platform === 'win32'
       ? voiceCalls.available()
       : { available: false, why: 'Voice calls are on Windows for now.' })
-    ipcMain.handle(VOICE_CALL_START, (event, offer: unknown) => {
+    ipcMain.handle(VOICE_CALL_START, (event, offer: unknown, target: unknown) => {
       if (!fromVoiceWindow(event) || process.platform !== 'win32') return voiceCallRefused
       if (!isVoiceCallOffer(offer)) return voiceCallRefused
       if (voiceCallWindow !== event.sender) {
@@ -3781,7 +3802,7 @@ if (!ownsSingleInstanceLock) {
         event.sender.once('destroyed', () => { void voiceCalls.stop() })
         BrowserWindow.fromWebContents(event.sender)?.on('hide', () => { void voiceCalls.stop() })
       }
-      return voiceCalls.start(offer)
+      return voiceCalls.start(offer, isVoiceCallTarget(target) ? target : undefined)
     })
     ipcMain.handle(VOICE_CALL_STOP, (event) => fromVoiceWindow(event) ? voiceCalls.stop() : undefined)
     ipcMain.handle(VOICE_CALL_VOICES, (event) => fromOwnWindow(event) ? voiceCallVoice() : DEFAULT_CHATGPT_VOICE)
@@ -5482,7 +5503,7 @@ if (!ownsSingleInstanceLock) {
       try {
         // roleTitle was dropped here since Custom teammates got titles: every
         // one read "Custom" on the sidebar and in the brief (found 2026-09-05).
-        const teammate = await teammates.create({ name: input.name, hue: input.hue, role: input.role, roleTitle: input.roleTitle, worktree: input.worktree, avatar: input.avatar, monthlyLimitUsd: input.monthlyLimitUsd, starters: input.starters, instructions: input.instructions })
+        const teammate = await teammates.create({ name: input.name, hue: input.hue, role: input.role, roleTitle: input.roleTitle, worktree: input.worktree, avatar: input.avatar, monthlyLimitUsd: input.monthlyLimitUsd, starters: input.starters, instructions: input.instructions, voice: input.voice })
         // The model picked on the dialog's Model row, kept exactly as a
         // started mission keeps one (rememberRoute validates it).
         if (!isTeammateRoute(input.route)) return { ok: true, data: { teammate } } as const
@@ -5515,7 +5536,8 @@ if (!ownsSingleInstanceLock) {
           worktree: input.worktree,
           avatar: input.avatar,
           monthlyLimitUsd: input.monthlyLimitUsd,
-          instructions: input.instructions
+          instructions: input.instructions,
+          voice: input.voice
         })
         // A model picked on the Model row (0.311): until then a teammate's
         // model changed only when a message was sent to them on another.
@@ -7712,7 +7734,9 @@ if (!ownsSingleInstanceLock) {
       background: async () => (await backgroundRuns.list()).map(publicRun),
       ownMode: () => true,
       origin: { kind: 'mcp', via: 'voice' },
-      waiting: id => raisedApprovals.waitingOn(id)
+      waiting: id => raisedApprovals.waitingOn(id),
+      // The one conversation a call with a teammate may continue, and only while that call is on (0.746).
+      here: () => voiceCallHere?.conversationId
     })
     // The call reads the folder with Locust's own read-only tools, never a command (0.742).
     const voiceCallFolder = callFolderTools(() => (workspaceChosen ? workspacePath : undefined))

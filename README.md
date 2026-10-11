@@ -148,7 +148,10 @@ microphone, placed by the Codex CLI with your ChatGPT sign-in (Windows, for
 now). The voice reads your folder with read-only tools, uses your connectors
 for quick things -- one that would send, change or buy something waits for
 your Allow in the call -- and hands bigger work to a teammate after saying back
-who will do what. You choose its voice from the nine ChatGPT offers.
+who will do what. Pressed in a teammate's conversation, Talk is a call with that
+teammate: the voice speaks as them, in the voice you gave them, and what you ask
+goes into their conversation, where they do it on their own agent. The voices
+are the nine ChatGPT offers.
 
 **Other apps.** Your other AI apps can ask your teammates through a local MCP
 server that is off until you turn it on, listens on 127.0.0.1 only, and starts

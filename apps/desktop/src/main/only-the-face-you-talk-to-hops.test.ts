@@ -33,10 +33,12 @@ describe('the motion a face asks for', () => {
     return full + computed === 0 ? [] : [{ file: path.slice(RENDERER.length).replace(/\\/g, '/'), full, computed }]
   })
 
-  it('is full in two places only: the face beside the live line, and the New teammate preview', () => {
+  // 0.746: and the face in a call with a teammate -- the one face you are literally talking to.
+  it('is full in three places only: the face beside the live line, the New teammate preview, and the teammate on a call', () => {
     expect(asking).toEqual([
       { file: 'components/NewTeammateDialog.tsx', full: 1, computed: 0 },
-      { file: 'components/ThreadItems.tsx', full: 1, computed: 0 }
+      { file: 'components/ThreadItems.tsx', full: 1, computed: 0 },
+      { file: 'components/VoiceCall.tsx', full: 1, computed: 0 }
     ])
   })
 

@@ -9,6 +9,7 @@ import type { PublicTeammate, TeammateHue, TeammateRole, TeammateRoute, Workspac
 import { DEFAULT_RELAY_HOP_CAP, MAX_RELAY_HOP_CAP, MIN_RELAY_HOP_CAP, DEFAULT_MEMORY_MODE } from '../shared/ipc.js'
 import { isMissionRuntime } from '../shared/runtimes.js'
 import { isMonthlyLimit } from '../shared/spend.js'
+import { isChatGptVoice } from '../shared/voice-call.js'
 import { parsedAboutYou, parsedAboutYouSuggestions } from '../shared/about-you.js'
 import { aboutYouSecretRefusal, secretIn } from '../shared/secrets.js'
 
@@ -101,14 +102,14 @@ export const TEAMMATE_ROLES: readonly TeammateRole[] = [
 
 export interface TeammateStore {
   list(): Promise<readonly PublicTeammate[]>
-  create(input: { name: unknown; hue: unknown; role: unknown; roleTitle?: unknown; worktree?: unknown; avatar?: unknown; monthlyLimitUsd?: unknown; starters?: unknown; instructions?: unknown }): Promise<PublicTeammate>
+  create(input: { name: unknown; hue: unknown; role: unknown; roleTitle?: unknown; worktree?: unknown; avatar?: unknown; monthlyLimitUsd?: unknown; starters?: unknown; instructions?: unknown; voice?: unknown }): Promise<PublicTeammate>
   remove(teammateId: unknown): Promise<void>
   /**
    * Change what a person may change; the id and the missions filed under it
    * stay. `monthlyLimitUsd`: a number sets it, `null` removes it, omitted
    * keeps it.
    */
-  update(input: { teammateId: unknown; name: unknown; hue: unknown; role: unknown; roleTitle?: unknown; worktree?: unknown; avatar: unknown; monthlyLimitUsd?: unknown; instructions?: unknown }): Promise<PublicTeammate>
+  update(input: { teammateId: unknown; name: unknown; hue: unknown; role: unknown; roleTitle?: unknown; worktree?: unknown; avatar: unknown; monthlyLimitUsd?: unknown; instructions?: unknown; voice?: unknown }): Promise<PublicTeammate>
   /** Record the route a person just started this teammate on. Unknown teammate or bad route: nothing changes. */
   rememberRoute(teammateId: unknown, route: unknown): Promise<void>
   /**
@@ -438,7 +439,9 @@ export function parsedTeammate(value: unknown): PublicTeammate | undefined {
     // before limits existed -- never zero, which would refuse every run.
     ...(isMonthlyLimit(record.monthlyLimitUsd) ? { monthlyLimitUsd: record.monthlyLimitUsd } : {}),
     // Instructions that do not read are dropped, not the teammate (0.706).
-    ...(parsedInstructions(record.instructions) === undefined ? {} : { instructions: parsedInstructions(record.instructions) })
+    ...(parsedInstructions(record.instructions) === undefined ? {} : { instructions: parsedInstructions(record.instructions) }),
+    // A voice that is not one of ChatGPT's nine is dropped, not the teammate (0.746).
+    ...(isChatGptVoice(record.voice) ? { voice: record.voice } : {})
   }
 }
 
@@ -714,7 +717,8 @@ export function createTeammateStore(options: { readonly rootDirectory: string })
           avatar: input.avatar === undefined ? seedAvatar(teammateId) : cleanAvatar(input.avatar),
           createdAt: new Date().toISOString(),
           ...(isMonthlyLimit(input.monthlyLimitUsd) ? { monthlyLimitUsd: input.monthlyLimitUsd } : {}),
-          ...(parsedInstructions(input.instructions) === undefined ? {} : { instructions: parsedInstructions(input.instructions) })
+          ...(parsedInstructions(input.instructions) === undefined ? {} : { instructions: parsedInstructions(input.instructions) }),
+          ...(isChatGptVoice(input.voice) ? { voice: input.voice } : {})
         }
         await write({ ...file, teammates: [...file.teammates, teammate] })
         return teammate
@@ -734,6 +738,7 @@ export function createTeammateStore(options: { readonly rootDirectory: string })
         if (input.instructions !== undefined && input.instructions !== null && (typeof input.instructions !== 'string' || input.instructions.trim().length > MAX_TEAMMATE_INSTRUCTIONS)) {
           throw new Error('Teammate instructions are invalid')
         }
+        if (input.voice !== undefined && input.voice !== null && !isChatGptVoice(input.voice)) throw new Error('Teammate voice is invalid')
         const file = await read()
         const existing = file.teammates.find((teammate) => teammate.teammateId === input.teammateId)
         if (existing === undefined) throw new Error('Unknown teammate')
@@ -774,7 +779,11 @@ export function createTeammateStore(options: { readonly rootDirectory: string })
           // Set, removed (null or empty), or -- omitted -- carried, like the limit (0.706).
           ...(input.instructions === undefined
             ? existing.instructions === undefined ? {} : { instructions: existing.instructions }
-            : parsedInstructions(input.instructions) === undefined ? {} : { instructions: parsedInstructions(input.instructions) })
+            : parsedInstructions(input.instructions) === undefined ? {} : { instructions: parsedInstructions(input.instructions) }),
+          // Set, removed (null), or -- omitted -- carried (0.746).
+          ...(input.voice === undefined
+            ? existing.voice === undefined ? {} : { voice: existing.voice }
+            : isChatGptVoice(input.voice) ? { voice: input.voice } : {})
         }
         await write({
           ...file,

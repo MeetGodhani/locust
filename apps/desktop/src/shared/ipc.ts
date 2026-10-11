@@ -1617,6 +1617,8 @@ export interface PublicTeammate {
    * MAX_TEAMMATE_INSTRUCTIONS characters; absent means none.
    */
   readonly instructions?: string
+  /** The voice it speaks in when the person presses Talk in its conversation (0.746): one of ChatGPT's nine; absent, Talk's own. */
+  readonly voice?: string
 }
 
 /** The longest a teammate's own instructions may be, as a group's (0.706). */
@@ -1677,6 +1679,8 @@ export interface TeammateCreateRequest {
   readonly monthlyLimitUsd?: number
   /** Its own standing instructions (0.706); omitted or empty, none. */
   readonly instructions?: string
+  /** Its voice in a call (0.746); omitted, Talk's own. */
+  readonly voice?: string
   /** A template's first messages for this teammate; omitted, the role's are offered. */
   readonly starters?: readonly string[]
 }
@@ -1707,6 +1711,8 @@ export interface TeammateUpdateRequest {
   readonly monthlyLimitUsd?: number | null
   /** Its own standing instructions (0.706): text sets them, `null` or empty removes them, OMITTED keeps them. */
   readonly instructions?: string | null
+  /** Its voice in a call (0.746): one of ChatGPT's nine sets it, `null` removes it, OMITTED keeps it. */
+  readonly voice?: string | null
 }
 
 export type TeammateListResponse =

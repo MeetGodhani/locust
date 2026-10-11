@@ -2997,6 +2997,13 @@ export default function App(): ReactElement {
         if (update.data.followsUp !== undefined && shown?.data?.missionId === update.data.followsUp.missionId) {
           setShownKey(update.runId)
         }
+        // A call with a teammate who had no conversation on screen (0.746): its first ask starts one, and the window
+        // opens it, as a message the person typed would. A hand-off to someone else in the same call stays a row.
+        const talking = talkToRef.current
+        if (update.startedBy?.kind === 'mcp' && update.startedBy.via === 'voice' && update.data.followsUp === undefined
+          && talking !== undefined && talking.conversationId === undefined && update.teammateId === talking.teammateId) {
+          setShownKey(update.runId)
+        }
         return
       }
       /*
@@ -3720,6 +3727,21 @@ export default function App(): ReactElement {
   /** Who a run belongs to: what it was started with, or what the host recorded. */
   const ownerOf = (run: LiveRunState): string | undefined =>
     run.teammateId ?? (run.data === undefined ? undefined : missionOwners[run.data.missionId])
+  /*
+   * WHO TALK CALLS (0.746): the teammate picked in this window, and the conversation on screen when it is theirs.
+   * Nobody picked -- Home, a chat of nobody's -- and Talk is ChatGPT's own voice, as before.
+   */
+  const talkTo = pickedTeammate === undefined
+    ? undefined
+    : {
+        teammateId: pickedTeammate.teammateId,
+        name: pickedTeammate.name,
+        hue: pickedTeammate.hue,
+        avatar: pickedTeammate.avatar,
+        ...(liveRun?.data !== undefined && ownerOf(liveRun) === pickedTeammate.teammateId ? { conversationId: liveRun.data.missionId } : {})
+      }
+  const talkToRef = useRef(talkTo)
+  talkToRef.current = talkTo
 
   // Said before the send: a reply on another runtime continues from the
   // stopped run's checkpoint, not from its memory (0.21.2 QA, P2).
@@ -5365,12 +5387,12 @@ export default function App(): ReactElement {
   })()
 
   // Returns the save, so the dialog can hold its button until it lands (L22).
-  const createTeammate = ({ monthlyLimitUsd, instructions, ...input }: TeammateDraft): Promise<void> => {
+  const createTeammate = ({ monthlyLimitUsd, instructions, voice, ...input }: TeammateDraft): Promise<void> => {
     const bridge = window.desktop
     if (!bridge) return Promise.resolve()
     return bridge
       // A new teammate has no limit to lift, nor instructions to clear: a value, or nothing.
-      .createTeammate({ ...input, ...(typeof monthlyLimitUsd === 'number' ? { monthlyLimitUsd } : {}), ...(typeof instructions === 'string' ? { instructions } : {}) })
+      .createTeammate({ ...input, ...(typeof monthlyLimitUsd === 'number' ? { monthlyLimitUsd } : {}), ...(typeof instructions === 'string' ? { instructions } : {}), ...(typeof voice === 'string' ? { voice } : {}) })
       .then((response) => {
         if (!response.ok) {
           setTeammateError(response.error.message)
@@ -8737,6 +8759,8 @@ export default function App(): ReactElement {
           {screen === 'workroom' && (
           <Composer
             draftKey={composerDraftKey}
+            // Talk in a teammate's conversation is a call with them, into it (0.746).
+            {...(talkTo === undefined ? {} : { talkTo })}
             metal={metal}
             metalStrength={metalStrength}
             metalMotion={metalMotion}

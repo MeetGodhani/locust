@@ -87,10 +87,10 @@ try {
   for (let second = 0; second < 120; second += 1) {
     await sleep(1000)
     state = await strip()
-    if (state.lines.some((line) => /^Handed to Wren/.test(line)) || state.message) break
+    if (state.lines.some((line) => /^(Handed|Sent) to Wren/.test(line)) || state.message) break
   }
   await drive.capture('the call, handing it over', () => JSON.stringify(state))
-  check('the strip says it handed the task to Wren', state.lines.some((line) => /^Handed to Wren/.test(line) && /files/i.test(line)), state.lines.join(' | '))
+  check('the strip says it handed the task to Wren', state.lines.some((line) => /^(Handed|Sent) to Wren/.test(line) && /files/i.test(line)), state.lines.join(' | '))
   check('no error on the way', state.message === '', state.message)
 
   // A real conversation of Wren's, new since the call began.

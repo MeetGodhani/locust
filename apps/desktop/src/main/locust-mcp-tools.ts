@@ -35,6 +35,11 @@ export function createLocustMcpTools(options: {
   readonly origin?: MissionStarter
   /** A card of this turn is waiting in Locust's window. */
   readonly waiting?: (missionId: string) => boolean
+  /**
+   * The one conversation a voice call with a teammate may continue (0.746): the person pressed Talk in it, so its
+   * asks are theirs. Undefined outside a call, and for every other server: nothing else is continued from here.
+   */
+  readonly here?: () => string | undefined
   /*
    * ROUTINES (0.704, Colin: "would be sick if we could actually integrate
    * workflows from here"). The routine runner's own run path -- the one Run
@@ -52,7 +57,8 @@ export function createLocustMcpTools(options: {
   const text = (value: unknown, max = 200): value is string => typeof value === 'string' && value.trim().length > 0 && value.length <= max && !value.includes('\0')
   const lookup = async (id: string) => {
     const root = await options.read(id)
-    if (!root.ok || root.data.mission.startedBy?.kind !== 'mcp') return undefined
+    if (!root.ok) return undefined
+    if (root.data.mission.startedBy?.kind !== 'mcp' && (options.here?.() === undefined || options.here() !== id)) return undefined
     const newest = await options.newest(id)
     const read = newest === id ? root : await options.read(newest)
     return read.ok ? read.data.mission : undefined

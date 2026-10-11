@@ -14,6 +14,8 @@ import {
   voiceThreadConfig,
   type VoiceAddOn,
   type VoiceCallAvailability,
+  type VoiceCallTarget,
+  type VoiceCallTeammate,
   type VoiceCallEvent,
   type VoiceCallStartResult
 } from '../shared/voice-call.js'
@@ -60,11 +62,15 @@ export interface VoiceCallDeps {
   readonly testServer?: VoiceAddOn
   /** The voice the person chose in Settings (0.745); Codex's own when there is none. */
   readonly voice?: () => Promise<string | undefined>
+  /** The teammate a call is with (0.746): as the voice is told it, with its own voice when it has one. */
+  readonly teammate?: (target: VoiceCallTarget) => Promise<(VoiceCallTeammate & { readonly voice?: string }) | undefined>
+  /** The conversation the call's add-on may continue while the call is on; undefined once it ends. */
+  readonly onTarget?: (target: VoiceCallTarget | undefined) => void
 }
 
 export interface VoiceCalls {
   available(): Promise<VoiceCallAvailability>
-  start(offer: string): Promise<VoiceCallStartResult>
+  start(offer: string, target?: VoiceCallTarget): Promise<VoiceCallStartResult>
   stop(): Promise<void>
   /** The person's Allow or Deny for one question in the strip; an id no call is waiting on changes nothing. */
   answer(id: unknown, allowed: unknown): void
@@ -82,6 +88,8 @@ interface Live {
   addOn?: boolean
   /** Questions waiting for the person's Allow, by the id the strip answers with. */
   readonly asks: Map<string, (allowed: boolean) => void>
+  /** The teammate the call is with (0.746), so an ask sent to its conversation is said as one. */
+  teammateName?: string
 }
 
 /** One start, from its first line: cancelled by Stop at whatever step it has reached. */
@@ -115,6 +123,8 @@ export function createVoiceCalls(deps: VoiceCallDeps): VoiceCalls {
     call.client.dispose('The call ended.')
     call.child.kill()
     if (call.addOn === true) void deps.addOn?.close().catch(() => undefined)
+    // The add-on may continue the teammate's conversation only while this call is on.
+    deps.onTarget?.(undefined)
     deps.send(why === undefined ? { kind: 'ended' } : { kind: 'ended', why })
   }
 
@@ -155,6 +165,10 @@ export function createVoiceCalls(deps: VoiceCallDeps): VoiceCalls {
         const args = item !== undefined && isRecord(item.arguments) ? item.arguments : undefined
         if (item?.type === 'mcpToolCall' && item.server === VOICE_CALL_ADD_ON && item.tool === 'start_conversation' && args !== undefined) {
           deps.send({ kind: 'handed', to: String(args.teammate ?? '').slice(0, 80), task: String(args.message ?? '').slice(0, 400) })
+        }
+        // An ask sent into the teammate's own conversation (0.746): said as one, under the teammate's name.
+        if (item?.type === 'mcpToolCall' && item.server === VOICE_CALL_ADD_ON && item.tool === 'send_message' && args !== undefined && call.teammateName !== undefined) {
+          deps.send({ kind: 'handed', to: call.teammateName, task: String(args.message ?? '').slice(0, 400) })
         }
         return
       }
@@ -214,7 +228,7 @@ export function createVoiceCalls(deps: VoiceCallDeps): VoiceCalls {
         : { available: true }
     },
 
-    async start(offer) {
+    async start(offer, target) {
       // The ticket is taken before the first await, so a second press or an End can always see this start.
       const previous = current
       const ticket: Ticket = { cancelled: false }
@@ -223,6 +237,9 @@ export function createVoiceCalls(deps: VoiceCallDeps): VoiceCalls {
       if (ticket.cancelled) return { ok: false, message: ENDED }
       const folder = deps.folder()
       if (folder === undefined) { if (current === ticket) current = undefined; return { ok: false, message: 'Pick a folder first.' } }
+      // The teammate the call is with (0.746); one that cannot be found makes an ordinary call, never a refused one.
+      const teammate = target === undefined ? undefined : await deps.teammate?.(target).catch(() => undefined)
+      if (ticket.cancelled) return { ok: false, message: ENDED }
       const codex = await deps.codex().catch(() => undefined)
       if (ticket.cancelled) return { ok: false, message: ENDED }
       if (codex === undefined) { if (current === ticket) current = undefined; return { ok: false, message: 'Voice calls use ChatGPT’s voice through Codex CLI, which is not ready on this computer.' } }
@@ -297,8 +314,13 @@ export function createVoiceCalls(deps: VoiceCallDeps): VoiceCalls {
         if (threadId === undefined) return refuse('Codex did not start the call’s conversation.')
         call.threadId = threadId
         // The voice chosen in Settings; one that cannot be read is Codex's own, never a refused call.
-        const voice = await deps.voice?.().catch(() => undefined)
+        const voice = teammate?.voice ?? await deps.voice?.().catch(() => undefined)
         if (!going()) return refuse(ENDED)
+        // With a teammate and Locust's add-on, the add-on may continue that teammate's conversation, this call only.
+        if (teammate !== undefined && addOn !== undefined) {
+          call.teammateName = teammate.name
+          deps.onTarget?.({ teammateId: teammate.teammateId, ...(teammate.conversationId === undefined ? {} : { conversationId: teammate.conversationId }) })
+        }
         const answered = new Promise<string>((resolve, reject) => {
           call.answer = resolve
           call.failed = (message) => reject(new Said(message))
@@ -311,7 +333,7 @@ export function createVoiceCalls(deps: VoiceCallDeps): VoiceCalls {
           outputModality: 'audio',
           transport: { type: 'webrtc', sdp: offer },
           version: 'v3',
-          realtimeStartInstructions: voiceCallInstructions(basename(folder) || folder, addOn !== undefined, deps.connectors === true),
+          realtimeStartInstructions: voiceCallInstructions(basename(folder) || folder, addOn !== undefined, deps.connectors === true, teammate),
           ...(voice === undefined ? {} : { voice })
         })
         const answer = await answered

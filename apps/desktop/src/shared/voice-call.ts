@@ -73,10 +73,41 @@ export type VoiceCallEvent =
   | { readonly kind: 'error'; readonly message: string }
   | { readonly kind: 'ended'; readonly why?: string }
 
+/*
+ * TALKING TO A TEAMMATE (0.746). Colin, 2026-10-11, on giving the call a face of its own: "we have the ability to
+ * assign the teammate a voice or just talk to the teammate directly with the voice? cause otherwise it may be
+ * clunky". So Talk pressed in a teammate's conversation is a call WITH that teammate: the voice speaks as them, in
+ * their voice, and what the person asks goes into that same conversation, where the teammate does it on its own
+ * runtime, in its own mode, with its cards in the thread. The voice is still ChatGPT's; the work is the teammate's.
+ */
+export interface VoiceCallTarget {
+  readonly teammateId: string
+  /** The conversation Talk was pressed in, when it has one: the call continues it, and only it. */
+  readonly conversationId?: string
+}
+
+const CALL_ID = /^[A-Za-z0-9_-]{1,128}$/
+export function isVoiceCallTarget(value: unknown): value is VoiceCallTarget {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
+  const { teammateId, conversationId } = value as Record<string, unknown>
+  return typeof teammateId === 'string' && CALL_ID.test(teammateId) && (conversationId === undefined || (typeof conversationId === 'string' && CALL_ID.test(conversationId)))
+}
+
+/** The teammate a call speaks as, in the words the voice is told. */
+export interface VoiceCallTeammate {
+  readonly teammateId: string
+  readonly name: string
+  /** Its role as the person reads it ("Code & Migrations"), when it has one. */
+  readonly role?: string
+  /** The AI agent its work runs on, by its own name ("Claude Code"). */
+  readonly runtime: string
+  readonly conversationId?: string
+}
+
 export interface VoiceCallApi {
   available(): Promise<VoiceCallAvailability>
-  /** The window's own WebRTC offer in; the voice service's answer back. */
-  start(offer: string): Promise<VoiceCallStartResult>
+  /** The window's own WebRTC offer in, and the teammate it is with (0.746); the voice service's answer back. */
+  start(offer: string, target?: VoiceCallTarget): Promise<VoiceCallStartResult>
   stop(): Promise<void>
   /** Allow or Deny one `asks`. */
   answer(id: string, allowed: boolean): Promise<void>
@@ -253,7 +284,8 @@ export function voiceThreadConfig(config: unknown, addOn?: VoiceAddOn, options: 
 }
 
 /** What the call's Codex is told when it starts: where it is, and what it may not do. */
-export function voiceCallInstructions(folderName: string, handsOff = false, connectors = false): string {
+export function voiceCallInstructions(folderName: string, handsOff = false, connectors = false, teammate?: VoiceCallTeammate): string {
+  if (teammate !== undefined && handsOff) return teammateCallInstructions(folderName, connectors, teammate)
   /*
    * Said as what works, because the voice believed what it was not told (2026-10-11): asked to read the folder,
    * it ran commands Locust refused, and said "I just sent the request in the app" when there was nothing to answer.
@@ -267,6 +299,29 @@ export function voiceCallInstructions(folderName: string, handsOff = false, conn
   if (!handsOff) return `${folder}${tools} If they ask for a change, say that one of their teammates can make it, and that they can hand it over after the call.`
   const hands = ` Bigger work goes to their teammates: list_teammates says who there is and what each runs on. Before you hand anything over, say back in one short sentence who will do what, and wait for them to say yes; never start one they did not agree to. Then start_conversation with that teammate and the task in plain words, as the person would type it. The teammate works in its own mode, and anything it needs approved shows in Locust's window. Tell them it has started. When they ask how it went, read_reply with the conversation's id and say what came back, briefly.`
   return folder + tools + hands
+}
+
+/** A name fit to sit inside the voice's instructions: one line, no quotes to break out of. */
+const spoken = (text: string, cap = 80): string => text.replace(/[\s"“”]+/g, ' ').trim().slice(0, cap)
+
+/**
+ * A call WITH a teammate (0.746): the voice is that teammate's, and their work goes into their own conversation.
+ * Each ask goes in as the person's words, so the teammate's run is the one that does it -- on its own runtime, in its
+ * own mode, with its approval cards in Locust's window -- and the voice says what came back, as the teammate.
+ */
+function teammateCallInstructions(folderName: string, connectors: boolean, teammate: VoiceCallTeammate): string {
+  const name = spoken(teammate.name, 60)
+  const role = teammate.role === undefined ? '' : ` (${spoken(teammate.role)})`
+  const runtime = spoken(teammate.runtime, 40)
+  const where = teammate.conversationId === undefined
+    ? `The first time they ask ${name} to do something, start_conversation with teammate "${teammate.teammateId}" and their words; it returns a conversation id, and every later ask goes to that conversation with send_message.`
+    : `${name}'s conversation is "${teammate.conversationId}": every ask goes there with send_message, conversation_id "${teammate.conversationId}".`
+  const tools = connectors
+    ? ' For a quick look at their email or calendar you may use their connectors yourself. One that would send, change or buy something first shows Allow and Deny in Locust: say what it will do, ask them to press Allow, and only say it is done once the tool says so.'
+    : ''
+  return `This is a voice call the person started in Locust, in their conversation with ${name}${role}, a Locust teammate whose work runs on ${runtime}, in the folder "${spoken(folderName)}". You are ${name}'s voice: speak as ${name}, in the first person, warmly and briefly, and never say you are someone else. `
+    + `Anything they want looked into or done goes to ${name}'s own run, which does the work: ${where} Send their ask in plain words, as they would type it, and say it is underway. Then read_reply with that conversation id until it has finished, and tell them what came back in a sentence or two, as ${name}. If the reply is still working, say so and offer to check again; never invent a result. Anything ${name}'s run needs approved shows as a card in Locust's window: say so when read_reply mentions one. `
+    + `To glance at a file yourself, use find_files, read_file and search_files; never run shell commands, which this call cannot run, and you change no file yourself.${tools} If they want a different teammate, list_teammates says who there is: say who you will ask, wait for a yes, then start_conversation with them.`
 }
 
 /** A failure from Codex or the voice service, in words a person can act on. */

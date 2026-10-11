@@ -2,7 +2,7 @@ import type { AppServerRunProcess as AppServerProcess } from '@teammate/runtime-
 import { describe, expect, it } from 'vitest'
 
 import type { VoiceAddOn, VoiceCallEvent } from '../shared/voice-call.js'
-import { createVoiceCalls } from './voice-call.js'
+import { createVoiceCalls, type VoiceCallDeps } from './voice-call.js'
 
 /*
  * A VOICE CALL, PLACED BY CODEX (0.737; 0.738 after Sol's review). Against a stand-in for `codex app-server`
@@ -69,6 +69,8 @@ function calls(fakes: () => ReturnType<typeof fakeCodex>, options: {
   readonly connectors?: boolean
   readonly askWaitMs?: number
   readonly voice?: () => Promise<string | undefined>
+  readonly teammate?: VoiceCallDeps['teammate']
+  readonly onTarget?: VoiceCallDeps['onTarget']
 } = {}) {
   const sent: VoiceCallEvent[] = []
   const spawned: ReturnType<typeof fakeCodex>[] = []
@@ -83,7 +85,9 @@ function calls(fakes: () => ReturnType<typeof fakeCodex>, options: {
     ...(options.addOn === undefined ? {} : { addOn: options.addOn }),
     ...(options.connectors === undefined ? {} : { connectors: options.connectors }),
     ...(options.askWaitMs === undefined ? {} : { askWaitMs: options.askWaitMs }),
-    ...(options.voice === undefined ? {} : { voice: options.voice })
+    ...(options.voice === undefined ? {} : { voice: options.voice }),
+    ...(options.teammate === undefined ? {} : { teammate: options.teammate }),
+    ...(options.onTarget === undefined ? {} : { onTarget: options.onTarget })
   })
   return { voice, sent, spawned }
 }
@@ -404,5 +408,44 @@ describe('a voice call’s voice', () => {
       expect(by(fake, 'thread/realtime/start')).not.toHaveProperty('voice')
       await call.voice.stop()
     }
+  })
+})
+
+/*
+ * A CALL WITH A TEAMMATE (0.746): the voice speaks as them, in their voice, and the add-on may continue their
+ * conversation while the call is on -- and not a moment after.
+ */
+describe('a voice call with a teammate', () => {
+  const ADD_ON: VoiceAddOn = { command: 'locust.exe', args: ['bridge.mjs', 'conn.json', 'call'], env: { ELECTRON_RUN_AS_NODE: '1' } }
+  it('speaks as the teammate, in its voice, into its conversation, and lets go of it when the call ends', async () => {
+    const fake = fakeCodex()
+    const targets: unknown[] = []
+    const { voice, sent } = calls(() => fake, {
+      addOn: { open: async () => ADD_ON, close: async () => undefined },
+      voice: async () => 'cove',
+      teammate: async (target) => ({ teammateId: target.teammateId, name: 'Wren', role: 'Code & Migrations', runtime: 'Claude Code', conversationId: 'mission_7', voice: 'sol' }),
+      onTarget: (target) => { targets.push(target) }
+    })
+    expect((await voice.start('v=0\r\noffer', { teammateId: 'tm_wren', conversationId: 'mission_7' })).ok).toBe(true)
+    const started = by(fake, 'thread/realtime/start')
+    expect(started.voice).toBe('sol')
+    expect(String(started.realtimeStartInstructions)).toContain('You are Wren\'s voice')
+    expect(targets).toEqual([{ teammateId: 'tm_wren', conversationId: 'mission_7' }])
+    // Its ask into that conversation is said in the strip as one, under the teammate's name.
+    fake.say({ method: 'item/started', params: { threadId: 'thread_1', item: { type: 'mcpToolCall', server: 'locust_call', tool: 'send_message', arguments: { conversation_id: 'mission_7', message: 'Fix it and add a test.' } } } })
+    await settle()
+    expect(sent).toContainEqual({ kind: 'handed', to: 'Wren', task: 'Fix it and add a test.' })
+    await voice.stop()
+    expect(targets.at(-1)).toBeUndefined()
+  })
+
+  it('is an ordinary call when the teammate cannot be found', async () => {
+    const fake = fakeCodex()
+    const targets: unknown[] = []
+    const { voice } = calls(() => fake, { teammate: async () => undefined, onTarget: (target) => { targets.push(target) } })
+    expect((await voice.start('v=0\r\noffer', { teammateId: 'tm_gone' })).ok).toBe(true)
+    expect(String(by(fake, 'thread/realtime/start').realtimeStartInstructions)).not.toContain('You are')
+    await voice.stop()
+    expect(targets.filter((target) => target !== undefined)).toEqual([])
   })
 })

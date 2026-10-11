@@ -1,6 +1,9 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 
 import { voiceCallText, type VoiceCallApi, type VoiceCallAvailability, type VoiceCallRole } from '../../../shared/voice-call.js'
+import type { AvatarSpec } from '../../../shared/avatar.js'
+import type { TeammateHue } from '../../../shared/ipc.js'
+import { TeammateBot } from './TeammateBot.js'
 import type { LiveVoiceCall } from '../voiceCall.js'
 import { setVoiceLevel, setVoiceState } from '../voiceLevel.js'
 import { Icon } from './Icon.js'
@@ -18,9 +21,24 @@ interface Line { readonly role: VoiceCallRole; readonly text: string }
 
 export const VOICE_CALL_TITLE = 'Talk with ChatGPT’s voice. It can read this folder and change nothing.'
 
-export function VoiceCallButton({ platform, onText, api = typeof window === 'undefined' ? undefined : window.desktop?.voiceCall, availability: given }: {
+/**
+ * The teammate a call is with (0.746): Talk pressed in their conversation is a call WITH them -- their face in the
+ * strip, their name on the lines, and what you ask goes into that conversation, where they do it.
+ */
+export interface VoiceCallTalkTo {
+  readonly teammateId: string
+  readonly name: string
+  readonly hue: TeammateHue
+  readonly avatar: AvatarSpec
+  /** The conversation on screen, when it is theirs. */
+  readonly conversationId?: string
+}
+
+export function VoiceCallButton({ platform, onText, api = typeof window === 'undefined' ? undefined : window.desktop?.voiceCall, availability: given, talkTo }: {
   readonly platform: string
   readonly onText: (text: string) => void
+  /** The teammate whose conversation this is (0.746); absent, Talk is ChatGPT's own voice. */
+  readonly talkTo?: VoiceCallTalkTo
   readonly api?: VoiceCallApi
   /** For a test: what `available()` would say. */
   readonly availability?: VoiceCallAvailability
@@ -130,7 +148,10 @@ export function VoiceCallButton({ platform, onText, api = typeof window === 'und
     starting.current = controller
     try {
       const { openVoiceCall } = await import('../voiceCall.js')
-      const opened = await openVoiceCall(api, (why) => {
+      // With a teammate, the call is placed WITH them, for the conversation on screen as Talk was pressed.
+      const target = talkTo === undefined ? undefined : { teammateId: talkTo.teammateId, ...(talkTo.conversationId === undefined ? {} : { conversationId: talkTo.conversationId }) }
+      const callApi: VoiceCallApi = target === undefined ? api : { ...api, start: (offer) => api.start(offer, target) }
+      const opened = await openVoiceCall(callApi, (why) => {
         if (generation.current !== token) return
         call.current = undefined
         setMessage(why)
@@ -166,9 +187,13 @@ export function VoiceCallButton({ platform, onText, api = typeof window === 'und
   if (platform !== 'win32' || api === undefined || availability?.available !== true) return null
   const on = phase === 'calling' || phase === 'live'
   const speaking = levels.voice > 0.08
+  // Who speaks on the lines and in the status: the teammate the call is with (0.746), else ChatGPT.
+  const voiceName = talkTo?.name ?? 'ChatGPT'
   const status = phase === 'calling'
-    ? 'Calling…'
-    : asks.length > 0 ? 'Waiting for you to allow it' : working ? 'Working on it…' : speaking ? 'ChatGPT is speaking' : muted ? 'Muted' : 'Listening'
+    ? talkTo === undefined ? 'Calling…' : `Calling ${talkTo.name}…`
+    : asks.length > 0 ? 'Waiting for you to allow it' : working ? talkTo === undefined ? 'Working on it…' : `${talkTo.name} is on it…` : speaking ? `${voiceName} is speaking` : muted ? 'Muted' : 'Listening'
+  // The teammate's face does what the call does: speaks, works, waits on you; still while it listens.
+  const faceActivity = asks.length > 0 ? 'waiting' : working ? 'working' : speaking ? 'responding' : 'idle'
   const clock = `${String(Math.floor(seconds / 60))}:${String(seconds % 60).padStart(2, '0')}`
   const shown = phase === 'ended' ? lines : lines.slice(-3)
   const loud = Math.max(levels.you, levels.voice)
@@ -180,7 +205,7 @@ export function VoiceCallButton({ platform, onText, api = typeof window === 'und
       onClick={() => { void (on ? end() : start()) }}
       aria-label={on ? 'End the voice call' : 'Talk'}
       aria-pressed={on}
-      title={on ? 'End the call' : VOICE_CALL_TITLE}
+      title={on ? 'End the call' : talkTo === undefined ? VOICE_CALL_TITLE : `Talk to ${talkTo.name}. What you ask goes to ${talkTo.name} in this conversation; the voice is ChatGPT’s.`}
     >
       <Icon name="waveform" size={17} />
     </button>
@@ -189,6 +214,8 @@ export function VoiceCallButton({ platform, onText, api = typeof window === 'und
         {phase === 'ended'
           ? <span className="lc-call__status">Call ended{seconds > 0 ? ` · ${clock}` : ''}</span>
           : <>
+            {talkTo !== undefined && <TeammateBot hue={talkTo.hue} avatar={talkTo.avatar} size={28} teammateId={talkTo.teammateId} motion="full" hopsWhenDone={false}
+              activity={faceActivity} presence={asks.length > 0 ? 'approval' : working ? 'working' : 'none'} />}
             <span className={`lc-call__bars${speaking ? ' is-voice' : ''}`} aria-hidden="true">
               {[0.55, 0.85, 1, 0.85, 0.55].map((weight, index) => (
                 <span key={index} className="lc-call__bar" style={{ transform: `scaleY(${String(0.18 + 0.82 * Math.sqrt(Math.min(1, loud * weight * (phase === 'live' ? 1 : 0))))})` }} />
@@ -206,9 +233,9 @@ export function VoiceCallButton({ platform, onText, api = typeof window === 'und
         </span>
       </div>
       {(shown.length > 0 || handed.length > 0 || partial.you.length > 0 || partial.voice.length > 0) && <div className="lc-call__lines">
-        {shown.map((line, index) => <p key={index} className={`lc-call__line is-${line.role}`}><span className="lc-call__who">{line.role === 'you' ? 'You' : 'ChatGPT'}</span>{line.text}</p>)}
-        {handed.map((hand, index) => <p key={`handed-${String(index)}`} className="lc-call__line is-handed"><span className="lc-call__who">Handed to {hand.to}</span>{hand.task}</p>)}
-        {on && (['you', 'voice'] as const).map((role) => partial[role].trim().length > 0 && <p key={`partial-${role}`} className={`lc-call__line is-${role} is-partial`}><span className="lc-call__who">{role === 'you' ? 'You' : 'ChatGPT'}</span>{partial[role].trim()}</p>)}
+        {shown.map((line, index) => <p key={index} className={`lc-call__line is-${line.role}`}><span className="lc-call__who">{line.role === 'you' ? 'You' : voiceName}</span>{line.text}</p>)}
+        {handed.map((hand, index) => <p key={`handed-${String(index)}`} className="lc-call__line is-handed"><span className="lc-call__who">{talkTo !== undefined && hand.to === talkTo.name ? `Sent to ${hand.to}` : `Handed to ${hand.to}`}</span>{hand.task}</p>)}
+        {on && (['you', 'voice'] as const).map((role) => partial[role].trim().length > 0 && <p key={`partial-${role}`} className={`lc-call__line is-${role} is-partial`}><span className="lc-call__who">{role === 'you' ? 'You' : voiceName}</span>{partial[role].trim()}</p>)}
       </div>}
       {/* A connector that would change something, asked here: nothing happens until Allow (0.742). */}
       {on && asks.map((asked) => <div key={asked.id} className="lc-call__ask" role="group" aria-label={`Allow ${asked.what}?`}>

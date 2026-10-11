@@ -11,6 +11,14 @@ Settings shows this file as What's new. An entry may group its changes under
 about when they arrive on it carries `<!-- big -->` on the line under its
 heading: the home screen then shows it once, as a splash.
 
+## 0.746.0 - 2026-10-11
+<!-- big -->
+
+### New
+
+- **Talk to a teammate.** Press Talk in a teammate's conversation and you're on a call with that teammate. The voice speaks as them, their face is in the call, and what you ask goes into their conversation. They do the work on their own AI agent, in their own mode, with their approval cards in the thread. On Home, Talk is still ChatGPT's own voice and hands work to whoever fits.
+- **Each teammate can have its own voice.** Pick one of ChatGPT's nine in the teammate's settings. Without one, they use the voice in Settings > General.
+
 ## 0.745.0 - 2026-10-11
 
 ### New

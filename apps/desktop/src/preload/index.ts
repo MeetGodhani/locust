@@ -423,7 +423,7 @@ const desktopApi: DesktopApi = {
   },
   voiceCall: {
     available: () => ipcRenderer.invoke(VOICE_CALL_AVAILABLE),
-    start: (offer) => ipcRenderer.invoke(VOICE_CALL_START, offer),
+    start: (offer, target) => ipcRenderer.invoke(VOICE_CALL_START, offer, target),
     stop: () => ipcRenderer.invoke(VOICE_CALL_STOP),
     answer: (id, allowed) => ipcRenderer.invoke(VOICE_CALL_ANSWER, id, allowed),
     voice: () => ipcRenderer.invoke(VOICE_CALL_VOICES),

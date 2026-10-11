@@ -55,7 +55,7 @@ import type { RouteChoice } from './RoutePicker.js'
 import { RuntimeMark } from './RuntimeMark.js'
 import { noteTyping } from '../faceLife.js'
 import { VoiceButton } from './VoiceButton.js'
-import { VoiceCallButton } from './VoiceCall.js'
+import { VoiceCallButton, type VoiceCallTalkTo } from './VoiceCall.js'
 import { VoiceBeam } from 'voice-glow'
 import { voiceLevel, voiceState } from '../voiceLevel.js'
 import type { VoiceState } from '../voiceLevel.js'
@@ -187,6 +187,8 @@ export function connectorsNote(
 }
 
 export interface ComposerProps {
+  /** The teammate whose conversation this is, for Talk (0.746): a call with them, into this conversation. */
+  readonly talkTo?: VoiceCallTalkTo
   /**
    * Words handed back to the box (C9): a busy model's message, with its
    * attachments, when the person goes on with another model -- so Enter
@@ -436,6 +438,7 @@ const CHAT_MODES: readonly { readonly id: 'direct' | 'compare' | 'blind' | 'clou
 const CLAUDE_CLOUD_DESC = 'Runs in Claude’s cloud; follow it on claude.ai, tell it more from here, bring it home when it is done'
 
 export function Composer({
+  talkTo,
   handBack,
   quoteIn,
   runtimeCommands,
@@ -2536,8 +2539,12 @@ export function Composer({
                 type(inserted.text)
                 requestAnimationFrame(() => { input?.focus(); input?.setSelectionRange(inserted.cursor, inserted.cursor) })
               }} />
-              {/* A voice call (0.737): talks back, where the microphone beside it only types. */}
-              <VoiceCallButton key={`call-${draftKey ?? ''}`} platform={platform ?? 'unknown'} onText={(text) => {
+              {/*
+                * A voice call (0.737): talks back, where the microphone beside it only types. Leaving the conversation
+                * ends it -- except a call WITH a teammate (0.746), which lasts while you stay with them: its first ask
+                * opens their new conversation, and that move must not hang up the call that made it.
+                */}
+              <VoiceCallButton key={`call-${talkTo?.teammateId ?? draftKey ?? ''}`} platform={platform ?? 'unknown'} {...(talkTo === undefined ? {} : { talkTo })} onText={(text) => {
                 const input = field.current
                 const inserted = insertVoiceText(valueNow.current, text, input?.selectionStart ?? valueNow.current.length, input?.selectionEnd ?? valueNow.current.length, MAX_PROMPT_LENGTH)
                 type(inserted.text)
