@@ -3518,6 +3518,8 @@ export type MissionDeleteResponse =
 
 export interface DesktopApi {
   readonly voice?: import('./voice.js').VoiceApi
+  /** A voice call: ChatGPT's voice, placed by Codex (0.737). */
+  readonly voiceCall?: import('./voice-call.js').VoiceCallApi
   readonly locustMcp?: import('./locust-mcp.js').LocustMcpApi
   readQueuedMessages(): Promise<QueuedMessagesResponse>
   writeQueuedMessages(rows: readonly SavedQueuedMessage[]): Promise<QueuedMessagesResponse>

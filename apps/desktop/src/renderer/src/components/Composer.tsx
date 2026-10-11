@@ -55,6 +55,7 @@ import type { RouteChoice } from './RoutePicker.js'
 import { RuntimeMark } from './RuntimeMark.js'
 import { noteTyping } from '../faceLife.js'
 import { VoiceButton } from './VoiceButton.js'
+import { VoiceCallButton } from './VoiceCall.js'
 import { VoiceBeam } from 'voice-glow'
 import { voiceLevel, voiceState } from '../voiceLevel.js'
 import type { VoiceState } from '../voiceLevel.js'
@@ -2530,6 +2531,13 @@ export function Composer({
                 </span>
               )}
               <VoiceButton key={draftKey ?? ''} platform={platform ?? 'unknown'} disabled={workingNow && queued !== undefined} onText={(text) => {
+                const input = field.current
+                const inserted = insertVoiceText(valueNow.current, text, input?.selectionStart ?? valueNow.current.length, input?.selectionEnd ?? valueNow.current.length, MAX_PROMPT_LENGTH)
+                type(inserted.text)
+                requestAnimationFrame(() => { input?.focus(); input?.setSelectionRange(inserted.cursor, inserted.cursor) })
+              }} />
+              {/* A voice call (0.737): talks back, where the microphone beside it only types. */}
+              <VoiceCallButton key={`call-${draftKey ?? ''}`} platform={platform ?? 'unknown'} onText={(text) => {
                 const input = field.current
                 const inserted = insertVoiceText(valueNow.current, text, input?.selectionStart ?? valueNow.current.length, input?.selectionEnd ?? valueNow.current.length, MAX_PROMPT_LENGTH)
                 type(inserted.text)

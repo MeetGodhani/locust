@@ -26,6 +26,7 @@ until it is listed here.
 | Voice typing's one-time files | `github.com/ggml-org/whisper.cpp`, `huggingface.co/ggerganov/whisper.cpp`, and their download CDNs | On Windows x64, only when you press Download in the microphone's first-use prompt |
 | OpenAI voice typing | `https://api.openai.com/v1/audio/transcriptions` | Only after choosing Your OpenAI account, saving your API key, allowing audio upload, and recording with the microphone |
 | A web page a teammate made, open in the preview | eight public hosts, for libraries and fonts only | While the page is open |
+| A voice call (Talk, beside the microphone) | OpenAI's voice service, at the media address the call's answer names | On Windows, only while a call you started is on |
 
 **Its own updates.** A plain request for the files of the newest release in a
 public repository that holds only Locust's installers: `latest.yml`, then the
@@ -91,6 +92,18 @@ Cancelling aborts the request and discards late text, but cannot recall audio
 already sent to OpenAI. No upload occurs before consent, no request is made at
 rest, and nothing falls back to OpenAI from either local choice.
 
+**A voice call.** Talk, beside the chat box's microphone, starts a call with
+ChatGPT's own voice. Locust does not place it: Codex CLI does, with the ChatGPT
+sign-in you gave Codex (Locust never sees it), over Codex's own app server
+(`thread/realtime/start`, WebRTC, realtime v3). The window makes the WebRTC offer
+from your microphone and plays the voice that comes back, so for as long as the
+call lasts your voice goes from this window to OpenAI's voice service and its
+voice comes back the same way; what was said comes back from Codex as text. The
+call's Codex works in your folder on a thread of its own: read-only, every
+request for approval refused, not kept in Codex's history, and with every add-on
+your Codex would start switched off for that thread. Nothing is sent before you
+press Talk, and End, leaving the conversation, or closing Locust ends it.
+
 **A web page in the preview.** A page a teammate made runs inside Locust. It may
 load libraries, stylesheets and fonts -- GET and HEAD over https only -- from
 `cdnjs.cloudflare.com`, `cdn.jsdelivr.net`, `unpkg.com`, `esm.sh`,
@@ -102,9 +115,11 @@ reads of your folder stays on this machine.
 
 - **Locust's own window loads nothing from the network** in the installed app:
   one filter refuses every request it makes, apart from a previewed page's,
-  above. On Windows its own main frame may request microphone audio for voice
-  typing after a mic press. Cameras, preview frames, location, and all other
-  device and web permissions remain refused.
+  above, and a voice call's audio while a call you started is on (above). On
+  Windows its own main frame may request microphone audio for voice typing
+  after a mic press, and for a voice call after you press Talk. Cameras,
+  preview frames, location, and all other device and web permissions remain
+  refused.
 - **Locust's permission host listens on `127.0.0.1` only.** Claude Code asks it
   before a connector call or a command, and each run gets its own token. Locust
   also reads Antigravity's own local server, at `127.0.0.1`.

@@ -3166,7 +3166,7 @@ export function SettingsScreen({
               pet gallery when you open it, and asks the address of a model of your own about it when you
               press Test. Voice typing downloads its checked files only when you choose Download;
               local recordings stay on this computer. If you choose Your OpenAI account and allow it, voice typing
-              sends recordings to api.openai.com using your API key. Each AI agent talks to its own service. A web page a teammate made
+              sends recordings to api.openai.com using your API key. A voice call you start with Talk, beside the microphone, connects this window to OpenAI's voice service for as long as it lasts; Codex places it with your ChatGPT sign-in. Each AI agent talks to its own service. A web page a teammate made
               may load libraries and fonts from the common public hosts and reach no other site, so what it
               reads in your folder cannot be sent anywhere. <NetworkListLink />
             </dd>

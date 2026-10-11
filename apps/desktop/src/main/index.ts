@@ -10,6 +10,8 @@ import { app, BrowserWindow, crashReporter, dialog, ipcMain, Menu, nativeImage, 
 import { createVoiceHost } from './voice-host.js'
 import { voicePermission } from './voice-permission.js'
 import { VOICE_READY, VOICE_DOWNLOAD, VOICE_TRANSCRIBE, VOICE_CANCEL, VOICE_PROGRESS, VOICE_SETTINGS_READ, VOICE_SETTINGS_SAVE, VOICE_OPENAI_CONSENT } from '../shared/voice.js'
+import { VOICE_CALL_AVAILABLE, VOICE_CALL_EVENT, VOICE_CALL_START, VOICE_CALL_STOP, isVoiceCallOffer } from '../shared/voice-call.js'
+import { createVoiceCalls } from './voice-call.js'
 import { createVoiceSettingsStore } from './voice-settings.js'
 import { createLocustMcpHost } from './locust-mcp-host.js'
 import { createLocustMcpTools } from './locust-mcp-tools.js'
@@ -3708,6 +3710,41 @@ if (!ownsSingleInstanceLock) {
     }, mode) : voiceRefused)
     ipcMain.handle(VOICE_TRANSCRIBE, (event, wav: unknown, mode: unknown) => fromVoiceWindow(event) ? voice.transcribe(wav, mode) : voiceRefused)
     ipcMain.handle(VOICE_CANCEL, (event) => fromVoiceWindow(event) ? voice.cancel() : undefined)
+
+    /*
+     * A VOICE CALL (0.737): ChatGPT's voice, placed by Codex as itself (shared/voice-call.ts). The window
+     * holds the microphone and the WebRTC connection; this side only starts Codex and passes the offer and
+     * the answer, and the lines said. One call at a time, ended with the window or the app.
+     */
+    let voiceCallWindow: Electron.WebContents | undefined
+    const voiceCalls = createVoiceCalls({
+      codex: async () => {
+        const found = (await discoverForStart('codex')).find((entry) => entry.id === 'codex')
+        return found?.readiness === 'ready' ? found.executable : undefined
+      },
+      spawn: (executablePath, args, env) => spawnAppServer(executablePath, args, env),
+      folder: () => (workspaceChosen ? workspacePath : undefined),
+      send: (update) => {
+        if (voiceCallWindow !== undefined && !voiceCallWindow.isDestroyed()) voiceCallWindow.send(VOICE_CALL_EVENT, update)
+      },
+      version: app.getVersion()
+    })
+    const voiceCallRefused = { ok: false, message: 'A voice call could not start here.' } as const
+    ipcMain.handle(VOICE_CALL_AVAILABLE, (event) => fromVoiceWindow(event) && process.platform === 'win32'
+      ? voiceCalls.available()
+      : { available: false, why: 'Voice calls are on Windows for now.' })
+    ipcMain.handle(VOICE_CALL_START, (event, offer: unknown) => {
+      if (!fromVoiceWindow(event) || process.platform !== 'win32') return voiceCallRefused
+      if (!isVoiceCallOffer(offer)) return voiceCallRefused
+      if (voiceCallWindow !== event.sender) {
+        voiceCallWindow = event.sender
+        // A window that goes ends its call (once per window, not once per call).
+        event.sender.once('destroyed', () => { void voiceCalls.stop() })
+      }
+      return voiceCalls.start(offer)
+    })
+    ipcMain.handle(VOICE_CALL_STOP, (event) => fromVoiceWindow(event) ? voiceCalls.stop() : undefined)
+    app.once('will-quit', () => voiceCalls.dispose())
 
     const teammatesUnavailable = {
       ok: false,

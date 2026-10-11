@@ -8217,6 +8217,24 @@ textarea {
 }
 
 /*
+ * THE MODEL'S NAME GIVES WAY FIRST, ABOVE THE WRAP (0.737). At an 860 window the box is 722px, just over the
+ * 720 where the row may wrap, and the right group (route, effort, voice typing, Talk, send) never shrinks:
+ * the left one was squeezed to 132 of its 225px and the route chip lay over Edit by 39px and over the folder
+ * by 30 (look-the-chat-box-row-with-talk; the folder was under it already before Talk, by 30). The folder's
+ * name had nothing left to give. Here the model's name is cut to 9ch, as the narrowest box cuts it, and the
+ * right group's gaps close to 8px: 218 of 225 and no overlap at 860, and 960 and up unchanged.
+ */
+@container (max-width: 800px) {
+  .lc-composer__controls .lc-control__model {
+    max-width: 9ch;
+  }
+
+  .lc-composer__controls .lc-composer__group + .lc-composer__group {
+    gap: 8px;
+  }
+}
+
+/*
  * Except when it holds a comparison's model chips (0.493): those are built to
  * give ground -- each name truncates -- and with this group held at full width
  * the LEFT group was squeezed below its own chips instead, which then lay
@@ -20893,6 +20911,37 @@ textarea {
 .lc-voice__ask, .lc-voice__message { position: absolute; bottom: calc(100% + 12px); right: 0; width: 300px; padding: 12px; border: 1px solid var(--lc-border-control); border-radius: 12px; background: var(--lc-bg-control); color: var(--lc-text-primary); z-index: 30; }
 .lc-voice__ask p { margin: 0 0 10px; }
 .lc-voice__message { font-size: 12px; }
+
+/*
+ * A VOICE CALL (0.737): the waveform beside the microphone, and the strip that carries the call above the
+ * chat box, where voice typing's own note opens. Quiet while it listens; the bars and the box's glow move
+ * with whoever is talking, lime while the voice speaks.
+ */
+.lc-call { position: relative; display: inline-flex; align-items: center; }
+.lc-call__button.is-on { color: var(--lc-lime-text); background: var(--lc-lime-tint); box-shadow: inset 0 0 0 1px var(--lc-lime-border); }
+.lc-call__strip {
+  position: absolute; bottom: calc(100% + 12px); right: 0; z-index: 30;
+  width: min(460px, calc(100vw - 48px)); padding: 10px 12px;
+  display: flex; flex-direction: column; gap: 8px;
+  border: 1px solid var(--lc-border-control); border-radius: 12px;
+  background: var(--lc-bg-control); color: var(--lc-text-primary);
+}
+.lc-call__head { display: flex; align-items: center; gap: 10px; min-height: 28px; }
+.lc-call__bars { display: inline-flex; align-items: center; gap: 3px; height: 18px; flex: 0 0 auto; }
+.lc-call__bar { width: 3px; height: 18px; border-radius: 2px; background: var(--lc-text-secondary); transform-origin: center; transition: transform 90ms linear; }
+.lc-call__bars.is-voice .lc-call__bar { background: var(--lc-lime); }
+.lc-call__status { flex: 1 1 auto; min-width: 0; font-size: 12px; color: var(--lc-text-secondary); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lc-call__acts { display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto; }
+.lc-call__acts .lc-control { gap: 6px; }
+.lc-call__end { color: var(--lc-red-text); }
+.lc-call__lines { display: flex; flex-direction: column; gap: 4px; max-height: 168px; overflow-y: auto; }
+.lc-call__line { margin: 0; font-size: 13px; line-height: 1.45; color: var(--lc-text-primary); overflow-wrap: anywhere; }
+.lc-call__line.is-partial { color: var(--lc-text-muted); }
+.lc-call__line.is-you .lc-call__who { color: var(--lc-text-secondary); }
+.lc-call__line.is-voice .lc-call__who { color: var(--lc-lime-text); }
+.lc-call__who { margin-right: 6px; font-size: 12px; font-weight: 600; }
+.lc-call__message { margin: 0; font-size: 12px; color: var(--lc-amber-text); }
+@media (prefers-reduced-motion: reduce) { .lc-call__bar { transition: none; } }
 
 /*
  * THE VOICE GLOW, AROUND THE BOX ITSELF (0.687).

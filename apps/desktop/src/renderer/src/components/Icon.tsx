@@ -56,6 +56,9 @@ export type IconName =
   | 'cloud'
   // Commit (0.680), from Lucide's git-commit-horizontal.
   | 'commit'
+  // A voice call (0.737), from Lucide's audio-lines and mic-off.
+  | 'waveform'
+  | 'mic-off'
 
 export function Icon({ name, size = 16 }: { name: IconName; size?: number }): ReactNode {
   const paths: Record<IconName, ReactNode> = {
@@ -85,6 +88,8 @@ export function Icon({ name, size = 16 }: { name: IconName; size?: number }): Re
     dots: <><circle cx="5" cy="12" r="1" fill="currentColor" stroke="none" /><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none" /><circle cx="19" cy="12" r="1" fill="currentColor" stroke="none" /></>,
     // Two columns and a divider: a change with a before and an after.
     commit: <><circle cx="12" cy="12" r="3" /><path d="M3 12h6" /><path d="M15 12h6" /></>,
+    waveform: <path d="M2 10v3M6 6v11M10 3v18M14 8v7M18 5v13M22 10v3" />,
+    'mic-off': <><path d="M2 2l20 20" /><path d="M18.89 13.23A7.12 7.12 0 0 0 19 12v-2" /><path d="M5 10v2a7 7 0 0 0 12 5" /><path d="M15 9.34V5a3 3 0 0 0-5.68-1.33" /><path d="M9 9v3a3 3 0 0 0 5.12 2.12" /><path d="M12 19v3" /></>,
     diff: <><rect x="3" y="5" width="6" height="14" /><rect x="15" y="5" width="6" height="14" /><path d="M12 2v20" /></>,
     file: <><path d="M6 3h8l4 4v14H6z" /><path d="M14 3v5h5" /></>,
     // The arrow into a tray: what every other client draws for "save this
