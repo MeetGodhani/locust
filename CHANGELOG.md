@@ -11,6 +11,12 @@ Settings shows this file as What's new. An entry may group its changes under
 about when they arrive on it carries `<!-- big -->` on the line under its
 heading: the home screen then shows it once, as a splash.
 
+## 0.740.0 - 2026-10-11
+
+### New
+
+- **Add Locust to the Claude app in one press.** Settings > General > The Claude app: press Add, and a Claude chat can ask your Locust teammates and read their replies. Locust makes the change for you and keeps a copy of Claude's settings first. If Claude is open, a Restart Claude button finishes it. Remove takes it out again.
+
 ## 0.739.0 - 2026-10-11
 
 ### New
