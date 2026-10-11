@@ -11,6 +11,17 @@ Settings shows this file as What's new. An entry may group its changes under
 about when they arrive on it carries `<!-- big -->` on the line under its
 heading: the home screen then shows it once, as a splash.
 
+## 0.739.0 - 2026-10-11
+
+### New
+
+- **Talk can hand work to your teammates.** In a voice call, say what you want done and who should do it ("have Wren fix the login bug"). The voice says it back, and once you say yes it starts a real conversation with that teammate, in the teammate's own mode and with its approval cards in the window as usual. The call shows "Handed to Wren", the conversation says it was started from a voice call, and later you can ask the voice how it went.
+
+### Fixed
+
+- **Sign in with GitHub works again** with the newest GitHub CLI, which words its one-time code differently.
+- **After Locust updates Codex, its new models appear in the picker right away**, without a restart.
+
 ## 0.738.0 - 2026-10-11
 
 ### Fixed
