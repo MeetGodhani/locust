@@ -11,6 +11,18 @@ Settings shows this file as What's new. An entry may group its changes under
 about when they arrive on it carries `<!-- big -->` on the line under its
 heading: the home screen then shows it once, as a splash.
 
+## 0.737.0 - 2026-10-11
+<!-- big -->
+
+### New
+
+- **Talk with ChatGPT's voice.** The waveform beside the chat box's microphone starts a voice call: you talk, ChatGPT answers out loud, and what you each say appears as you go. It runs on your ChatGPT plan through Codex CLI, so there is no API key to add, only Codex signed in with ChatGPT. During a call it can read your folder but changes nothing, and your Codex add-ons stay off. When the call ends, one press puts what was said in the chat box for any teammate. On Windows for now.
+
+### Fixed
+
+- **The chat box's buttons no longer overlap in a narrow window.** At about 860 pixels wide the model button covered the folder and the mode; now the model's name is shortened first.
+- **When Codex's sandbox can't start, Locust says what to look for:** a Codex process still running in the background, which can happen after the Codex app's window is closed.
+
 ## 0.736.0 - 2026-10-10
 
 ### Fixed
