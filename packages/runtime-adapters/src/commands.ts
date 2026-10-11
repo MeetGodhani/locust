@@ -1318,10 +1318,60 @@ export const COPILOT_MODEL_HINTS: RuntimeModelHints = {
  */
 const OPENCODE_KEEP_GOING = { continue_loop_on_deny: true } as const
 
+/**
+ * GIT THAT ONLY READS, IN ASK MODE (0.744). The overnight sweep of 0.738 found
+ * `/review` in Ask mode on OpenCode could not see the change it was asked to
+ * review: every shell command, `git diff` included, was refused. Colin left the
+ * call to me (2026-10-11).
+ *
+ * MEASURED 2026-10-11 against OpenCode 1.18.27 on the free model, one
+ * `opencode run` per case in a throwaway repository:
+ * - the LAST matching pattern wins: `{"*": "ask", "git status*": "allow"}` ran
+ *   `git status`; the same two the other way round refused it;
+ * - a chained command is asked about part by part: `git status && echo hello >
+ *   notes.txt` asked about `git status, echo hello` and was refused, nothing
+ *   written;
+ * - `git diff --output=out.txt` and `git log --output=log.txt` were ALLOWED by
+ *   a bare `git diff*` -- `--output` writes a file -- and refused once
+ *   `"git *--output*": "ask"` came after the allows;
+ * - the free model answered with a map here, as it does with plain "ask".
+ *
+ * So: ask for everything, allow the git commands that only read, then ask
+ * again for each of their flags that writes, runs a program or reads outside
+ * the folder. `git branch` is allowed bare and listing only: with a name it
+ * makes a branch. "ask" is a refusal in an unattended run.
+ */
+const OPENCODE_READ_ONLY_BASH = {
+  "*": "ask",
+  "git status*": "allow",
+  "git diff*": "allow",
+  "git log*": "allow",
+  "git show*": "allow",
+  "git blame*": "allow",
+  "git grep*": "allow",
+  "git ls-files*": "allow",
+  "git rev-parse*": "allow",
+  "git shortlog*": "allow",
+  "git describe*": "allow",
+  "git branch": "allow",
+  "git branch -a": "allow",
+  "git branch -r": "allow",
+  "git branch -v": "allow",
+  "git branch -vv": "allow",
+  "git branch --show-current": "allow",
+  "git branch --list*": "allow",
+  "git stash list*": "allow",
+  "git *--output*": "ask",
+  "git *--ext-diff*": "ask",
+  "git *--no-index*": "ask",
+  "git grep *-O*": "ask",
+  "git grep *--open-files-in-pager*": "ask",
+} as const;
+
 const OPENCODE_READ_ONLY_PERMISSIONS = {
   edit: "deny",
   write: "deny",
-  bash: "ask",
+  bash: OPENCODE_READ_ONLY_BASH,
   patch: "deny",
 } as const;
 

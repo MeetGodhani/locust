@@ -1130,7 +1130,9 @@ describe("OpenCode and Copilot CLI commands", () => {
         // and `opencode run`, being non-interactive, auto-rejects every
         // use of it -- measured: "permission requested: bash; auto-rejecting".
         // Still read-only; refused at the call rather than by absence.
-        bash: "ask",
+        // 0.744: a map that still starts "ask" -- git that only reads is let
+        // through after it (checked below).
+        bash: expect.any(Object),
         patch: "deny",
         // Stated, not left to the default: an unstated refusal ends the run.
         external_directory: "deny",
@@ -1139,6 +1141,26 @@ describe("OpenCode and Copilot CLI commands", () => {
       // (A6.1): measured, `git status` refused, the file read instead, exit 0.
       experimental: { continue_loop_on_deny: true },
     });
+    /*
+     * GIT THAT ONLY READS (0.744), measured 2026-10-11 on OpenCode 1.18.27: the
+     * last matching pattern wins, a chained command is asked about part by
+     * part, and a bare "git diff*" let --output write a file until an "ask"
+     * for it came after the allows.
+     */
+    const bash = (JSON.parse(OPENCODE_READ_ONLY_CONFIG) as { permission: { bash: Record<string, string> } }).permission.bash;
+    const order = Object.keys(bash);
+    expect(order[0]).toBe("*");
+    expect(bash["*"]).toBe("ask");
+    for (const read of ["git status*", "git diff*", "git log*", "git show*", "git blame*", "git branch"]) expect(bash[read], read).toBe("allow");
+    // Everything allowed is git, and nothing that makes or changes anything.
+    for (const [pattern, said] of Object.entries(bash)) if (said === "allow") expect(pattern, pattern).toMatch(/^git (status|diff|log|show|blame|grep|ls-files|rev-parse|shortlog|describe|branch|stash list)($| |\*)/);
+    expect(bash["git branch*"]).toBeUndefined();
+    // Each flag that writes, runs a program or reads outside the folder is asked about again, AFTER every allow.
+    const lastAllow = Math.max(...order.map((pattern, index) => (bash[pattern] === "allow" ? index : -1)));
+    for (const flag of ["git *--output*", "git *--ext-diff*", "git *--no-index*", "git grep *-O*", "git grep *--open-files-in-pager*"]) {
+      expect(bash[flag], flag).toBe("ask");
+      expect(order.indexOf(flag), flag).toBeGreaterThan(lastAllow);
+    }
   });
 
   it("titles only a NEW OpenCode session, and keeps plugins for a run that may edit", () => {
@@ -1211,8 +1233,10 @@ describe("OpenCode and Copilot CLI commands", () => {
          * configs to the real provider: "deny" returns HTTP 403
          * `FreeTierError`, "ask" answers. A test that agrees with the code
          * and disagrees with the provider is worse than no test.
+         *
+         * 0.744: the same map as the sibling's, "ask" first.
          */
-        bash: "ask",
+        bash: JSON.parse(OPENCODE_READ_ONLY_CONFIG).permission.bash,
         patch: "deny",
         external_directory: { "C:\\work\\shop\\.git\\*": "allow", "*": "deny" },
       },
@@ -1236,8 +1260,9 @@ describe("OpenCode and Copilot CLI commands", () => {
       permission: Record<string, unknown>;
     };
     for (const rule of ["edit", "write", "bash", "patch"]) {
+      // toEqual: since 0.744 `bash` is a map of patterns, the same map in both.
       expect(inWorktree.permission[rule], `${rule} differs between a plain read-only run and a worktree one`)
-        .toBe(plain.permission[rule]);
+        .toEqual(plain.permission[rule]);
     }
 
     // And a run in the folder itself asks for nothing extra -- the negative

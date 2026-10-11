@@ -11,6 +11,12 @@ Settings shows this file as What's new. An entry may group its changes under
 about when they arrive on it carries `<!-- big -->` on the line under its
 heading: the home screen then shows it once, as a splash.
 
+## 0.744.0 - 2026-10-11
+
+### Fixed
+
+- **An OpenCode teammate in Ask mode can review your changes.** `/review` and questions like "what changed?" used to fail, because Ask mode refused every command, `git diff` included. Git commands that only read now run: status, diff, log, show, blame, grep, listing branches. Everything else stays refused, including git's flags that write files and commands chained after git.
+
 ## 0.743.0 - 2026-10-11
 
 ### Improved

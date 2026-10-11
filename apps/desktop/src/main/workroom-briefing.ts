@@ -542,7 +542,8 @@ function answerSection(): string {
  * nothing in place of `git log`, so the line says what to answer from.
  */
 export function openCodeReadOnlySection(): string {
-  return 'You have NO shell in this mode -- not git, not cat, not ls: any shell command ends this run at once, with nothing done. Use your read, grep, glob and list tools, and answer from what the files show.'
+  // 0.744: git that only reads runs (commands.ts, OPENCODE_READ_ONLY_BASH); every other shell command is still refused.
+  return 'Your shell in this mode runs only git commands that read -- git status, git diff, git log, git show, git blame, git grep, git ls-files, git branch -- each on its own: no &&, no pipes, no redirects, no --output. Any other shell command, cat and ls included, is refused. For everything else use your read, grep, glob and list tools, and answer from what the files show.'
 }
 
 /**
