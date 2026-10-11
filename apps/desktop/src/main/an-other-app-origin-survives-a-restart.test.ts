@@ -26,9 +26,20 @@ describe('an other-app origin survives a restart', () => {
     const old = await createFileMissionLedger({ rootDirectory: directory }).getMission('mission_1')
     expect(old).toBeUndefined() // an older writer never claimed this new origin
   })
+  it('keeps a voice call’s hand-off as one, across a restart (0.739)', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'locust-mcp-ledger-')); roots.push(directory)
+    const metadata: MissionLedgerMetadata = { missionId: 'mission_2', runId: 'run_2', prompt: 'Fix the login loop', runtime: 'codex', model: 'account-default', requestedRouteId: 'codex', resolvedRouteId: 'codex-account:default', cliVersion: null, workspaceId: 'ws_test', sandbox: 'workspace-write', mode: 'accept-edits', executionPolicyVersion: 1, createdAt: '2026-10-11T00:00:00Z', startedBy: { kind: 'mcp', via: 'voice' } }
+    const ledger = createFileMissionLedger({ rootDirectory: directory })
+    await ledger.createMission(metadata); await ledger.flush()
+    const answer = await readOneMission(createFileMissionLedger({ rootDirectory: directory }), undefined, 'mission_2')
+    expect(answer.ok && answer.data.mission.startedBy).toEqual({ kind: 'mcp', via: 'voice' })
+    // Still the same schema: an older Locust reads it as "another app", which is still true.
+    expect(JSON.parse((await readFile(join(directory, 'mission_2.jsonl'), 'utf8')).split('\n')[0]!).schemaVersion).toBe(23)
+  })
   it('makes the external origin visible in the thread and keeps the actual ask as a message', async () => {
     const thread = await readFile(fileURLToPath(new URL('../renderer/src/components/Thread.tsx', import.meta.url)), 'utf8')
-    expect(thread).toContain('Started from another app · Ask mode (read only)')
+    expect(thread).toContain("const from = via === 'voice' ? 'Started from a voice call' : 'Started from another app'")
+    expect(thread).toContain('return `${from} · Ask mode (read only)`')
     expect(thread).toContain("earlierTurns.some(turn => turn.startedBy?.kind === 'mcp')")
   })
   it('classifies the token file and opt-in as excluded from every profile backup', () => {

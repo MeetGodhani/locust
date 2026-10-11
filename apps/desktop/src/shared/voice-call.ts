@@ -33,6 +33,8 @@ export type VoiceCallEvent =
   | { readonly kind: 'said'; readonly role: VoiceCallRole; readonly text: string }
   /** Codex is working behind the voice (it was handed something to look at). */
   | { readonly kind: 'working'; readonly working: boolean }
+  /** The voice handed something to a teammate (0.739): a real conversation, in the teammate's own mode. */
+  | { readonly kind: 'handed'; readonly to: string; readonly task: string }
   | { readonly kind: 'error'; readonly message: string }
   | { readonly kind: 'ended'; readonly why?: string }
 
@@ -57,12 +59,26 @@ export function voiceCallRole(role: unknown): VoiceCallRole | undefined {
   return undefined
 }
 
+/**
+ * LOCUST ITSELF, THE ONE ADD-ON A CALL'S CODEX HAS (0.739). A private copy of Locust's own add-on server
+ * ("Let your other AI apps use Locust", which can stay off), started for the call and stopped with it, carrying
+ * only the hand-off tools. Its name is the call's own, so it never meets one of the person's servers.
+ */
+export const VOICE_CALL_ADD_ON = 'locust_call'
+export interface VoiceAddOn {
+  readonly command: string
+  readonly args: readonly string[]
+  readonly env: Readonly<Record<string, string>>
+}
+/** The tools the call's copy of Locust's server answers; anything else is refused there. */
+export const VOICE_CALL_TOOLS: ReadonlySet<string> = new Set(['list_teammates', 'start_conversation', 'send_message', 'read_reply', 'list_background_runs'])
+
 /** A name that can sit inside a dotted config key without being read as two. */
 const PLAIN_NAME = /^[A-Za-z0-9@_-]{1,128}$/
 
 /** What the call's Codex thread is started with, or why the call is not placed. */
 export type VoiceThreadConfig =
-  | { readonly ok: true; readonly config: Readonly<Record<string, boolean | readonly string[]>> }
+  | { readonly ok: true; readonly config: Readonly<Record<string, boolean | string | readonly string[] | Readonly<Record<string, string>>>> }
   | { readonly ok: false; readonly message: string }
 
 /** The hosts a call's own traffic may be pointed at: OpenAI's. */
@@ -92,7 +108,7 @@ function openAiHost(value: string): boolean {
  * name cannot be written as a key; and when Codex has been pointed at a voice or ChatGPT address that is not
  * OpenAI's, since the call's audio and control would follow it (#4).
  */
-export function voiceThreadConfig(config: unknown): VoiceThreadConfig {
+export function voiceThreadConfig(config: unknown, addOn?: VoiceAddOn): VoiceThreadConfig {
   if (typeof config !== 'object' || config === null || Array.isArray(config)) {
     return { ok: false, message: 'Locust could not read your Codex settings, so it did not place the call. Try again.' }
   }
@@ -106,7 +122,7 @@ export function voiceThreadConfig(config: unknown): VoiceThreadConfig {
       return { ok: false, message: `Your Codex settings send ${/realtime/i.test(key) ? 'voice calls' : 'ChatGPT requests'} to an address that is not OpenAI’s (${key}), so Locust did not place the call. Remove that setting to use Talk.` }
     }
   }
-  const out: Record<string, boolean | readonly string[]> = {
+  const out: Record<string, boolean | string | readonly string[] | Readonly<Record<string, string>>> = {
     'features.apps': false,
     'features.plugins': false,
     'features.hooks': false,
@@ -117,15 +133,25 @@ export function voiceThreadConfig(config: unknown): VoiceThreadConfig {
     if (typeof servers !== 'object' || Array.isArray(servers)) return { ok: false, message: 'Locust could not read your Codex add-ons, so it did not place the call. Try again.' }
     for (const name of Object.keys(servers)) {
       if (!PLAIN_NAME.test(name)) return { ok: false, message: `Locust could not switch off your Codex add-on "${name.slice(0, 60)}" for the call, so it did not place it.` }
+      // The call's own name is the call's: one of the person's by that name cannot share it.
+      if (name === VOICE_CALL_ADD_ON && addOn !== undefined) return { ok: false, message: `Your Codex has an add-on named "${VOICE_CALL_ADD_ON}", the name a call keeps for Locust, so Locust did not place the call.` }
       out[`mcp_servers.${name}.enabled`] = false
     }
+  }
+  if (addOn !== undefined) {
+    out[`mcp_servers.${VOICE_CALL_ADD_ON}.command`] = addOn.command
+    out[`mcp_servers.${VOICE_CALL_ADD_ON}.args`] = addOn.args
+    out[`mcp_servers.${VOICE_CALL_ADD_ON}.env`] = addOn.env
+    out[`mcp_servers.${VOICE_CALL_ADD_ON}.enabled`] = true
   }
   return { ok: true, config: out }
 }
 
 /** What the call's Codex is told when it starts: where it is, and what it may not do. */
-export function voiceCallInstructions(folderName: string): string {
-  return `This is a voice call the person started in Locust, about the folder "${folderName}". You may read files in that folder to answer, but nothing can be changed during this call: no edits, no commands that change anything. If they ask for a change, say that one of their teammates can make it, and that they can hand it over after the call.`
+export function voiceCallInstructions(folderName: string, handsOff = false): string {
+  const said = `This is a voice call the person started in Locust, about the folder "${folderName}". You may read files in that folder to answer, but you change nothing yourself during this call: no edits, no commands that change anything.`
+  if (!handsOff) return `${said} If they ask for a change, say that one of their teammates can make it, and that they can hand it over after the call.`
+  return `${said} When they want something done, their teammates can do it: use the ${VOICE_CALL_ADD_ON} tools. list_teammates says who there is and what each runs on. Before you hand anything over, say back in one short sentence who will do what, and wait for them to say yes; never start one they did not agree to. Then start_conversation with that teammate and the task in plain words, as the person would type it. The teammate works in its own mode, and anything it needs approved shows in Locust's window. Tell them it has started. When they ask how it went, read_reply with the conversation's id and say what came back, briefly.`
 }
 
 /** A failure from Codex or the voice service, in words a person can act on. */
@@ -147,9 +173,18 @@ export function voiceCallSaid(message: string): string {
   return `The call could not go on. Codex said: ${first.slice(0, 200)}`
 }
 
-/** A finished call as text for the chat box, said line by line. */
-export function voiceCallText(lines: readonly { readonly role: VoiceCallRole; readonly text: string }[]): string {
+/** A finished call as text for the chat box, said line by line, and what was handed over (0.739). */
+export function voiceCallText(
+  lines: readonly { readonly role: VoiceCallRole; readonly text: string }[],
+  handed: readonly { readonly to: string; readonly task: string }[] = []
+): string {
   const said = lines.map((line) => ({ ...line, text: line.text.replace(/\s+/g, ' ').trim() })).filter((line) => line.text.length > 0)
-  if (said.length === 0) return ''
-  return ['From a voice call:', '', ...said.map((line) => `${line.role === 'you' ? 'You' : 'ChatGPT'}: ${line.text}`)].join('\n')
+  if (said.length === 0 && handed.length === 0) return ''
+  const over = handed.map((hand) => `- ${hand.to}: ${hand.task.replace(/\s+/g, ' ').trim()}`)
+  return [
+    'From a voice call:',
+    '',
+    ...said.map((line) => `${line.role === 'you' ? 'You' : 'ChatGPT'}: ${line.text}`),
+    ...(over.length === 0 ? [] : ['', 'Handed over:', ...over])
+  ].join('\n')
 }

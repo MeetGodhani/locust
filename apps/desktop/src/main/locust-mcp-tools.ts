@@ -31,6 +31,8 @@ export function createLocustMcpTools(options: {
   readonly background: () => Promise<readonly PublicBackgroundRun[]>
   /** The person's switch in Settings: the teammate's own mode instead of Ask. Read on every turn. */
   readonly ownMode?: () => boolean
+  /** Who a conversation started here is recorded as started by: another app, or a voice call's Codex (0.739). */
+  readonly origin?: MissionStarter
   /** A card of this turn is waiting in Locust's window. */
   readonly waiting?: (missionId: string) => boolean
   /*
@@ -70,7 +72,7 @@ export function createLocustMcpTools(options: {
     // This is the only request shape that can reach the start path. A tool
     // argument named mode/route/etc. never widens it or changes a saved route.
     const mode = await modeOf(request.teammateId!)
-    const result = await options.start({ ...request, mode, keepSavedRoute: true } as CodexMissionStartRequest, { kind: 'mcp' })
+    const result = await options.start({ ...request, mode, keepSavedRoute: true } as CodexMissionStartRequest, options.origin ?? { kind: 'mcp' })
     return result.ok ? mcpText(JSON.stringify({ conversation_id: conversation ?? result.data.missionId, mode })) : mcpText(result.error.message, true)
   }
   /** A finished turn's answer, or Locust's own words for why there is none. */

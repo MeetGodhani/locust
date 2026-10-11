@@ -4,10 +4,12 @@ import { createAppServerClient } from '@teammate/runtime-adapters'
 import type { AppServerClient, AppServerRunProcess as AppServerProcess, ExecutableLaunch, JsonValue } from '@teammate/runtime-adapters'
 
 import {
+  VOICE_CALL_ADD_ON,
   voiceCallInstructions,
   voiceCallRole,
   voiceCallSaid,
   voiceThreadConfig,
+  type VoiceAddOn,
   type VoiceCallAvailability,
   type VoiceCallEvent,
   type VoiceCallStartResult
@@ -39,6 +41,14 @@ export interface VoiceCallDeps {
   readonly answerTimeoutMs?: number
   /** How long End waits for Codex to say it stopped before the server is ended anyway. */
   readonly stopWaitMs?: number
+  /**
+   * Locust's own add-on server, a private copy for the call (0.739): opened as the call starts, closed with it.
+   * Without it a call can look and talk but hand nothing over.
+   */
+  readonly addOn?: {
+    readonly open: () => Promise<VoiceAddOn | undefined>
+    readonly close: () => Promise<void>
+  }
 }
 
 export interface VoiceCalls {
@@ -55,6 +65,8 @@ interface Live {
   answer?: (sdp: string) => void
   failed?: (message: string) => void
   ended: boolean
+  /** Locust's add-on was opened for this call, and closes with it. */
+  addOn?: boolean
 }
 
 /** One start, from its first line: cancelled by Stop at whatever step it has reached. */
@@ -85,6 +97,7 @@ export function createVoiceCalls(deps: VoiceCallDeps): VoiceCalls {
     call.failed = undefined
     call.client.dispose('The call ended.')
     call.child.kill()
+    if (call.addOn === true) void deps.addOn?.close().catch(() => undefined)
     deps.send(why === undefined ? { kind: 'ended' } : { kind: 'ended', why })
   }
 
@@ -119,6 +132,15 @@ export function createVoiceCalls(deps: VoiceCallDeps): VoiceCalls {
       case 'thread/realtime/closed':
         end(call, typeof p.reason === 'string' && p.reason !== 'requested' ? `The voice service closed the call (${p.reason}).` : undefined)
         return
+      // A hand-off to a teammate, said in the strip as it starts (0.739).
+      case 'item/started': {
+        const item = isRecord(p.item) ? p.item : undefined
+        const args = item !== undefined && isRecord(item.arguments) ? item.arguments : undefined
+        if (item?.type === 'mcpToolCall' && item.server === VOICE_CALL_ADD_ON && item.tool === 'start_conversation' && args !== undefined) {
+          deps.send({ kind: 'handed', to: String(args.teammate ?? '').slice(0, 80), task: String(args.message ?? '').slice(0, 400) })
+        }
+        return
+      }
       // Codex working behind the voice: something it was handed to look at.
       case 'turn/started':
         deps.send({ kind: 'working', working: true })
@@ -177,8 +199,22 @@ export function createVoiceCalls(deps: VoiceCallDeps): VoiceCalls {
       const client = createAppServerClient({
         transport: { send: (line) => child.write(line), close: () => child.kill() },
         onNotification: ({ method, params }) => notified(call, method, params),
-        // Nothing in a call may act: every approval Codex asks for is refused.
-        onRequest: async () => ({ decision: 'reject' }),
+        /*
+         * Nothing in a call may act itself: every approval Codex asks for is refused -- except Codex asking to use
+         * Locust's own add-on, which only hands work to teammates (measured 2026-10-11: an MCP tool call on this
+         * thread first asks `mcpServer/elicitation/request`, `codex_approval_kind: mcp_tool_call`; declined, the
+         * tool never runs). That add-on is the call's private copy, carrying only the hand-off tools.
+         */
+        onRequest: async (request): Promise<JsonValue> => {
+          const p = isRecord(request.params) ? request.params : {}
+          const meta = isRecord(p._meta) ? p._meta : {}
+          if (request.method === 'mcpServer/elicitation/request') {
+            return call.addOn === true && p.serverName === VOICE_CALL_ADD_ON && meta.codex_approval_kind === 'mcp_tool_call'
+              ? { action: 'accept', content: {} }
+              : { action: 'decline' }
+          }
+          return { decision: 'reject' }
+        },
         requestTimeoutMs: REQUEST_TIMEOUT_MS
       })
       call = { client, child, ended: false }
@@ -207,7 +243,11 @@ export function createVoiceCalls(deps: VoiceCallDeps): VoiceCalls {
         // The settings alone, which start nothing (#1); unreadable settings place no call (#2).
         const read = await client.request('config/read', { cwd: folder }).catch(() => undefined)
         if (!going()) return refuse(ENDED)
-        const threadConfig = voiceThreadConfig(isRecord(read) ? read.config : undefined)
+        // Locust's own add-on for the hand-offs; a call without it still talks.
+        const addOn = deps.addOn === undefined ? undefined : await deps.addOn.open().catch(() => undefined)
+        if (addOn !== undefined) call.addOn = true
+        if (!going()) return refuse(ENDED)
+        const threadConfig = voiceThreadConfig(isRecord(read) ? read.config : undefined, addOn)
         if (!threadConfig.ok) return refuse(threadConfig.message)
         const thread = await client.request('thread/start', {
           cwd: folder,
@@ -232,7 +272,7 @@ export function createVoiceCalls(deps: VoiceCallDeps): VoiceCalls {
           outputModality: 'audio',
           transport: { type: 'webrtc', sdp: offer },
           version: 'v3',
-          realtimeStartInstructions: voiceCallInstructions(basename(folder) || folder)
+          realtimeStartInstructions: voiceCallInstructions(basename(folder) || folder, addOn !== undefined)
         })
         const answer = await answered
         call.answer = undefined

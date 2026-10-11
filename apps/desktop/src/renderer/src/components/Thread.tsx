@@ -768,11 +768,12 @@ function ReceiptCard({
   )
 }
 
-/** The thread's line for a turn another app started. */
-export function otherAppMarker(mode: MissionMode | undefined): string {
-  if (mode === undefined) return 'Started from another app'
-  if (mode === 'ask') return 'Started from another app · Ask mode (read only)'
-  return `Started from another app · ${modeFacts(mode).name}`
+/** The thread's line for a turn another app started -- or a voice call's Codex handed over (0.739). */
+export function otherAppMarker(mode: MissionMode | undefined, via?: 'voice'): string {
+  const from = via === 'voice' ? 'Started from a voice call' : 'Started from another app'
+  if (mode === undefined) return from
+  if (mode === 'ask') return `${from} · Ask mode (read only)`
+  return `${from} · ${modeFacts(mode).name}`
 }
 
 export interface ThreadProps {
@@ -1459,8 +1460,8 @@ onResume,
         {(startedBy?.kind === 'mcp' || earlierTurns.some(turn => turn.startedBy?.kind === 'mcp')) && (
           // Another app's turn runs in Ask unless the person turned on each
           // teammate's own mode (0.703); the marker names the run's own mode,
-          // and claims none it does not know.
-          <div className="lc-thread__marker lc-mono">{otherAppMarker(runMode)}</div>
+          // and claims none it does not know. A voice call's hand-off says so (0.739).
+          <div className="lc-thread__marker lc-mono">{otherAppMarker(runMode, [startedBy, ...earlierTurns.map(turn => turn.startedBy)].find(by => by?.kind === 'mcp' && by.via === 'voice') === undefined ? undefined : 'voice')}</div>
         )}
 
         {/*

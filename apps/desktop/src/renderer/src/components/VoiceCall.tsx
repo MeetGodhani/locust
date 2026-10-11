@@ -28,6 +28,8 @@ export function VoiceCallButton({ platform, onText, api = typeof window === 'und
   const [availability, setAvailability] = useState<VoiceCallAvailability | undefined>(given)
   const [phase, setPhase] = useState<Phase>('idle')
   const [lines, setLines] = useState<readonly Line[]>([])
+  /** What the voice handed to teammates (0.739). */
+  const [handed, setHanded] = useState<readonly { readonly to: string; readonly task: string }[]>([])
   const [partial, setPartial] = useState<Readonly<Record<VoiceCallRole, string>>>({ you: '', voice: '' })
   const [message, setMessage] = useState('')
   const [muted, setMuted] = useState(false)
@@ -59,6 +61,7 @@ export function VoiceCallButton({ platform, onText, api = typeof window === 'und
         setPartial((was) => ({ ...was, [update.role]: '' }))
         if (update.text.trim().length > 0) setLines((was) => [...was, { role: update.role, text: update.text.trim() }])
       } else if (update.kind === 'working') setWorking(update.working)
+      else if (update.kind === 'handed') setHanded((was) => [...was, { to: update.to, task: update.task }])
       else if (update.kind === 'error') setMessage(update.message)
       else if (update.kind === 'ended' && current.current === 'live') {
         void call.current?.hangUp()
@@ -115,7 +118,7 @@ export function VoiceCallButton({ platform, onText, api = typeof window === 'und
 
   const start = async (): Promise<void> => {
     if (api === undefined || current.current === 'calling' || current.current === 'live') return
-    setLines([]); setPartial({ you: '', voice: '' }); setMessage(''); setMuted(false); setWorking(false); setSeconds(0)
+    setLines([]); setHanded([]); setPartial({ you: '', voice: '' }); setMessage(''); setMuted(false); setWorking(false); setSeconds(0)
     transition('calling')
     const token = ++generation.current
     const controller = new AbortController()
@@ -193,12 +196,13 @@ export function VoiceCallButton({ platform, onText, api = typeof window === 'und
             <Icon name={muted ? 'mic-off' : 'mic'} size={15} />{muted ? 'Unmute' : 'Mute'}
           </button>}
           {on && <button type="button" className="lc-control lc-call__end" onClick={() => { void end() }}>End</button>}
-          {phase === 'ended' && voiceCallText(lines).length > 0 && <button type="button" className="lc-control lc-control--boxed" onClick={() => { onText(voiceCallText(lines)); close() }}>Put it in the chat box</button>}
+          {phase === 'ended' && voiceCallText(lines, handed).length > 0 && <button type="button" className="lc-control lc-control--boxed" onClick={() => { onText(voiceCallText(lines, handed)); close() }}>Put it in the chat box</button>}
           {phase === 'ended' && <button type="button" className="lc-control" onClick={close}>Close</button>}
         </span>
       </div>
-      {(shown.length > 0 || partial.you.length > 0 || partial.voice.length > 0) && <div className="lc-call__lines">
+      {(shown.length > 0 || handed.length > 0 || partial.you.length > 0 || partial.voice.length > 0) && <div className="lc-call__lines">
         {shown.map((line, index) => <p key={index} className={`lc-call__line is-${line.role}`}><span className="lc-call__who">{line.role === 'you' ? 'You' : 'ChatGPT'}</span>{line.text}</p>)}
+        {handed.map((hand, index) => <p key={`handed-${String(index)}`} className="lc-call__line is-handed"><span className="lc-call__who">Handed to {hand.to}</span>{hand.task}</p>)}
         {on && (['you', 'voice'] as const).map((role) => partial[role].trim().length > 0 && <p key={`partial-${role}`} className={`lc-call__line is-${role} is-partial`}><span className="lc-call__who">{role === 'you' ? 'You' : 'ChatGPT'}</span>{partial[role].trim()}</p>)}
       </div>}
       {message && <p className="lc-call__message">{message}</p>}

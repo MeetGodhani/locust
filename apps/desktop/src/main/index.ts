@@ -10,10 +10,10 @@ import { app, BrowserWindow, crashReporter, dialog, ipcMain, Menu, nativeImage, 
 import { createVoiceHost } from './voice-host.js'
 import { voicePermission } from './voice-permission.js'
 import { VOICE_READY, VOICE_DOWNLOAD, VOICE_TRANSCRIBE, VOICE_CANCEL, VOICE_PROGRESS, VOICE_SETTINGS_READ, VOICE_SETTINGS_SAVE, VOICE_OPENAI_CONSENT } from '../shared/voice.js'
-import { VOICE_CALL_AVAILABLE, VOICE_CALL_EVENT, VOICE_CALL_START, VOICE_CALL_STOP, isVoiceCallOffer } from '../shared/voice-call.js'
+import { VOICE_CALL_AVAILABLE, VOICE_CALL_EVENT, VOICE_CALL_START, VOICE_CALL_STOP, VOICE_CALL_TOOLS, isVoiceCallOffer, type VoiceAddOn } from '../shared/voice-call.js'
 import { createVoiceCalls } from './voice-call.js'
 import { createVoiceSettingsStore } from './voice-settings.js'
-import { createLocustMcpHost } from './locust-mcp-host.js'
+import { MCP_CONNECTION_FILE, createLocustMcpHost } from './locust-mcp-host.js'
 import { createLocustMcpTools } from './locust-mcp-tools.js'
 import { LOCUST_MCP_GET, LOCUST_MCP_SET, LOCUST_MCP_SET_OWN_MODE } from '../shared/locust-mcp.js'
 import { createPageServer, fromPagePreview, pageMayReach, PAGE_SCHEME } from './page-preview.js'
@@ -3717,7 +3717,13 @@ if (!ownsSingleInstanceLock) {
      * the answer, and the lines said. One call at a time, ended with the window or the app.
      */
     let voiceCallWindow: Electron.WebContents | undefined
+    /** Locust's own add-on server, a private copy for each call (0.739); set once the tools exist, below. */
+    let voiceCallAddOn: { readonly open: () => Promise<VoiceAddOn | undefined>; readonly close: () => Promise<void> } | undefined
     const voiceCalls = createVoiceCalls({
+      addOn: {
+        open: async () => voiceCallAddOn?.open(),
+        close: async () => { await voiceCallAddOn?.close() }
+      },
       codex: async () => {
         const found = (await discoverForStart('codex')).find((entry) => entry.id === 'codex')
         return found?.readiness === 'ready' ? found.executable : undefined
@@ -7646,6 +7652,43 @@ if (!ownsSingleInstanceLock) {
     })
     const mcpHost = createLocustMcpHost({ directory: app.getPath('userData'), node: process.execPath,
       bridge: app.isPackaged ? join(process.resourcesPath, 'locust-mcp-bridge.mjs') : join(__dirname, '../../resources/locust-mcp-bridge.mjs'), call: mcpTools })
+    /*
+     * THE CALL'S COPY (0.739): what a voice call's Codex hands work over with. The same tools another app gets,
+     * but a turn runs in the teammate's own mode -- the person asked for it aloud, in Locust, and heard it read
+     * back -- and is recorded as handed over in a voice call. Only the hand-off tools answer; its listener is its
+     * own, with its own token, started for a call and stopped with it, so the switch for other apps stays as set.
+     */
+    const voiceCallTools = createLocustMcpTools({
+      teammates: listTeammates,
+      busy: id => codexMissions.runIdOwnedBy(id) !== undefined || antigravityMissions.runIdOwnedBy(id) !== undefined,
+      start: async (request, origin) => {
+        const response = await startMission(request, sendToWindow, origin)
+        if (response.ok) sendToWindow({ kind: 'mission-started', runId: response.data.runId, missionId: response.data.missionId,
+          teammateId: request.teammateId, prompt: request.prompt, data: response.data, startedBy: { kind: 'mcp', via: 'voice' } })
+        return response
+      },
+      read: id => readOneMission(missionLedger, workroom, id),
+      newest: id => newestTurnOf(missionLedger, id),
+      owner: async id => (await teammates.missionOwners())[id],
+      live: id => codexMissions.hasMission(id) || antigravityMissions.liveMissionIds().includes(id),
+      background: async () => (await backgroundRuns.list()).map(publicRun),
+      ownMode: () => true,
+      origin: { kind: 'mcp', via: 'voice' },
+      waiting: id => raisedApprovals.waitingOn(id)
+    })
+    const voiceCallBridge = app.isPackaged ? join(process.resourcesPath, 'locust-mcp-bridge.mjs') : join(__dirname, '../../resources/locust-mcp-bridge.mjs')
+    const voiceCallMcpDirectory = join(app.getPath('userData'), 'voice-call-mcp')
+    const voiceCallHost = createLocustMcpHost({ directory: voiceCallMcpDirectory, node: process.execPath, bridge: voiceCallBridge,
+      call: (name, args) => VOICE_CALL_TOOLS.has(name) ? voiceCallTools(name, args) : Promise.resolve({ content: [{ type: 'text', text: 'A voice call can only hand work to teammates and read their replies.' }], isError: true }) })
+    voiceCallAddOn = {
+      open: async () => {
+        const state = await voiceCallHost.setEnabled(true)
+        if (!state.enabled) return undefined
+        return { command: process.execPath, args: [voiceCallBridge, join(voiceCallMcpDirectory, MCP_CONNECTION_FILE)], env: { ELECTRON_RUN_AS_NODE: '1' } }
+      },
+      close: async () => { await voiceCallHost.setEnabled(false) }
+    }
+    app.once('will-quit', () => { void voiceCallHost.dispose() })
     mcpForShutdown = mcpHost
     void mcpHost.load().catch(() => note('locust-mcp', 'The local MCP listener could not start. It is off.'))
     ipcMain.handle(LOCUST_MCP_GET, event => fromOwnWindow(event) ? mcpHost.settings() : { enabled: false, ownMode: false })

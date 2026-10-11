@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url'
 
 import { describe, expect, it } from 'vitest'
 
-import { isVoiceCallOffer, voiceCallRole, voiceCallSaid, voiceCallText, voiceThreadConfig } from './voice-call.js'
+import { VOICE_CALL_ADD_ON, VOICE_CALL_TOOLS, isVoiceCallOffer, voiceCallInstructions, voiceCallRole, voiceCallSaid, voiceCallText, voiceThreadConfig } from './voice-call.js'
 
 /*
  * A VOICE CALL'S RULES (0.737; 0.738 after Sol's review). The call's Codex thread starts nothing the person's
@@ -76,6 +76,44 @@ describe('the rest of the call’s words', () => {
   it('puts a finished call in the chat box line by line, and nothing for a silent one', () => {
     expect(voiceCallText([{ role: 'you', text: ' What is two plus two ' }, { role: 'voice', text: 'That’s four.' }])).toBe('From a voice call:\n\nYou: What is two plus two\nChatGPT: That’s four.')
     expect(voiceCallText([{ role: 'you', text: '   ' }])).toBe('')
+  })
+})
+
+describe('Locust as the call’s one add-on (0.739)', () => {
+  const ADD_ON = { command: 'Locust.exe', args: ['bridge.mjs', 'connection.json'], env: { ELECTRON_RUN_AS_NODE: '1' } }
+
+  it('is switched on under the call’s own name, after everything else is off', () => {
+    const made = voiceThreadConfig(COLINS_CONFIG, ADD_ON)
+    expect(made.ok && made.config).toMatchObject({
+      'features.plugins': false,
+      'mcp_servers.robinhood.enabled': false,
+      [`mcp_servers.${VOICE_CALL_ADD_ON}.command`]: 'Locust.exe',
+      [`mcp_servers.${VOICE_CALL_ADD_ON}.args`]: ['bridge.mjs', 'connection.json'],
+      [`mcp_servers.${VOICE_CALL_ADD_ON}.env`]: { ELECTRON_RUN_AS_NODE: '1' },
+      [`mcp_servers.${VOICE_CALL_ADD_ON}.enabled`]: true
+    })
+  })
+
+  it('places no call when one of the person’s own add-ons already has that name', () => {
+    expect(voiceThreadConfig({ mcp_servers: { [VOICE_CALL_ADD_ON]: { url: 'https://example.test' } } }, ADD_ON).ok).toBe(false)
+    // Without the hand-offs the name is just one of theirs, switched off like the rest.
+    expect(voiceThreadConfig({ mcp_servers: { [VOICE_CALL_ADD_ON]: {} } }).ok).toBe(true)
+  })
+
+  it('carries only the hand-off tools', () => {
+    expect([...VOICE_CALL_TOOLS].sort()).toEqual(['list_background_runs', 'list_teammates', 'read_reply', 'send_message', 'start_conversation'])
+  })
+
+  it('tells the call’s Codex to read a task back and wait for a yes before handing it over', () => {
+    const told = voiceCallInstructions('acme', true)
+    expect(told).toContain('say back in one short sentence who will do what, and wait for them to say yes')
+    expect(told).toContain('never start one they did not agree to')
+    expect(voiceCallInstructions('acme')).not.toContain(VOICE_CALL_ADD_ON)
+  })
+
+  it('puts what was handed over in the chat box with the call', () => {
+    expect(voiceCallText([{ role: 'you', text: 'Have Wren fix the login loop' }], [{ to: 'Wren', task: 'Fix the login  redirect loop' }]))
+      .toBe('From a voice call:\n\nYou: Have Wren fix the login loop\n\nHanded over:\n- Wren: Fix the login redirect loop')
   })
 })
 

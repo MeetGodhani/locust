@@ -318,7 +318,8 @@ export function publicRecoveredMission(
     ...(mission.metadata.startedBy === undefined
       ? {}
       : mission.metadata.startedBy.kind === 'mcp'
-        ? { startedBy: { kind: 'mcp' as const } }
+        // A voice call's hand-off says so (0.739); nothing but that one word rides along.
+        ? { startedBy: mission.metadata.startedBy.via === 'voice' ? { kind: 'mcp' as const, via: 'voice' as const } : { kind: 'mcp' as const } }
       : mission.metadata.startedBy.kind === 'relay'
         ? { startedBy: { kind: 'relay' as const, hop: mission.metadata.startedBy.hop } }
         : mission.metadata.startedBy.kind === 'routine'

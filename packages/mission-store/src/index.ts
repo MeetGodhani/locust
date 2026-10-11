@@ -280,7 +280,14 @@ export interface MissionCommand {
  * `hop` is which automatic turn of the exchange this is, counting from 1.
  */
 export type MissionStarter =
-  | { readonly kind: 'mcp' }
+  | {
+      readonly kind: 'mcp'
+      /**
+       * Handed over in a voice call (0.739): the call's own Codex used Locust's tools, as another app
+       * would. Older readers ignore it and say "another app", which is still true.
+       */
+      readonly via?: 'voice'
+    }
   | {
       readonly kind: 'relay'
       readonly hop: number

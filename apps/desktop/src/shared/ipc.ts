@@ -3204,7 +3204,7 @@ export type CodexMissionUpdate =
        * room post's missions as ordinary missions of their teammates.
        */
       readonly startedBy:
-        | { readonly kind: 'mcp' }
+        | { readonly kind: 'mcp'; readonly via?: 'voice' }
         | { readonly kind: 'relay'; readonly hop: number }
         | { readonly kind: 'routine'; readonly routineId: string; readonly step: number }
         | { readonly kind: 'room'; readonly roomId: string; readonly postId: string }
@@ -3413,7 +3413,7 @@ export interface PublicRecoveredMission {
    * which is why the renderer must never title a mission with it.
    */
   readonly startedBy?:
-    | { readonly kind: 'mcp' }
+    | { readonly kind: 'mcp'; readonly via?: 'voice' }
     | {
         readonly kind: 'relay'
         /** Which automatic turn of the exchange this is, counting from 1. */

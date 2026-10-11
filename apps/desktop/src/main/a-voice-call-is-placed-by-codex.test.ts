@@ -1,7 +1,7 @@
 import type { AppServerRunProcess as AppServerProcess } from '@teammate/runtime-adapters'
 import { describe, expect, it } from 'vitest'
 
-import type { VoiceCallEvent } from '../shared/voice-call.js'
+import type { VoiceAddOn, VoiceCallEvent } from '../shared/voice-call.js'
 import { createVoiceCalls } from './voice-call.js'
 
 /*
@@ -62,7 +62,11 @@ function fakeCodex(answers: FakeAnswers = {}) {
 
 const CODEX = { commandName: 'codex', discoveredPath: 'codex', executablePath: 'codex.exe', prefixArgs: [] as string[], kind: 'native' as const }
 
-function calls(fakes: () => ReturnType<typeof fakeCodex>, options: { readonly folder?: string | null; readonly codex?: () => Promise<typeof CODEX | undefined> } = {}) {
+function calls(fakes: () => ReturnType<typeof fakeCodex>, options: {
+  readonly folder?: string | null
+  readonly codex?: () => Promise<typeof CODEX | undefined>
+  readonly addOn?: { readonly open: () => Promise<VoiceAddOn | undefined>; readonly close: () => Promise<void> }
+} = {}) {
   const sent: VoiceCallEvent[] = []
   const spawned: ReturnType<typeof fakeCodex>[] = []
   const voice = createVoiceCalls({
@@ -72,7 +76,8 @@ function calls(fakes: () => ReturnType<typeof fakeCodex>, options: { readonly fo
     send: (event) => sent.push(event),
     version: '0.738.0',
     answerTimeoutMs: 2_000,
-    stopWaitMs: 50
+    stopWaitMs: 50,
+    ...(options.addOn === undefined ? {} : { addOn: options.addOn })
   })
   return { voice, sent, spawned }
 }
@@ -215,5 +220,74 @@ describe('a voice call’s starts and ends (Sol’s review of 0.737)', () => {
     voice.dispose()
     expect(fake.killed()).toBe(true)
     expect(sent.at(-1)).toEqual({ kind: 'ended' })
+  })
+})
+
+/*
+ * HANDING WORK TO TEAMMATES (0.739). The call's Codex gets one add-on, Locust's own (a private copy of its
+ * add-on server, only the hand-off tools), and Codex's question before using it -- `mcpServer/elicitation/
+ * request`, `codex_approval_kind: mcp_tool_call`, measured 2026-10-11 -- is accepted for that server alone.
+ */
+describe('a voice call’s hand-offs', () => {
+  const ADD_ON: VoiceAddOn = { command: 'Locust.exe', args: ['locust-mcp-bridge.mjs', 'voice-call-mcp/locust-mcp-connection.json'], env: { ELECTRON_RUN_AS_NODE: '1' } }
+  const withAddOn = (open: () => Promise<VoiceAddOn | undefined> = async () => ADD_ON) => {
+    const fake = fakeCodex()
+    const closed: number[] = []
+    const made = calls(() => fake, { addOn: { open, close: async () => { closed.push(1) } } })
+    return { fake, closed, ...made }
+  }
+  const asks = (fake: ReturnType<typeof fakeCodex>, id: number, serverName: string, kind = 'mcp_tool_call'): void =>
+    fake.say({ id, method: 'mcpServer/elicitation/request', params: { threadId: 'thread_1', serverName, mode: 'form', _meta: { codex_approval_kind: kind }, message: `Allow the ${serverName} MCP server to run tool "start_conversation"?` } })
+
+  it('gives the call’s thread Locust’s own add-on, under the call’s own name, and tells Codex how to hand over', async () => {
+    const { fake, voice } = withAddOn()
+    expect((await voice.start('v=0\r\noffer')).ok).toBe(true)
+    expect(by(fake, 'thread/start').config).toMatchObject({
+      'features.plugins': false,
+      'mcp_servers.locust_call.command': 'Locust.exe',
+      'mcp_servers.locust_call.args': ['locust-mcp-bridge.mjs', 'voice-call-mcp/locust-mcp-connection.json'],
+      'mcp_servers.locust_call.env': { ELECTRON_RUN_AS_NODE: '1' },
+      'mcp_servers.locust_call.enabled': true
+    })
+    const told = String(by(fake, 'thread/realtime/start').realtimeStartInstructions)
+    expect(told).toContain('locust_call tools')
+    expect(told).toContain('wait for them to say yes')
+  })
+
+  it('lets Codex use that add-on and nothing else, and says a hand-off in the strip', async () => {
+    const { fake, voice, sent } = withAddOn()
+    await voice.start('v=0\r\noffer')
+    asks(fake, 71, 'locust_call')
+    asks(fake, 72, 'robinhood')
+    asks(fake, 73, 'locust_call', 'something_else')
+    fake.say({ method: 'item/started', params: { threadId: 'thread_1', item: { type: 'mcpToolCall', server: 'locust_call', tool: 'start_conversation', arguments: { teammate: 'Wren', message: 'Fix the login redirect loop' } } } })
+    fake.say({ method: 'item/started', params: { threadId: 'thread_1', item: { type: 'mcpToolCall', server: 'locust_call', tool: 'list_teammates', arguments: {} } } })
+    await settle()
+    expect(fake.asked).toContainEqual({ method: 'answer:71', params: { action: 'accept', content: {} } })
+    expect(fake.asked).toContainEqual({ method: 'answer:72', params: { action: 'decline' } })
+    expect(fake.asked).toContainEqual({ method: 'answer:73', params: { action: 'decline' } })
+    expect(sent.filter((event) => event.kind === 'handed')).toEqual([{ kind: 'handed', to: 'Wren', task: 'Fix the login redirect loop' }])
+  })
+
+  it('closes the add-on with the call', async () => {
+    const { voice, closed } = withAddOn()
+    await voice.start('v=0\r\noffer')
+    expect(closed).toHaveLength(0)
+    await voice.stop()
+    await settle()
+    expect(closed).toHaveLength(1)
+  })
+
+  it('still talks without it, and then lets Codex use nothing', async () => {
+    const { fake, voice, closed } = withAddOn(async () => undefined)
+    expect((await voice.start('v=0\r\noffer')).ok).toBe(true)
+    expect(Object.keys(by(fake, 'thread/start').config as object)).not.toContain('mcp_servers.locust_call.enabled')
+    expect(String(by(fake, 'thread/realtime/start').realtimeStartInstructions)).not.toContain('locust_call')
+    asks(fake, 81, 'locust_call')
+    await settle()
+    expect(fake.asked).toContainEqual({ method: 'answer:81', params: { action: 'decline' } })
+    await voice.stop()
+    await settle()
+    expect(closed).toHaveLength(0)
   })
 })

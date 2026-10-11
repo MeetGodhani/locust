@@ -20939,6 +20939,8 @@ textarea {
 .lc-call__line.is-partial { color: var(--lc-text-muted); }
 .lc-call__line.is-you .lc-call__who { color: var(--lc-text-secondary); }
 .lc-call__line.is-voice .lc-call__who { color: var(--lc-lime-text); }
+.lc-call__line.is-handed { color: var(--lc-text-secondary); }
+.lc-call__line.is-handed .lc-call__who { color: var(--lc-text-primary); }
 .lc-call__who { margin-right: 6px; font-size: 12px; font-weight: 600; }
 .lc-call__message { margin: 0; font-size: 12px; color: var(--lc-amber-text); }
 @media (prefers-reduced-motion: reduce) { .lc-call__bar { transition: none; } }
