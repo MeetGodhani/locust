@@ -35,6 +35,9 @@ export function VoiceCallButton({ platform, onText, api = typeof window === 'und
   const [levels, setLevels] = useState({ you: 0, voice: 0 })
   const [seconds, setSeconds] = useState(0)
   const call = useRef<LiveVoiceCall | undefined>(undefined)
+  /** The start under way, so End and leaving the conversation can reach it (0.738, Sol's review #5). */
+  const starting = useRef<AbortController | undefined>(undefined)
+  const generation = useRef(0)
   const anchor = useRef<HTMLSpanElement>(null)
   const [lift, setLift] = useState(0)
   const current = useRef<Phase>('idle')
@@ -62,6 +65,10 @@ export function VoiceCallButton({ platform, onText, api = typeof window === 'und
         call.current = undefined
         if (update.why !== undefined) setMessage(update.why)
         transition('ended')
+      } else if (update.kind === 'ended' && current.current === 'calling') {
+        // Ended on the other side while it was starting (the window closed to the tray): the start's own
+        // answer says why, if it has anything to say.
+        starting.current?.abort()
       }
     })
   }, [api, phase])
@@ -99,30 +106,50 @@ export function VoiceCallButton({ platform, onText, api = typeof window === 'und
   }, [phase])
 
   // Leaving the conversation ends its call: no voice goes on talking from a box nobody can see.
-  useEffect(() => () => { void call.current?.hangUp(); call.current = undefined }, [])
+  useEffect(() => () => {
+    generation.current += 1
+    starting.current?.abort()
+    void call.current?.hangUp()
+    call.current = undefined
+  }, [])
 
   const start = async (): Promise<void> => {
     if (api === undefined || current.current === 'calling' || current.current === 'live') return
     setLines([]); setPartial({ you: '', voice: '' }); setMessage(''); setMuted(false); setWorking(false); setSeconds(0)
     transition('calling')
+    const token = ++generation.current
+    const controller = new AbortController()
+    starting.current = controller
     try {
       const { openVoiceCall } = await import('../voiceCall.js')
       const opened = await openVoiceCall(api, (why) => {
+        if (generation.current !== token) return
         call.current = undefined
         setMessage(why)
         transition('ended')
-      })
-      if ((current.current as Phase) !== 'calling') { await opened.hangUp(); return }
+      }, controller.signal)
+      // A start that was ended, left, or overtaken by a newer one is hung up, never adopted (#5).
+      if (generation.current !== token || controller.signal.aborted || (current.current as Phase) !== 'calling') { await opened.hangUp(); return }
       call.current = opened
       transition('live')
     } catch (error) {
-      setMessage(error instanceof Error && error.message.length > 0 ? error.message : 'The call could not start.')
+      if (generation.current !== token) return
+      const { VoiceCallAborted, VoiceCallRefused } = await import('../voiceCall.js')
+      if (error instanceof VoiceCallAborted) {
+        if ((current.current as Phase) === 'calling') transition('ended')
+        return
+      }
+      setMessage(error instanceof VoiceCallRefused ? error.message : 'The call could not start. Try again.')
       transition('ended')
+    } finally {
+      if (starting.current === controller) starting.current = undefined
     }
   }
   const end = async (): Promise<void> => {
     const live = call.current
     call.current = undefined
+    // A call still starting is reached through its controller: the microphone closes and Codex is told now.
+    starting.current?.abort()
     transition('ended')
     await live?.hangUp()
   }

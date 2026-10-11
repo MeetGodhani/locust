@@ -3738,8 +3738,11 @@ if (!ownsSingleInstanceLock) {
       if (!isVoiceCallOffer(offer)) return voiceCallRefused
       if (voiceCallWindow !== event.sender) {
         voiceCallWindow = event.sender
-        // A window that goes ends its call (once per window, not once per call).
+        // A window that goes ends its call (once per window, not once per call) -- and so does one closed to
+        // the tray, which is hidden rather than destroyed: the microphone and the voice went on behind it
+        // (Sol's review of 0.737, #7).
         event.sender.once('destroyed', () => { void voiceCalls.stop() })
+        BrowserWindow.fromWebContents(event.sender)?.on('hide', () => { void voiceCalls.stop() })
       }
       return voiceCalls.start(offer)
     })

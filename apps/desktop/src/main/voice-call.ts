@@ -20,6 +20,12 @@ import {
  * checks it is signed in with ChatGPT, opens a read-only thread of its own in the person's folder with
  * every add-on off, asks for the call on realtime v3, and hands the window the voice service's answer.
  * What is said comes back as Codex's transcript notifications and goes to the window as lines.
+ *
+ * A START IS A CALL FROM ITS FIRST MOMENT (0.738, Sol's review of 0.737, #6 and #11). It was only tracked
+ * once Codex had been found and spawned, so two quick presses spawned two servers and stopped one, and an
+ * End or a closed window during the start returned before a server was spawned behind it. Now a start holds
+ * a ticket from the first line; Stop cancels it at whatever step it has reached, each step looks at it
+ * before going on, and an answer that arrives for a call already ended is not handed back as a call.
  */
 export interface VoiceCallDeps {
   /** Codex as discovery found it, when it is ready to start. */
@@ -31,6 +37,8 @@ export interface VoiceCallDeps {
   readonly version: string
   /** How long the voice service has to answer the offer. */
   readonly answerTimeoutMs?: number
+  /** How long End waits for Codex to say it stopped before the server is ended anyway. */
+  readonly stopWaitMs?: number
 }
 
 export interface VoiceCalls {
@@ -49,8 +57,16 @@ interface Live {
   ended: boolean
 }
 
+/** One start, from its first line: cancelled by Stop at whatever step it has reached. */
+interface Ticket {
+  cancelled: boolean
+  call?: Live
+}
+
 const ANSWER_TIMEOUT_MS = 20_000
 const REQUEST_TIMEOUT_MS = 30_000
+const STOP_WAIT_MS = 1_500
+const ENDED = 'The call was ended before it began.'
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value)
 
@@ -58,12 +74,12 @@ const isRecord = (value: unknown): value is Record<string, unknown> => typeof va
 class Said extends Error {}
 
 export function createVoiceCalls(deps: VoiceCallDeps): VoiceCalls {
-  let live: Live | undefined
+  let current: Ticket | undefined
 
   const end = (call: Live, why?: string): void => {
     if (call.ended) return
     call.ended = true
-    if (live === call) live = undefined
+    if (current?.call === call) current = undefined
     // A start still waiting on the answer is told why it will not come.
     call.failed?.(why ?? 'The call ended.')
     call.failed = undefined
@@ -114,13 +130,25 @@ export function createVoiceCalls(deps: VoiceCallDeps): VoiceCalls {
     }
   }
 
-  const stop = async (): Promise<void> => {
-    const call = live
-    if (call === undefined) return
+  /** Ends one start or call, at whatever step it has reached. */
+  const cancel = async (ticket: Ticket): Promise<void> => {
+    ticket.cancelled = true
+    if (current === ticket) current = undefined
+    const call = ticket.call
+    if (call === undefined || call.ended) return
     if (call.threadId !== undefined) {
-      await call.client.request('thread/realtime/stop', { threadId: call.threadId }).catch(() => undefined)
+      // Asked to stop, but not waited on for long: a Codex that never answers is ended anyway (#12).
+      await Promise.race([
+        call.client.request('thread/realtime/stop', { threadId: call.threadId }).catch(() => undefined),
+        new Promise((resolve) => setTimeout(resolve, deps.stopWaitMs ?? STOP_WAIT_MS))
+      ])
     }
     end(call)
+  }
+
+  const stop = async (): Promise<void> => {
+    const ticket = current
+    if (ticket !== undefined) await cancel(ticket)
   }
 
   return {
@@ -133,11 +161,17 @@ export function createVoiceCalls(deps: VoiceCallDeps): VoiceCalls {
     },
 
     async start(offer) {
-      await stop()
+      // The ticket is taken before the first await, so a second press or an End can always see this start.
+      const previous = current
+      const ticket: Ticket = { cancelled: false }
+      current = ticket
+      if (previous !== undefined) await cancel(previous)
+      if (ticket.cancelled) return { ok: false, message: ENDED }
       const folder = deps.folder()
-      if (folder === undefined) return { ok: false, message: 'Pick a folder first.' }
+      if (folder === undefined) { if (current === ticket) current = undefined; return { ok: false, message: 'Pick a folder first.' } }
       const codex = await deps.codex().catch(() => undefined)
-      if (codex === undefined) return { ok: false, message: 'Voice calls use ChatGPT’s voice through Codex CLI, which is not ready on this computer.' }
+      if (ticket.cancelled) return { ok: false, message: ENDED }
+      if (codex === undefined) { if (current === ticket) current = undefined; return { ok: false, message: 'Voice calls use ChatGPT’s voice through Codex CLI, which is not ready on this computer.' } }
       const child = deps.spawn(codex.executablePath, [...codex.prefixArgs, 'app-server'], codex.env)
       let call: Live
       const client = createAppServerClient({
@@ -148,7 +182,7 @@ export function createVoiceCalls(deps: VoiceCallDeps): VoiceCalls {
         requestTimeoutMs: REQUEST_TIMEOUT_MS
       })
       call = { client, child, ended: false }
-      live = call
+      ticket.call = call
       child.onData((chunk) => client.accept(chunk))
       // Nothing if the call already ended; otherwise Codex went away under it.
       child.onExit(() => end(call, 'Codex stopped, so the call ended.'))
@@ -156,29 +190,33 @@ export function createVoiceCalls(deps: VoiceCallDeps): VoiceCalls {
         end(call, message)
         return { ok: false, message }
       }
+      /** Each step looks at the ticket before going on: an End during the start ends it there. */
+      const going = (): boolean => !ticket.cancelled && !call.ended
       try {
         await client.request('initialize', { clientInfo: { name: 'locust', title: 'Locust', version: deps.version }, capabilities: { experimentalApi: true, requestAttestation: false } })
+        if (!going()) return refuse(ENDED)
         client.notify('initialized')
         const account = await client.request('account/read', {})
+        if (!going()) return refuse(ENDED)
         const kind = isRecord(account) && isRecord(account.account) ? account.account.type : undefined
         if (kind !== 'chatgpt') {
           return refuse(kind === undefined
             ? 'Codex is not signed in. Voice calls use your ChatGPT sign-in: sign Codex in with ChatGPT and try again.'
             : 'Codex is signed in with an API key. Voice calls use your ChatGPT sign-in: sign Codex in with ChatGPT and try again.')
         }
-        const [status, config] = await Promise.all([
-          client.request('mcpServerStatus/list', {}).catch(() => undefined),
-          client.request('config/read', { cwd: folder }).then((read) => (isRecord(read) ? read.config : undefined)).catch(() => undefined)
-        ])
-        const threadConfig = voiceThreadConfig(status, config)
-        if (threadConfig === undefined) return refuse('Locust could not switch off one of your Codex add-ons for the call, so it did not place it.')
+        // The settings alone, which start nothing (#1); unreadable settings place no call (#2).
+        const read = await client.request('config/read', { cwd: folder }).catch(() => undefined)
+        if (!going()) return refuse(ENDED)
+        const threadConfig = voiceThreadConfig(isRecord(read) ? read.config : undefined)
+        if (!threadConfig.ok) return refuse(threadConfig.message)
         const thread = await client.request('thread/start', {
           cwd: folder,
           sandbox: 'read-only',
           approvalPolicy: 'untrusted',
           ephemeral: true,
-          config: threadConfig as Readonly<Record<string, JsonValue>>
+          config: threadConfig.config as Readonly<Record<string, JsonValue>>
         })
+        if (!going()) return refuse(ENDED)
         const threadId = isRecord(thread) && isRecord(thread.thread) && typeof thread.thread.id === 'string' ? thread.thread.id : undefined
         if (threadId === undefined) return refuse('Codex did not start the call’s conversation.')
         call.threadId = threadId
@@ -199,17 +237,24 @@ export function createVoiceCalls(deps: VoiceCallDeps): VoiceCalls {
         const answer = await answered
         call.answer = undefined
         call.failed = undefined
+        // An answer for a call that ended meanwhile is not a call (#11).
+        if (!going()) return refuse(ENDED)
         return { ok: true, answer }
       } catch (error) {
-        const message = error instanceof Said ? error.message : voiceCallSaid(error instanceof Error ? error.message : String(error))
+        const message = ticket.cancelled ? ENDED : error instanceof Said ? error.message : voiceCallSaid(error instanceof Error ? error.message : String(error))
         return call.ended ? { ok: false, message } : refuse(message)
       }
     },
 
     stop,
 
+    // Quitting: ended now, not after Codex has had its say.
     dispose() {
-      if (live !== undefined) end(live)
+      const ticket = current
+      if (ticket === undefined) return
+      ticket.cancelled = true
+      current = undefined
+      if (ticket.call !== undefined) end(ticket.call)
     }
   }
 }

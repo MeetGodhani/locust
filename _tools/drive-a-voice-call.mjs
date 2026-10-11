@@ -91,6 +91,24 @@ try {
   })()`)))
   check('Talk is in the chat box, right after the microphone', /^after the mic/.test(beside), beside)
 
+  // End while it is still calling (0.738, Sol's review #5/#6): the strip ends, and no Codex is left behind it.
+  const early = String(await drive.capture('Talk, then End while calling', () => drive.evaluate(`(async () => {
+    document.querySelector('button[aria-label="Talk"]').click()
+    for (let i = 0; i < 40; i += 1) {
+      await new Promise(r => setTimeout(r, 50))
+      if (/Calling/.test(document.querySelector('.lc-call__status')?.innerText ?? '')) break
+    }
+    const calling = document.querySelector('.lc-call__status')?.innerText ?? ''
+    ;[...document.querySelectorAll('[role=region][aria-label="Voice call"] button')].find((b) => b.innerText.trim() === 'End')?.click()
+    await new Promise(r => setTimeout(r, 600))
+    return calling + ' -> ' + (document.querySelector('.lc-call__status')?.innerText ?? 'no strip')
+  })()`)))
+  await sleep(4000)
+  const codexAfterEarly = codexCount()
+  check('End while calling ends it, and leaves no Codex running', /^Calling/.test(early) && /Call ended/.test(early) && codexAfterEarly <= codexBefore, `${early} · codex ${String(codexBefore)} before, ${String(codexAfterEarly)} after`)
+  await drive.evaluate(`[...document.querySelectorAll('[role=region][aria-label="Voice call"] button')].find((b) => b.innerText.trim() === 'Close')?.click()`)
+  await sleep(500)
+
   await drive.evaluate(`document.querySelector('button[aria-label="Talk"]').click()`)
   let state = { strip: false, status: '', lines: [], message: '' }
   for (let second = 0; second < 25; second += 1) {

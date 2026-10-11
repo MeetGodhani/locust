@@ -5,34 +5,41 @@ import type { VoiceCallEvent } from '../shared/voice-call.js'
 import { createVoiceCalls } from './voice-call.js'
 
 /*
- * A VOICE CALL, PLACED BY CODEX (0.737). Against a stand-in for `codex app-server` that answers the way
- * Codex 0.162.1 did for Colin's Plus sign-in on 2026-10-10: the call is asked for on a read-only,
+ * A VOICE CALL, PLACED BY CODEX (0.737; 0.738 after Sol's review). Against a stand-in for `codex app-server`
+ * that answers the way Codex 0.162.1 did for Colin's Plus sign-in: the call is asked for on a read-only,
  * ephemeral thread with every add-on off, over WebRTC on realtime v3, and the voice service's answer is
- * handed back; the lines said come through; an approval is refused; End stops it and the server.
+ * handed back; the lines said come through; an approval is refused; End stops it and the server. And the
+ * review's lifecycle findings: one start at a time, an End during a start reaches it, an answer for a call
+ * already ended is not a call, and End does not wait on a Codex that never answers.
  */
 interface Asked { readonly method: string; readonly params: Record<string, unknown> }
+interface FakeAnswers {
+  readonly account?: unknown
+  readonly realtime?: 'answer' | 'error' | 'answer-then-closed'
+  readonly config?: 'ok' | 'fail'
+  readonly answersStop?: boolean
+}
 
-function fakeCodex(answers: { readonly account?: unknown; readonly realtime?: 'answer' | 'error' } = {}) {
+function fakeCodex(answers: FakeAnswers = {}) {
   const asked: Asked[] = []
   let onData: (chunk: string) => void = () => undefined
   let onExit: () => void = () => undefined
   let killed = false
   const say = (message: unknown): void => { setTimeout(() => onData(`${JSON.stringify({ jsonrpc: '2.0', ...(message as object) })}\n`), 0) }
-  const result = (method: string, params: Record<string, unknown>): unknown => {
+  const result = (method: string): unknown => {
     switch (method) {
       case 'initialize': return { userAgent: 'codex' }
-      case 'account/read': return answers.account ?? { account: { type: 'chatgpt', email: 'someone@example.test', planType: 'plus' }, requiresOpenaiAuth: true }
-      case 'mcpServerStatus/list': return { data: [{ name: 'cua_repl', pluginId: 'unified-computer-use@openai-bundled' }, { name: 'robinhood', pluginId: null }, { name: 'codex_apps', pluginId: null }] }
-      case 'config/read': return { config: { mcp_servers: { robinhood: {} } } }
+      case 'account/read': return answers.account ?? { account: { type: 'chatgpt', planType: 'plus' }, requiresOpenaiAuth: true }
+      case 'config/read': return answers.config === 'fail' ? undefined : { config: { model: 'gpt-6-sol', mcp_servers: { robinhood: {} } } }
       case 'thread/start': return { thread: { id: 'thread_1' } }
       case 'thread/realtime/start':
         if (answers.realtime === 'error') say({ method: 'thread/realtime/error', params: { threadId: 'thread_1', message: 'realtime conversation requires API key auth' } })
         else {
           say({ method: 'thread/realtime/started', params: { threadId: 'thread_1', version: 'v3' } })
           say({ method: 'thread/realtime/sdp', params: { threadId: 'thread_1', sdp: 'v=0\r\nanswer' } })
+          if (answers.realtime === 'answer-then-closed') say({ method: 'thread/realtime/closed', params: { threadId: 'thread_1', reason: 'transport' } })
         }
         return {}
-      case 'thread/realtime/stop': return {}
       default: return {}
     }
   }
@@ -41,7 +48,10 @@ function fakeCodex(answers: { readonly account?: unknown; readonly realtime?: 'a
       const message = JSON.parse(line) as { id?: number; method?: string; params?: Record<string, unknown>; result?: unknown }
       if (message.method === undefined) { asked.push({ method: `answer:${String(message.id)}`, params: message.result as Record<string, unknown> }); return }
       asked.push({ method: message.method, params: message.params ?? {} })
-      if (message.id !== undefined) say({ id: message.id, result: result(message.method, message.params ?? {}) })
+      if (message.id === undefined) return
+      if (message.method === 'config/read' && answers.config === 'fail') { say({ id: message.id, error: { code: -32000, message: 'no config' } }); return }
+      if (message.method === 'thread/realtime/stop' && answers.answersStop === false) return
+      say({ id: message.id, result: result(message.method) })
     },
     kill: () => { killed = true; setTimeout(() => onExit(), 0) },
     onData: (listener) => { onData = listener },
@@ -52,53 +62,58 @@ function fakeCodex(answers: { readonly account?: unknown; readonly realtime?: 'a
 
 const CODEX = { commandName: 'codex', discoveredPath: 'codex', executablePath: 'codex.exe', prefixArgs: [] as string[], kind: 'native' as const }
 
-function calls(fake: ReturnType<typeof fakeCodex>, folder: string | null = 'C:\\work\\acme') {
+function calls(fakes: () => ReturnType<typeof fakeCodex>, options: { readonly folder?: string | null; readonly codex?: () => Promise<typeof CODEX | undefined> } = {}) {
   const sent: VoiceCallEvent[] = []
-  const spawned: { path: string; args: readonly string[] }[] = []
+  const spawned: ReturnType<typeof fakeCodex>[] = []
   const voice = createVoiceCalls({
-    codex: async () => CODEX,
-    spawn: (path, args) => { spawned.push({ path, args }); return fake.child },
-    folder: () => folder ?? undefined,
+    codex: options.codex ?? (async () => CODEX),
+    spawn: () => { const fake = fakes(); spawned.push(fake); return fake.child },
+    folder: () => (options.folder === null ? undefined : options.folder ?? 'C:\\work\\acme'),
     send: (event) => sent.push(event),
-    version: '0.737.0',
-    answerTimeoutMs: 2_000
+    version: '0.738.0',
+    answerTimeoutMs: 2_000,
+    stopWaitMs: 50
   })
   return { voice, sent, spawned }
 }
+const one = (answers: FakeAnswers = {}) => {
+  const fake = fakeCodex(answers)
+  return { fake, ...calls(() => fake) }
+}
+const by = (fake: ReturnType<typeof fakeCodex>, method: string): Record<string, unknown> => fake.asked.find((entry) => entry.method === method)!.params
+const settle = (ms = 20) => new Promise((resolve) => setTimeout(resolve, ms))
 
 describe('a voice call', () => {
   it('is asked of Codex on a read-only thread with every add-on off, and the answer comes back', async () => {
-    const fake = fakeCodex()
-    const { voice, spawned } = calls(fake)
-    const started = await voice.start('v=0\r\noffer')
-    expect(started).toEqual({ ok: true, answer: 'v=0\r\nanswer' })
-    expect(spawned).toEqual([{ path: 'codex.exe', args: ['app-server'] }])
-    const by = (method: string): Record<string, unknown> => fake.asked.find((entry) => entry.method === method)!.params
-    expect(by('initialize')).toMatchObject({ capabilities: { experimentalApi: true } })
-    expect(by('thread/start')).toEqual({
+    const { fake, voice, spawned } = one()
+    expect(await voice.start('v=0\r\noffer')).toEqual({ ok: true, answer: 'v=0\r\nanswer' })
+    expect(spawned).toHaveLength(1)
+    expect(by(fake, 'initialize')).toMatchObject({ capabilities: { experimentalApi: true } })
+    expect(by(fake, 'thread/start')).toEqual({
       cwd: 'C:\\work\\acme',
       sandbox: 'read-only',
       approvalPolicy: 'untrusted',
       ephemeral: true,
-      config: { 'features.apps': false, 'mcp_servers.robinhood.enabled': false, 'plugins.unified-computer-use@openai-bundled.enabled': false } // public-guard: allow (a Codex plugin id, not an address)
+      config: { 'features.apps': false, 'features.plugins': false, 'features.hooks': false, notify: [], 'mcp_servers.robinhood.enabled': false }
     })
-    expect(by('thread/realtime/start')).toMatchObject({ threadId: 'thread_1', outputModality: 'audio', transport: { type: 'webrtc', sdp: 'v=0\r\noffer' }, version: 'v3' })
-    expect(String(by('thread/realtime/start').realtimeStartInstructions)).toContain('"acme"')
-    // The order matters: the account is checked, and the add-ons read, before any thread exists.
+    expect(by(fake, 'thread/realtime/start')).toMatchObject({ threadId: 'thread_1', outputModality: 'audio', transport: { type: 'webrtc', sdp: 'v=0\r\noffer' }, version: 'v3' })
+    expect(String(by(fake, 'thread/realtime/start').realtimeStartInstructions)).toContain('"acme"')
+    // The account is checked and the settings read before any thread exists -- and the add-on list, which
+    // starts every server to list its tools, is never asked for (Sol's #1).
     const order = fake.asked.map((entry) => entry.method).filter((method) => !method.startsWith('answer:'))
-    expect(order.slice(0, 6)).toEqual(['initialize', 'initialized', 'account/read', 'mcpServerStatus/list', 'config/read', 'thread/start'])
+    expect(order.slice(0, 5)).toEqual(['initialize', 'initialized', 'account/read', 'config/read', 'thread/start'])
+    expect(order).not.toContain('mcpServerStatus/list')
   })
 
   it('says what is said, refuses whatever Codex asks to do, and ends with End', async () => {
-    const fake = fakeCodex()
-    const { voice, sent } = calls(fake)
+    const { fake, voice, sent } = one()
     await voice.start('v=0\r\noffer')
     fake.say({ method: 'thread/realtime/transcript/delta', params: { threadId: 'thread_1', role: 'user', delta: 'What is two' } })
     fake.say({ method: 'thread/realtime/transcript/done', params: { threadId: 'thread_1', role: 'user', text: 'What is two plus two' } })
     fake.say({ method: 'thread/realtime/transcript/done', params: { threadId: 'thread_1', role: 'assistant', text: 'That’s four.' } })
     fake.say({ method: 'turn/started', params: { threadId: 'thread_1' } })
     fake.say({ id: 99, method: 'item/commandExecution/requestApproval', params: { threadId: 'thread_1', command: 'rm -rf build' } })
-    await new Promise((resolve) => setTimeout(resolve, 20))
+    await settle()
     expect(sent).toEqual([
       { kind: 'partial', role: 'you', delta: 'What is two' },
       { kind: 'said', role: 'you', text: 'What is two plus two' },
@@ -113,28 +128,92 @@ describe('a voice call', () => {
   })
 
   it('is not placed on an API key, and says how to fix it', async () => {
-    const fake = fakeCodex({ account: { account: { type: 'apiKey' }, requiresOpenaiAuth: true } })
-    const { voice } = calls(fake)
+    const { fake, voice } = one({ account: { account: { type: 'apiKey' }, requiresOpenaiAuth: true } })
+    expect(await voice.start('v=0\r\noffer')).toEqual({ ok: false, message: 'Codex is signed in with an API key. Voice calls use your ChatGPT sign-in: sign Codex in with ChatGPT and try again.' })
+    expect(fake.asked.map((entry) => entry.method)).not.toContain('thread/start')
+    expect(fake.killed()).toBe(true)
+  })
+
+  it('is not placed when the settings cannot be read: nothing is left on by accident (Sol’s #2)', async () => {
+    const { fake, voice } = one({ config: 'fail' })
     const started = await voice.start('v=0\r\noffer')
-    expect(started).toEqual({ ok: false, message: 'Codex is signed in with an API key. Voice calls use your ChatGPT sign-in: sign Codex in with ChatGPT and try again.' })
+    expect(started).toEqual({ ok: false, message: 'Locust could not read your Codex settings, so it did not place the call. Try again.' })
     expect(fake.asked.map((entry) => entry.method)).not.toContain('thread/start')
     expect(fake.killed()).toBe(true)
   })
 
   it('says the voice service’s refusal in words, and stops the server', async () => {
-    const fake = fakeCodex({ realtime: 'error' })
-    const { voice } = calls(fake)
+    const { fake, voice } = one({ realtime: 'error' })
     const started = await voice.start('v=0\r\noffer')
-    expect(started.ok).toBe(false)
     expect(started.ok === false && started.message).toMatch(/sign Codex in with ChatGPT/)
     expect(fake.killed()).toBe(true)
   })
 
   it('needs a folder, and Codex', async () => {
-    const fake = fakeCodex()
-    expect(await calls(fake, null).voice.available()).toEqual({ available: false, why: 'Pick a folder first.' })
-    const none = createVoiceCalls({ codex: async () => undefined, spawn: () => fake.child, folder: () => 'C:\\work', send: () => undefined, version: '0' })
-    expect((await none.available()).available).toBe(false)
-    expect((await none.start('v=0\r\n')).ok).toBe(false)
+    expect(await one().voice.available()).toEqual({ available: true })
+    expect(await calls(() => fakeCodex(), { folder: null }).voice.available()).toEqual({ available: false, why: 'Pick a folder first.' })
+    const none = calls(() => fakeCodex(), { codex: async () => undefined })
+    expect((await none.voice.available()).available).toBe(false)
+    expect((await none.voice.start('v=0\r\n')).ok).toBe(false)
+    expect(none.spawned).toHaveLength(0)
+  })
+})
+
+describe('a voice call’s starts and ends (Sol’s review of 0.737)', () => {
+  it('runs one start at a time: a second press ends the first before it spawns anything (#6)', async () => {
+    let release: (value: typeof CODEX) => void = () => undefined
+    const slow = new Promise<typeof CODEX>((resolve) => { release = resolve })
+    const { voice, spawned } = calls(() => fakeCodex(), { codex: () => slow })
+    const first = voice.start('v=0\r\nfirst')
+    const second = voice.start('v=0\r\nsecond')
+    release(CODEX)
+    const [a, b] = await Promise.all([first, second])
+    expect(a).toEqual({ ok: false, message: 'The call was ended before it began.' })
+    expect(b).toEqual({ ok: true, answer: 'v=0\r\nanswer' })
+    expect(spawned).toHaveLength(1)
+  })
+
+  it('reaches a start still finding Codex: End then spawns nothing (#6)', async () => {
+    let release: (value: typeof CODEX) => void = () => undefined
+    const slow = new Promise<typeof CODEX>((resolve) => { release = resolve })
+    const { voice, spawned } = calls(() => fakeCodex(), { codex: () => slow })
+    const starting = voice.start('v=0\r\noffer')
+    await voice.stop()
+    release(CODEX)
+    expect(await starting).toEqual({ ok: false, message: 'The call was ended before it began.' })
+    expect(spawned).toHaveLength(0)
+  })
+
+  it('reaches a start already talking to Codex: End stops it there and the server goes (#6)', async () => {
+    const { fake, voice } = one()
+    const starting = voice.start('v=0\r\noffer')
+    await settle(1)
+    await voice.stop()
+    expect((await starting).ok).toBe(false)
+    expect(fake.killed()).toBe(true)
+  })
+
+  it('hands back no answer for a call that closed as it came (#11)', async () => {
+    const { fake, voice } = one({ realtime: 'answer-then-closed' })
+    const started = await voice.start('v=0\r\noffer')
+    expect(started.ok).toBe(false)
+    expect(fake.killed()).toBe(true)
+  })
+
+  it('does not wait on a Codex that never says it stopped (#12)', async () => {
+    const { fake, voice } = one({ answersStop: false })
+    await voice.start('v=0\r\noffer')
+    const at = Date.now()
+    await voice.stop()
+    expect(Date.now() - at).toBeLessThan(1_000)
+    expect(fake.killed()).toBe(true)
+  })
+
+  it('ends at once when the app quits', async () => {
+    const { fake, voice, sent } = one({ answersStop: false })
+    await voice.start('v=0\r\noffer')
+    voice.dispose()
+    expect(fake.killed()).toBe(true)
+    expect(sent.at(-1)).toEqual({ kind: 'ended' })
   })
 })

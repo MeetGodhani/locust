@@ -6,50 +6,48 @@ import { describe, expect, it } from 'vitest'
 import { isVoiceCallOffer, voiceCallRole, voiceCallSaid, voiceCallText, voiceThreadConfig } from './voice-call.js'
 
 /*
- * A VOICE CALL'S RULES (0.737). The call's Codex thread starts nothing the person's Codex would: measured
- * 2026-10-10 against Codex 0.162.1 on Colin's machine, whose six were code-review, codex_app, codex_apps,
- * cua_repl, node_repl and robinhood -- three a plugin brings, ChatGPT's connectors, and two in his config.
+ * A VOICE CALL'S RULES (0.737; 0.738 after Sol's review). The call's Codex thread starts nothing the person's
+ * Codex would: measured 2026-10-11 against Codex 0.162.1 on Colin's machine -- cua_repl, node_repl, codex_apps
+ * and robinhood without these settings, none with them. Read from his settings alone (config/read): asking
+ * mcpServerStatus/list for names started every server to list its tools (Sol's #1).
  */
-const COLINS_STATUS = {
-  data: [
-    { name: 'code-review', pluginId: 'code-review@openai-bundled' },
-    { name: 'codex_app', pluginId: 'codex-app-tools@openai-bundled' },
-    { name: 'codex_apps', pluginId: null, httpOrigin: 'https://chatgpt.com' },
-    { name: 'cua_repl', pluginId: 'unified-computer-use@openai-bundled' },
-    { name: 'node_repl', pluginId: null },
-    { name: 'robinhood', pluginId: null, httpOrigin: 'https://agent.robinhood.com' }
-  ]
-}
-const COLINS_CONFIG = { mcp_servers: { node_repl: { command: 'node_repl.exe' }, robinhood: { url: 'https://agent.robinhood.com' } } }
+const COLINS_CONFIG = { model: 'gpt-6-sol', mcp_servers: { node_repl: { command: 'node_repl.exe' }, robinhood: { url: 'https://agent.robinhood.com' } } }
 
 describe('the call’s thread starts no add-on', () => {
-  it('switches each off where it lives: plugin, connectors, or the person’s config', () => {
-    expect(voiceThreadConfig(COLINS_STATUS, COLINS_CONFIG)).toEqual({
-      'features.apps': false,
-      'mcp_servers.node_repl.enabled': false,
-      'mcp_servers.robinhood.enabled': false,
-      'plugins.code-review@openai-bundled.enabled': false, // public-guard: allow (Codex plugin ids, not addresses)
-      'plugins.codex-app-tools@openai-bundled.enabled': false, // public-guard: allow (Codex plugin ids, not addresses)
-      'plugins.unified-computer-use@openai-bundled.enabled': false // public-guard: allow (Codex plugin ids, not addresses)
+  it('switches off connectors, plugins, hooks, notify, and each of the person’s own servers by name', () => {
+    expect(voiceThreadConfig(COLINS_CONFIG)).toEqual({
+      ok: true,
+      config: {
+        'features.apps': false,
+        'features.plugins': false,
+        'features.hooks': false,
+        notify: [],
+        'mcp_servers.node_repl.enabled': false,
+        'mcp_servers.robinhood.enabled': false
+      }
     })
+    // Settings with no servers of their own still get every category switched off.
+    const none = voiceThreadConfig({ model: 'x' })
+    expect(none.ok && Object.keys(none.config)).toEqual(['features.apps', 'features.plugins', 'features.hooks', 'notify'])
   })
 
-  it('never names a server where it does not live (Codex refuses a half entry)', () => {
-    const config = voiceThreadConfig(COLINS_STATUS, COLINS_CONFIG)!
-    expect(Object.keys(config)).not.toContain('mcp_servers.codex_app.enabled')
-    expect(Object.keys(config)).not.toContain('mcp_servers.cua_repl.enabled')
-  })
-
-  it('places no call when a server could not be switched off', () => {
-    // A server neither a plugin's nor the person's nor ChatGPT's: nothing to switch, so no call.
-    expect(voiceThreadConfig({ data: [{ name: 'mystery' }] }, { mcp_servers: {} })).toBeUndefined()
+  it('places no call when the settings did not read as settings (Sol’s #2: it failed open)', () => {
+    for (const unread of [undefined, null, 'config', ['a'], 42]) expect(voiceThreadConfig(unread).ok).toBe(false)
+    expect(voiceThreadConfig({ mcp_servers: ['robinhood'] })).toEqual({ ok: false, message: 'Locust could not read your Codex add-ons, so it did not place the call. Try again.' })
     // A name a dotted key would read as two.
-    expect(voiceThreadConfig({ data: [] }, { mcp_servers: { 'my.server': {} } })).toBeUndefined()
-    expect(voiceThreadConfig({ data: [{ name: 'x', pluginId: 'odd plugin' }] }, {})).toBeUndefined()
+    expect(voiceThreadConfig({ mcp_servers: { 'my.server': {} } }).ok).toBe(false)
   })
 
-  it('still holds ChatGPT’s connectors off when Codex lists nothing', () => {
-    expect(voiceThreadConfig(undefined, undefined)).toEqual({ 'features.apps': false })
+  it('places no call when Codex is pointed at a voice or ChatGPT address that is not OpenAI’s (Sol’s #4)', () => {
+    const refused = voiceThreadConfig({ experimental_realtime_webrtc_call_base_url: 'https://proxy.example.test/v1' })
+    expect(refused).toEqual({ ok: false, message: 'Your Codex settings send voice calls to an address that is not OpenAI’s (experimental_realtime_webrtc_call_base_url), so Locust did not place the call. Remove that setting to use Talk.' })
+    expect(voiceThreadConfig({ experimental_realtime_ws_base_url: 'wss://elsewhere.example.test' }).ok).toBe(false)
+    expect(voiceThreadConfig({ chatgpt_base_url: 'https://my-proxy.example.test/backend-api' }).ok).toBe(false)
+    expect(voiceThreadConfig({ realtime: { base_url: 'https://elsewhere.example.test' } }).ok).toBe(false)
+    // OpenAI's own addresses are fine; so is a realtime setting that is not an address.
+    expect(voiceThreadConfig({ experimental_realtime_ws_base_url: 'wss://api.openai.com/v1/realtime' }).ok).toBe(true)
+    expect(voiceThreadConfig({ chatgpt_base_url: 'https://chatgpt.com/backend-api/' }).ok).toBe(true)
+    expect(voiceThreadConfig({ realtime_conversation_version: 'v3' }).ok).toBe(true)
   })
 })
 
@@ -69,6 +67,9 @@ describe('the rest of the call’s words', () => {
     expect(voiceCallSaid('realtime conversation requires API key auth')).toMatch(/sign Codex in with ChatGPT/)
     expect(voiceCallSaid('AVAS requires OpenAI-Alpha: quicksilver=v2.')).toMatch(/Update Codex in Settings > AI agents/)
     expect(voiceCallSaid('Rate limit reached for voice')).toMatch(/voice time is used up/)
+    // A limit is a limit even when it names the voice service (Sol's #13), and a timeout says to try again.
+    expect(voiceCallSaid('AVAS quota exceeded')).toMatch(/voice time is used up/)
+    expect(voiceCallSaid('The app server did not answer initialize in time.')).toBe('Codex did not answer in time, so the call did not start. Try again; if it keeps happening, restart Locust.')
     expect(voiceCallSaid('something\nelse')).toBe('The call could not go on. Codex said: something else')
   })
 
