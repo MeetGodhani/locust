@@ -66,6 +66,8 @@ function calls(fakes: () => ReturnType<typeof fakeCodex>, options: {
   readonly folder?: string | null
   readonly codex?: () => Promise<typeof CODEX | undefined>
   readonly addOn?: { readonly open: () => Promise<VoiceAddOn | undefined>; readonly close: () => Promise<void> }
+  readonly connectors?: boolean
+  readonly askWaitMs?: number
 } = {}) {
   const sent: VoiceCallEvent[] = []
   const spawned: ReturnType<typeof fakeCodex>[] = []
@@ -77,7 +79,9 @@ function calls(fakes: () => ReturnType<typeof fakeCodex>, options: {
     version: '0.738.0',
     answerTimeoutMs: 2_000,
     stopWaitMs: 50,
-    ...(options.addOn === undefined ? {} : { addOn: options.addOn })
+    ...(options.addOn === undefined ? {} : { addOn: options.addOn }),
+    ...(options.connectors === undefined ? {} : { connectors: options.connectors }),
+    ...(options.askWaitMs === undefined ? {} : { askWaitMs: options.askWaitMs })
   })
   return { voice, sent, spawned }
 }
@@ -125,7 +129,7 @@ describe('a voice call', () => {
       { kind: 'said', role: 'voice', text: 'That’s four.' },
       { kind: 'working', working: true }
     ])
-    expect(fake.asked).toContainEqual({ method: 'answer:99', params: { decision: 'reject' } })
+    expect(fake.asked).toContainEqual({ method: 'answer:99', params: { decision: 'decline' } })
     await voice.stop()
     expect(fake.asked.map((entry) => entry.method)).toContain('thread/realtime/stop')
     expect(fake.killed()).toBe(true)
@@ -289,5 +293,93 @@ describe('a voice call’s hand-offs', () => {
     await voice.stop()
     await settle()
     expect(closed).toHaveLength(0)
+  })
+})
+
+/*
+ * YOUR CONNECTORS IN A CALL (0.742). Colin, 2026-10-11: "want to be able to do simple things like check gmail by
+ * asking". A connector that only reads runs without a question (Codex's rule, measured); one that would change
+ * something asks, and the question is the person's, in the strip, never answered for them.
+ */
+describe('a voice call with your connectors', () => {
+  // The question Codex asked of a throwaway server's send_note, measured 2026-10-11 (Codex 0.162.1).
+  const ASKED = {
+    threadId: 'thread_1', turnId: 'turn_1', serverName: 'robinhood', mode: 'form',
+    _meta: { codex_approval_kind: 'mcp_tool_call', persist: ['session', 'always'], tool_description: 'Places an order.', tool_params: { symbol: 'AAPL', quantity: 1 },
+      tool_params_display: [{ name: 'symbol', value: 'AAPL', display_name: 'symbol' }, { name: 'quantity', value: 1, display_name: 'quantity' }] },
+    message: 'Allow the robinhood MCP server to run tool "place_equity_order"?', requestedSchema: { type: 'object', properties: {} }
+  }
+  const connected = (askWaitMs?: number) => {
+    const fake = fakeCodex()
+    return { fake, ...calls(() => fake, { connectors: true, ...(askWaitMs === undefined ? {} : { askWaitMs }) }) }
+  }
+  const asksOf = (sent: readonly VoiceCallEvent[]) => sent.filter((event): event is Extract<VoiceCallEvent, { kind: 'asks' }> => event.kind === 'asks')
+
+  it('keeps the person’s connectors on for the call’s thread, and its thinking quick', async () => {
+    const { fake, voice } = connected()
+    await voice.start('v=0\r\noffer')
+    // The fake's robinhood names no address, so it is not known to be a service elsewhere: it stays off.
+    expect(by(fake, 'thread/start').config).toEqual({ 'features.plugins': false, 'features.hooks': false, notify: [], model_reasoning_effort: 'low', 'mcp_servers.robinhood.enabled': false })
+    const told = String(by(fake, 'thread/realtime/start').realtimeStartInstructions)
+    expect(told).toContain('Allow and Deny in the call’s strip')
+    await voice.stop()
+  })
+
+  it('asks the person before a connector changes anything, and does it only on Allow', async () => {
+    const { fake, voice, sent } = connected()
+    await voice.start('v=0\r\noffer')
+    fake.say({ id: 50, method: 'mcpServer/elicitation/request', params: ASKED })
+    await settle()
+    const [asked] = asksOf(sent)
+    expect(asked).toMatchObject({ what: 'robinhood: place equity order', detail: 'symbol: AAPL · quantity: 1' })
+    expect(fake.asked.some((entry) => entry.method === 'answer:50')).toBe(false)
+    voice.answer(asked!.id, true)
+    await settle()
+    expect(fake.asked).toContainEqual({ method: 'answer:50', params: { action: 'accept', content: {} } })
+    expect(sent).toContainEqual({ kind: 'asked', id: asked!.id, allowed: true })
+    // An answer twice, or for an id nobody asked, changes nothing.
+    voice.answer(asked!.id, false)
+    voice.answer('nobody', true)
+    await settle()
+    expect(fake.asked.filter((entry) => entry.method === 'answer:50')).toHaveLength(1)
+    await voice.stop()
+  })
+
+  it('is a Deny on Deny, when nobody answers in time, and when the call ends', async () => {
+    const { fake, voice, sent } = connected(60)
+    await voice.start('v=0\r\noffer')
+    fake.say({ id: 51, method: 'mcpServer/elicitation/request', params: ASKED })
+    await settle()
+    voice.answer(asksOf(sent)[0]!.id, false)
+    fake.say({ id: 52, method: 'mcpServer/elicitation/request', params: ASKED })
+    await settle(120)
+    fake.say({ id: 53, method: 'mcpServer/elicitation/request', params: { ...ASKED } })
+    await settle()
+    await voice.stop()
+    await settle()
+    for (const id of [51, 52]) expect(fake.asked).toContainEqual({ method: `answer:${String(id)}`, params: { action: 'decline' } })
+    // The third ended with the call: Codex went with it, and the strip was told it is over.
+    const over = sent.filter((event) => event.kind === 'asked')
+    expect(over).toHaveLength(3)
+    expect(over.every((event) => event.kind === 'asked' && !event.allowed)).toBe(true)
+  })
+
+  it('declines unasked what is not a connector’s tool call, and every connector when they are off', async () => {
+    const { fake, voice, sent } = connected()
+    await voice.start('v=0\r\noffer')
+    fake.say({ id: 60, method: 'mcpServer/elicitation/request', params: { ...ASKED, mode: 'url', url: 'https://example.com' } })
+    fake.say({ id: 61, method: 'item/fileChange/requestApproval', params: { threadId: 'thread_1' } })
+    await settle()
+    expect(asksOf(sent)).toEqual([])
+    expect(fake.asked).toContainEqual({ method: 'answer:60', params: { action: 'decline' } })
+    expect(fake.asked).toContainEqual({ method: 'answer:61', params: { decision: 'decline' } })
+    await voice.stop()
+    const off = one()
+    await off.voice.start('v=0\r\noffer')
+    off.fake.say({ id: 62, method: 'mcpServer/elicitation/request', params: ASKED })
+    await settle()
+    expect(asksOf(off.sent)).toEqual([])
+    expect(off.fake.asked).toContainEqual({ method: 'answer:62', params: { action: 'decline' } })
+    await off.voice.stop()
   })
 })

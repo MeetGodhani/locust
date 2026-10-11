@@ -10,8 +10,9 @@ import { app, BrowserWindow, crashReporter, dialog, ipcMain, Menu, nativeImage, 
 import { createVoiceHost } from './voice-host.js'
 import { voicePermission } from './voice-permission.js'
 import { VOICE_READY, VOICE_DOWNLOAD, VOICE_TRANSCRIBE, VOICE_CANCEL, VOICE_PROGRESS, VOICE_SETTINGS_READ, VOICE_SETTINGS_SAVE, VOICE_OPENAI_CONSENT } from '../shared/voice.js'
-import { VOICE_CALL_AVAILABLE, VOICE_CALL_EVENT, VOICE_CALL_START, VOICE_CALL_STOP, VOICE_CALL_TOOLS, isVoiceCallOffer, type VoiceAddOn } from '../shared/voice-call.js'
+import { VOICE_CALL_ANSWER, VOICE_CALL_AVAILABLE, VOICE_CALL_EVENT, VOICE_CALL_START, VOICE_CALL_STOP, VOICE_CALL_TOOLS, isVoiceCallOffer, type VoiceAddOn } from '../shared/voice-call.js'
 import { createVoiceCalls } from './voice-call.js'
+import { CALL_FOLDER_TOOLS, callFolderTools } from './voice-call-folder.js'
 import { createVoiceSettingsStore } from './voice-settings.js'
 import { MCP_CONNECTION_FILE, createLocustMcpHost } from './locust-mcp-host.js'
 import { claudeAppConfigFile, claudeAppStartedAt, createClaudeAppConnector, relaunchClaudeApp } from './claude-app-connection.js'
@@ -3724,6 +3725,12 @@ if (!ownsSingleInstanceLock) {
     /** Locust's own add-on server, a private copy for each call (0.739); set once the tools exist, below. */
     let voiceCallAddOn: { readonly open: () => Promise<VoiceAddOn | undefined>; readonly close: () => Promise<void> } | undefined
     const voiceCalls = createVoiceCalls({
+      // The person's connectors are the call's too; one that would change something asks in the strip (0.742).
+      connectors: true,
+      // A drive's throwaway server, in a development build only: LOCUST_VOICE_TEST_SERVER is the path of its script.
+      ...(!app.isPackaged && process.env.LOCUST_VOICE_TEST_SERVER !== undefined
+        ? { testServer: { command: process.execPath, args: [process.env.LOCUST_VOICE_TEST_SERVER], env: { ELECTRON_RUN_AS_NODE: '1' } } }
+        : {}),
       addOn: {
         open: async () => voiceCallAddOn?.open(),
         close: async () => { await voiceCallAddOn?.close() }
@@ -3766,6 +3773,7 @@ if (!ownsSingleInstanceLock) {
       return voiceCalls.start(offer)
     })
     ipcMain.handle(VOICE_CALL_STOP, (event) => fromVoiceWindow(event) ? voiceCalls.stop() : undefined)
+    ipcMain.handle(VOICE_CALL_ANSWER, (event, id: unknown, allowed: unknown) => { if (fromVoiceWindow(event)) voiceCalls.answer(id, allowed) })
     app.once('will-quit', () => voiceCalls.dispose())
 
     const teammatesUnavailable = {
@@ -7689,15 +7697,19 @@ if (!ownsSingleInstanceLock) {
       origin: { kind: 'mcp', via: 'voice' },
       waiting: id => raisedApprovals.waitingOn(id)
     })
+    // The call reads the folder with Locust's own read-only tools, never a command (0.742).
+    const voiceCallFolder = callFolderTools(() => (workspaceChosen ? workspacePath : undefined))
     const voiceCallBridge = app.isPackaged ? join(process.resourcesPath, 'locust-mcp-bridge.mjs') : join(__dirname, '../../resources/locust-mcp-bridge.mjs')
     const voiceCallMcpDirectory = join(app.getPath('userData'), 'voice-call-mcp')
     const voiceCallHost = createLocustMcpHost({ directory: voiceCallMcpDirectory, node: process.execPath, bridge: voiceCallBridge,
-      call: (name, args) => VOICE_CALL_TOOLS.has(name) ? voiceCallTools(name, args) : Promise.resolve({ content: [{ type: 'text', text: 'A voice call can only hand work to teammates and read their replies.' }], isError: true }) })
+      call: (name, args) => !VOICE_CALL_TOOLS.has(name)
+        ? Promise.resolve({ content: [{ type: 'text', text: 'A voice call can only read the folder, hand work to teammates and read their replies.' }], isError: true })
+        : CALL_FOLDER_TOOLS.has(name) ? voiceCallFolder(name, args) : voiceCallTools(name, args) })
     voiceCallAddOn = {
       open: async () => {
         const state = await voiceCallHost.setEnabled(true)
         if (!state.enabled) return undefined
-        return { command: process.execPath, args: [voiceCallBridge, join(voiceCallMcpDirectory, MCP_CONNECTION_FILE)], env: { ELECTRON_RUN_AS_NODE: '1' } }
+        return { command: process.execPath, args: [voiceCallBridge, join(voiceCallMcpDirectory, MCP_CONNECTION_FILE), 'call'], env: { ELECTRON_RUN_AS_NODE: '1' } }
       },
       close: async () => { await voiceCallHost.setEnabled(false) }
     }

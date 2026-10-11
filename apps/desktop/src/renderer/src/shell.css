@@ -20946,6 +20946,12 @@ textarea {
 .lc-call__line.is-handed .lc-call__who { color: var(--lc-text-primary); }
 .lc-call__who { margin-right: 6px; font-size: 12px; font-weight: 600; }
 .lc-call__message { margin: 0; font-size: 12px; color: var(--lc-amber-text); }
+/* A connector waiting for Allow (0.742): what it would do on the left, the two answers on the right. */
+.lc-call__ask { display: flex; align-items: center; justify-content: space-between; gap: var(--lc-space-4); padding: 8px 10px; border: 1px solid var(--lc-amber-border); border-radius: var(--lc-radius-control); }
+.lc-call__asktext { margin: 0; min-width: 0; font-size: 13px; line-height: 1.45; color: var(--lc-text-primary); overflow-wrap: anywhere; }
+.lc-call__asktext .lc-call__who { color: var(--lc-amber-text); }
+.lc-call__askdetail { display: block; font-size: 12px; color: var(--lc-text-secondary); }
+.lc-call__askacts { display: inline-flex; align-items: center; gap: var(--lc-space-2); flex: none; }
 @media (prefers-reduced-motion: reduce) { .lc-call__bar { transition: none; } }
 
 /*

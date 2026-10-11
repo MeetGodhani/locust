@@ -99,10 +99,15 @@ sign-in you gave Codex (Locust never sees it), over Codex's own app server
 from your microphone and plays the voice that comes back, so for as long as the
 call lasts your voice goes from this window to OpenAI's voice service and its
 voice comes back the same way; what was said comes back from Codex as text. The
-call's Codex works in your folder on a thread of its own: read-only, every
-request for approval refused, not kept in Codex's history, and with every add-on
-your Codex would start switched off for that thread. Nothing is sent before you
-press Talk, and End, leaving the conversation, or closing Locust ends it.
+call's Codex works in your folder on a thread of its own: read-only, not kept in
+Codex's history, reading the folder through Locust's own read-only tools, and
+running no command. Your connectors are the call's too (0.742): ChatGPT's own,
+and each add-on of yours that is a service at an address, reached by Codex as it
+reaches them for any of your runs. One that only reads answers at once; one that
+would send, change or buy something waits for your Allow in the call's strip.
+Add-ons your computer runs as programs, plugins and hooks stay switched off for
+that thread. Nothing is sent before you press Talk, and End, leaving the
+conversation, or closing Locust ends it.
 
 **A web page in the preview.** A page a teammate made runs inside Locust. It may
 load libraries, stylesheets and fonts -- GET and HEAD over https only -- from

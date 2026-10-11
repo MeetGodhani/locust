@@ -49,7 +49,7 @@ class FakeAudio { autoplay = false; srcObject: unknown = null; async play(): Pro
 
 function api(start: () => Promise<VoiceCallStartResult> = async () => ({ ok: true, answer: 'v=0\r\nanswer' })) {
   const stops: number[] = []
-  const calls: VoiceCallApi = { available: async () => ({ available: true }), start, stop: async () => { stops.push(1) }, onEvent: () => () => undefined }
+  const calls: VoiceCallApi = { available: async () => ({ available: true }), start, stop: async () => { stops.push(1) }, answer: async () => undefined, onEvent: () => () => undefined }
   return { calls, stops }
 }
 const FAST = { gatherMs: 10, connectMs: 60, reconnectMs: 40 }

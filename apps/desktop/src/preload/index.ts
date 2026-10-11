@@ -1,7 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { LOCUST_MCP_CLAUDE_APP, LOCUST_MCP_CLAUDE_APP_RESTART, LOCUST_MCP_CLAUDE_APP_SET, LOCUST_MCP_GET, LOCUST_MCP_SET, LOCUST_MCP_SET_OWN_MODE } from '../shared/locust-mcp.js'
 import { VOICE_READY, VOICE_DOWNLOAD, VOICE_TRANSCRIBE, VOICE_CANCEL, VOICE_PROGRESS, VOICE_SETTINGS_READ, VOICE_SETTINGS_SAVE, VOICE_OPENAI_CONSENT } from '../shared/voice.js'
-import { VOICE_CALL_AVAILABLE, VOICE_CALL_EVENT, VOICE_CALL_START, VOICE_CALL_STOP } from '../shared/voice-call.js'
+import { VOICE_CALL_ANSWER, VOICE_CALL_AVAILABLE, VOICE_CALL_EVENT, VOICE_CALL_START, VOICE_CALL_STOP } from '../shared/voice-call.js'
 import type { VoiceCallEvent } from '../shared/voice-call.js'
 import { REMOTE_CONTROL_GET_CHANNEL, REMOTE_CONTROL_SET_CHANNEL, type RemoteControlState } from '../shared/claude-remote-control.js'
 import { FOLDER_CHANGES_CHANNEL, FOLDER_COMMIT_CHANNEL, type CommitResult, type FolderChanges } from '../shared/folder-commit.js'
@@ -425,6 +425,7 @@ const desktopApi: DesktopApi = {
     available: () => ipcRenderer.invoke(VOICE_CALL_AVAILABLE),
     start: (offer) => ipcRenderer.invoke(VOICE_CALL_START, offer),
     stop: () => ipcRenderer.invoke(VOICE_CALL_STOP),
+    answer: (id, allowed) => ipcRenderer.invoke(VOICE_CALL_ANSWER, id, allowed),
     onEvent: (listener) => {
       const receive = (_event: Electron.IpcRendererEvent, update: VoiceCallEvent): void => { listener(update) }
       ipcRenderer.on(VOICE_CALL_EVENT, receive)

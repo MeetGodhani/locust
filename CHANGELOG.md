@@ -11,6 +11,18 @@ Settings shows this file as What's new. An entry may group its changes under
 about when they arrive on it carries `<!-- big -->` on the line under its
 heading: the home screen then shows it once, as a splash.
 
+## 0.742.0 - 2026-10-11
+<!-- big -->
+
+### New
+
+- **Talk can use your connectors.** In a voice call, ask for quick things directly, like "check my email" or "what's on my calendar". Connectors that only read answer straight away. One that would send, change or buy something shows Allow and Deny in the call, and nothing happens until you press Allow. Bigger jobs still go to a teammate.
+
+### Fixed
+
+- **A voice call reads your folder now.** It used to try commands it was not allowed to run, then say it was waiting for an approval that never appeared. It now reads, lists and searches the folder with Locust's own read-only tools, and it never reads a file of secrets such as `.env`.
+- **A voice call never runs programs on your computer by itself.** Add-ons that run code on your machine stay off during a call; online connectors stay on.
+
 ## 0.741.0 - 2026-10-11
 
 ### Fixed

@@ -15,6 +15,7 @@ const api: VoiceCallApi = {
   available: async () => ({ available: true }),
   start: async () => ({ ok: false, message: 'not in a test' }),
   stop: async () => undefined,
+  answer: async () => undefined,
   onEvent: () => () => undefined
 }
 

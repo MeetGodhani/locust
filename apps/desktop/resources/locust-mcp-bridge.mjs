@@ -18,6 +18,18 @@ const TOOLS = [
   { name: 'run_routine', description: 'Run a Locust routine by id or name, with values for its inputs. A routine that changes files runs only if the person has turned on "Use each teammate\'s own mode" in Locust; any approval is answered by the person in Locust\'s window, never from here. A routine that asks for a folder runs only from Locust. API/account usage and Locust monthly limits apply. Returns the routine id; poll routine_status.', inputSchema: schema({ routine: string, values: { type: 'object', additionalProperties: { type: 'string', maxLength: 4000 }, maxProperties: 12 } }, ['routine']) },
   { name: 'routine_status', description: 'The step a routine started by run_routine is on, a wait for the person in Locust, or, once it ends, its last answer. Read only.', inputSchema: schema({ routine: string }, ['routine']) }
 ]
+/*
+ * A voice call's copy (0.742, `call` after the connection file): the hand-off tools, and three that read the
+ * folder. Each that only reads says so, and Codex runs a tool marked read only without asking first.
+ */
+const READS = new Set(['list_teammates', 'read_reply', 'list_background_runs'])
+const CALL_TOOLS = process.argv[3] === 'call' ? [
+  ...TOOLS.filter(t => ['list_teammates', 'start_conversation', 'send_message', 'read_reply', 'list_background_runs'].includes(t.name)),
+  { name: 'find_files', description: 'List the files in the folder Locust has open, or those whose path contains query. Read only.', inputSchema: schema({ query: { type: 'string', maxLength: 200 } }) },
+  { name: 'read_file', description: 'Read a text file in the folder Locust has open, by its path in the folder, 400 lines at a time from from_line. Never a file of secrets. Read only.', inputSchema: schema({ path: { type: 'string', minLength: 1, maxLength: 1000 }, from_line: { type: 'integer', minimum: 1 } }, ['path']) },
+  { name: 'search_files', description: 'Find the lines that contain text in the folder Locust has open. Read only.', inputSchema: schema({ text: string }, ['text']) }
+].map(t => READS.has(t.name) || ['find_files', 'read_file', 'search_files'].includes(t.name) ? { ...t, annotations: { readOnlyHint: true } } : t) : undefined
+const LISTED = CALL_TOOLS ?? TOOLS
 
 async function call(name, args) {
   let connection
@@ -69,9 +81,9 @@ process.stdin.on('data', chunk => {
     if (rpc.id === undefined) continue // notifications have no response
     if (rpc.method === 'initialize') { send(rpc.id, { protocolVersion: ['2024-11-05', '2025-03-26', '2025-06-18'].includes(rpc.params?.protocolVersion) ? rpc.params.protocolVersion : '2025-06-18', capabilities: { tools: {} }, serverInfo: { name: 'locust', version: '1' } }); continue }
     if (rpc.method === 'ping') { send(rpc.id, {}); continue }
-    if (rpc.method === 'tools/list') { send(rpc.id, { tools: TOOLS }); continue }
+    if (rpc.method === 'tools/list') { send(rpc.id, { tools: LISTED }); continue }
     if (rpc.method === 'tools/call') {
-      if (!TOOLS.some(t => t.name === rpc.params?.name)) { error(rpc.id, -32602, 'Unknown Locust tool'); continue }
+      if (!LISTED.some(t => t.name === rpc.params?.name)) { error(rpc.id, -32602, 'Unknown Locust tool'); continue }
       void call(rpc.params.name, rpc.params.arguments ?? {}).then(answer => send(rpc.id, answer)).catch(() => send(rpc.id, result('Locust could not complete that request. Nothing was retried.', true)))
       continue
     }

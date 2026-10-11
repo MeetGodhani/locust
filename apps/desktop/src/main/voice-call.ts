@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { basename } from 'node:path'
 
 import { createAppServerClient } from '@teammate/runtime-adapters'
@@ -5,6 +6,8 @@ import type { AppServerClient, AppServerRunProcess as AppServerProcess, Executab
 
 import {
   VOICE_CALL_ADD_ON,
+  VOICE_CALL_ASK_WAIT_MS,
+  voiceCallAsk,
   voiceCallInstructions,
   voiceCallRole,
   voiceCallSaid,
@@ -49,12 +52,20 @@ export interface VoiceCallDeps {
     readonly open: () => Promise<VoiceAddOn | undefined>
     readonly close: () => Promise<void>
   }
+  /** The person's own connectors stay on for the call, each that would change something asking first (0.742). */
+  readonly connectors?: boolean
+  /** How long a connector's question waits for Allow. */
+  readonly askWaitMs?: number
+  /** A drive's throwaway server for a development build's call, so a question can be asked and denied (0.742). */
+  readonly testServer?: VoiceAddOn
 }
 
 export interface VoiceCalls {
   available(): Promise<VoiceCallAvailability>
   start(offer: string): Promise<VoiceCallStartResult>
   stop(): Promise<void>
+  /** The person's Allow or Deny for one question in the strip; an id no call is waiting on changes nothing. */
+  answer(id: unknown, allowed: unknown): void
   dispose(): void
 }
 
@@ -67,6 +78,8 @@ interface Live {
   ended: boolean
   /** Locust's add-on was opened for this call, and closes with it. */
   addOn?: boolean
+  /** Questions waiting for the person's Allow, by the id the strip answers with. */
+  readonly asks: Map<string, (allowed: boolean) => void>
 }
 
 /** One start, from its first line: cancelled by Stop at whatever step it has reached. */
@@ -95,6 +108,8 @@ export function createVoiceCalls(deps: VoiceCallDeps): VoiceCalls {
     // A start still waiting on the answer is told why it will not come.
     call.failed?.(why ?? 'The call ended.')
     call.failed = undefined
+    // Anything still waiting for Allow did not happen.
+    for (const settle of [...call.asks.values()]) settle(false)
     call.client.dispose('The call ended.')
     call.child.kill()
     if (call.addOn === true) void deps.addOn?.close().catch(() => undefined)
@@ -168,6 +183,21 @@ export function createVoiceCalls(deps: VoiceCallDeps): VoiceCalls {
     end(call)
   }
 
+  /** Puts one question in the strip and waits for Allow, Deny, the time running out or the call ending. */
+  const ask = (call: Live, asked: { readonly what: string; readonly detail: string }): Promise<boolean> =>
+    new Promise((resolve) => {
+      const id = randomUUID()
+      const timer = setTimeout(() => { settle(false) }, deps.askWaitMs ?? VOICE_CALL_ASK_WAIT_MS)
+      function settle(allowed: boolean): void {
+        if (!call.asks.delete(id)) return
+        clearTimeout(timer)
+        deps.send({ kind: 'asked', id, allowed })
+        resolve(allowed)
+      }
+      call.asks.set(id, settle)
+      deps.send({ kind: 'asks', id, what: asked.what, detail: asked.detail })
+    })
+
   const stop = async (): Promise<void> => {
     const ticket = current
     if (ticket !== undefined) await cancel(ticket)
@@ -200,24 +230,28 @@ export function createVoiceCalls(deps: VoiceCallDeps): VoiceCalls {
         transport: { send: (line) => child.write(line), close: () => child.kill() },
         onNotification: ({ method, params }) => notified(call, method, params),
         /*
-         * Nothing in a call may act itself: every approval Codex asks for is refused -- except Codex asking to use
-         * Locust's own add-on, which only hands work to teammates (measured 2026-10-11: an MCP tool call on this
-         * thread first asks `mcpServer/elicitation/request`, `codex_approval_kind: mcp_tool_call`; declined, the
-         * tool never runs). That add-on is the call's private copy, carrying only the hand-off tools.
+         * Nothing in a call acts by itself. Codex asking to use Locust's own add-on is let through: it only hands
+         * work to teammates and reads the folder (measured 2026-10-11: an MCP tool call on this thread first asks
+         * `mcpServer/elicitation/request`, `codex_approval_kind: mcp_tool_call`; declined, the tool never runs).
+         * One of the person's connectors that would change something asks THEM, in the strip (0.742); a command,
+         * a file change or anything else is refused, since a call has nowhere to show it.
          */
         onRequest: async (request): Promise<JsonValue> => {
           const p = isRecord(request.params) ? request.params : {}
           const meta = isRecord(p._meta) ? p._meta : {}
           if (request.method === 'mcpServer/elicitation/request') {
-            return call.addOn === true && p.serverName === VOICE_CALL_ADD_ON && meta.codex_approval_kind === 'mcp_tool_call'
-              ? { action: 'accept', content: {} }
-              : { action: 'decline' }
+            if (p.serverName === VOICE_CALL_ADD_ON) {
+              return call.addOn === true && meta.codex_approval_kind === 'mcp_tool_call' ? { action: 'accept', content: {} } : { action: 'decline' }
+            }
+            const asked = deps.connectors === true ? voiceCallAsk(p) : undefined
+            if (asked === undefined || call.ended) return { action: 'decline' }
+            return (await ask(call, asked)) ? { action: 'accept', content: {} } : { action: 'decline' }
           }
-          return { decision: 'reject' }
+          return { decision: 'decline' }
         },
         requestTimeoutMs: REQUEST_TIMEOUT_MS
       })
-      call = { client, child, ended: false }
+      call = { client, child, ended: false, asks: new Map() }
       ticket.call = call
       child.onData((chunk) => client.accept(chunk))
       // Nothing if the call already ended; otherwise Codex went away under it.
@@ -247,7 +281,7 @@ export function createVoiceCalls(deps: VoiceCallDeps): VoiceCalls {
         const addOn = deps.addOn === undefined ? undefined : await deps.addOn.open().catch(() => undefined)
         if (addOn !== undefined) call.addOn = true
         if (!going()) return refuse(ENDED)
-        const threadConfig = voiceThreadConfig(isRecord(read) ? read.config : undefined, addOn)
+        const threadConfig = voiceThreadConfig(isRecord(read) ? read.config : undefined, addOn, { connectors: deps.connectors === true, ...(deps.testServer === undefined ? {} : { testServer: deps.testServer }) })
         if (!threadConfig.ok) return refuse(threadConfig.message)
         const thread = await client.request('thread/start', {
           cwd: folder,
@@ -272,7 +306,7 @@ export function createVoiceCalls(deps: VoiceCallDeps): VoiceCalls {
           outputModality: 'audio',
           transport: { type: 'webrtc', sdp: offer },
           version: 'v3',
-          realtimeStartInstructions: voiceCallInstructions(basename(folder) || folder, addOn !== undefined)
+          realtimeStartInstructions: voiceCallInstructions(basename(folder) || folder, addOn !== undefined, deps.connectors === true)
         })
         const answer = await answered
         call.answer = undefined
@@ -287,6 +321,11 @@ export function createVoiceCalls(deps: VoiceCallDeps): VoiceCalls {
     },
 
     stop,
+
+    answer(id, allowed) {
+      if (typeof id !== 'string' || typeof allowed !== 'boolean') return
+      current?.call?.asks.get(id)?.(allowed)
+    },
 
     // Quitting: ended now, not after Codex has had its say.
     dispose() {

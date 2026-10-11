@@ -30,6 +30,8 @@ export function VoiceCallButton({ platform, onText, api = typeof window === 'und
   const [lines, setLines] = useState<readonly Line[]>([])
   /** What the voice handed to teammates (0.739). */
   const [handed, setHanded] = useState<readonly { readonly to: string; readonly task: string }[]>([])
+  /** A connector waiting for Allow (0.742): what it would do, until it is answered. */
+  const [asks, setAsks] = useState<readonly { readonly id: string; readonly what: string; readonly detail: string }[]>([])
   const [partial, setPartial] = useState<Readonly<Record<VoiceCallRole, string>>>({ you: '', voice: '' })
   const [message, setMessage] = useState('')
   const [muted, setMuted] = useState(false)
@@ -62,8 +64,11 @@ export function VoiceCallButton({ platform, onText, api = typeof window === 'und
         if (update.text.trim().length > 0) setLines((was) => [...was, { role: update.role, text: update.text.trim() }])
       } else if (update.kind === 'working') setWorking(update.working)
       else if (update.kind === 'handed') setHanded((was) => [...was, { to: update.to, task: update.task }])
+      else if (update.kind === 'asks') setAsks((was) => [...was, { id: update.id, what: update.what, detail: update.detail }])
+      else if (update.kind === 'asked') setAsks((was) => was.filter((asked) => asked.id !== update.id))
       else if (update.kind === 'error') setMessage(update.message)
       else if (update.kind === 'ended' && current.current === 'live') {
+        setAsks([])
         void call.current?.hangUp()
         call.current = undefined
         if (update.why !== undefined) setMessage(update.why)
@@ -163,7 +168,7 @@ export function VoiceCallButton({ platform, onText, api = typeof window === 'und
   const speaking = levels.voice > 0.08
   const status = phase === 'calling'
     ? 'Calling…'
-    : working ? 'Codex is looking in the folder…' : speaking ? 'ChatGPT is speaking' : muted ? 'Muted' : 'Listening'
+    : asks.length > 0 ? 'Waiting for you to allow it' : working ? 'Working on it…' : speaking ? 'ChatGPT is speaking' : muted ? 'Muted' : 'Listening'
   const clock = `${String(Math.floor(seconds / 60))}:${String(seconds % 60).padStart(2, '0')}`
   const shown = phase === 'ended' ? lines : lines.slice(-3)
   const loud = Math.max(levels.you, levels.voice)
@@ -205,6 +210,14 @@ export function VoiceCallButton({ platform, onText, api = typeof window === 'und
         {handed.map((hand, index) => <p key={`handed-${String(index)}`} className="lc-call__line is-handed"><span className="lc-call__who">Handed to {hand.to}</span>{hand.task}</p>)}
         {on && (['you', 'voice'] as const).map((role) => partial[role].trim().length > 0 && <p key={`partial-${role}`} className={`lc-call__line is-${role} is-partial`}><span className="lc-call__who">{role === 'you' ? 'You' : 'ChatGPT'}</span>{partial[role].trim()}</p>)}
       </div>}
+      {/* A connector that would change something, asked here: nothing happens until Allow (0.742). */}
+      {on && asks.map((asked) => <div key={asked.id} className="lc-call__ask" role="group" aria-label={`Allow ${asked.what}?`}>
+        <p className="lc-call__asktext"><span className="lc-call__who">Allow?</span>{asked.what}{asked.detail.length > 0 && <span className="lc-call__askdetail">{asked.detail}</span>}</p>
+        <span className="lc-call__askacts">
+          <button type="button" className="lc-control lc-control--boxed" onClick={() => { void api.answer(asked.id, true) }}>Allow</button>
+          <button type="button" className="lc-control" onClick={() => { void api.answer(asked.id, false) }}>Deny</button>
+        </span>
+      </div>)}
       {message && <p className="lc-call__message">{message}</p>}
     </div>}
   </span>

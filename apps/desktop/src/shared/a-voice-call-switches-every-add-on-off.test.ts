@@ -100,8 +100,8 @@ describe('Locust as the call’s one add-on (0.739)', () => {
     expect(voiceThreadConfig({ mcp_servers: { [VOICE_CALL_ADD_ON]: {} } }).ok).toBe(true)
   })
 
-  it('carries only the hand-off tools', () => {
-    expect([...VOICE_CALL_TOOLS].sort()).toEqual(['list_background_runs', 'list_teammates', 'read_reply', 'send_message', 'start_conversation'])
+  it('carries only the hand-off tools, and three that read the folder (0.742)', () => {
+    expect([...VOICE_CALL_TOOLS].sort()).toEqual(['find_files', 'list_background_runs', 'list_teammates', 'read_file', 'read_reply', 'search_files', 'send_message', 'start_conversation'])
   })
 
   it('tells the call’s Codex to read a task back and wait for a yes before handing it over', () => {
