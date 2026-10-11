@@ -11,6 +11,12 @@ Settings shows this file as What's new. An entry may group its changes under
 about when they arrive on it carries `<!-- big -->` on the line under its
 heading: the home screen then shows it once, as a splash.
 
+## 0.745.0 - 2026-10-11
+
+### New
+
+- **Choose Talk's voice.** Settings > General > Talk's voice offers ChatGPT's own nine voices, under the names and descriptions ChatGPT gives them: Juniper, Maple, Spruce, Ember, Vale, Breeze, Arbor, Sol and Cove. The next call speaks in the one you pick.
+
 ## 0.744.0 - 2026-10-11
 
 ### Fixed

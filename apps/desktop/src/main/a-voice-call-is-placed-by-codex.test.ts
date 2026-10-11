@@ -68,6 +68,7 @@ function calls(fakes: () => ReturnType<typeof fakeCodex>, options: {
   readonly addOn?: { readonly open: () => Promise<VoiceAddOn | undefined>; readonly close: () => Promise<void> }
   readonly connectors?: boolean
   readonly askWaitMs?: number
+  readonly voice?: () => Promise<string | undefined>
 } = {}) {
   const sent: VoiceCallEvent[] = []
   const spawned: ReturnType<typeof fakeCodex>[] = []
@@ -81,7 +82,8 @@ function calls(fakes: () => ReturnType<typeof fakeCodex>, options: {
     stopWaitMs: 50,
     ...(options.addOn === undefined ? {} : { addOn: options.addOn }),
     ...(options.connectors === undefined ? {} : { connectors: options.connectors }),
-    ...(options.askWaitMs === undefined ? {} : { askWaitMs: options.askWaitMs })
+    ...(options.askWaitMs === undefined ? {} : { askWaitMs: options.askWaitMs }),
+    ...(options.voice === undefined ? {} : { voice: options.voice })
   })
   return { voice, sent, spawned }
 }
@@ -381,5 +383,26 @@ describe('a voice call with your connectors', () => {
     expect(asksOf(off.sent)).toEqual([])
     expect(off.fake.asked).toContainEqual({ method: 'answer:62', params: { action: 'decline' } })
     await off.voice.stop()
+  })
+})
+
+/*
+ * TALK'S VOICE (0.745): the one chosen in Settings goes to Codex as the call starts. Measured 2026-10-11: Codex
+ * 0.162.1 took `voice: 'sol'` on a realtime v3 call and the call went on as before.
+ */
+describe('a voice call’s voice', () => {
+  it('is the one chosen, and Codex’s own when none is or it cannot be read', async () => {
+    const chosen = fakeCodex()
+    const sol = calls(() => chosen, { voice: async () => 'sol' })
+    await sol.voice.start('v=0\r\noffer')
+    expect(by(chosen, 'thread/realtime/start')).toMatchObject({ voice: 'sol', version: 'v3' })
+    await sol.voice.stop()
+    for (const voice of [undefined, async () => undefined, async () => { throw new Error('unreadable') }]) {
+      const fake = fakeCodex()
+      const call = calls(() => fake, voice === undefined ? {} : { voice })
+      expect((await call.voice.start('v=0\r\noffer')).ok).toBe(true)
+      expect(by(fake, 'thread/realtime/start')).not.toHaveProperty('voice')
+      await call.voice.stop()
+    }
   })
 })

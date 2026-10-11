@@ -10,7 +10,7 @@ import { app, BrowserWindow, crashReporter, dialog, ipcMain, Menu, nativeImage, 
 import { createVoiceHost } from './voice-host.js'
 import { voicePermission } from './voice-permission.js'
 import { VOICE_READY, VOICE_DOWNLOAD, VOICE_TRANSCRIBE, VOICE_CANCEL, VOICE_PROGRESS, VOICE_SETTINGS_READ, VOICE_SETTINGS_SAVE, VOICE_OPENAI_CONSENT } from '../shared/voice.js'
-import { VOICE_CALL_ANSWER, VOICE_CALL_AVAILABLE, VOICE_CALL_EVENT, VOICE_CALL_START, VOICE_CALL_STOP, VOICE_CALL_TOOLS, isVoiceCallOffer, type VoiceAddOn } from '../shared/voice-call.js'
+import { DEFAULT_CHATGPT_VOICE, VOICE_CALL_ANSWER, VOICE_CALL_AVAILABLE, VOICE_CALL_EVENT, VOICE_CALL_SET_VOICE, VOICE_CALL_START, VOICE_CALL_STOP, VOICE_CALL_TOOLS, VOICE_CALL_VOICES, isChatGptVoice, isVoiceCallOffer, type ChatGptVoice, type VoiceAddOn } from '../shared/voice-call.js'
 import { createVoiceCalls } from './voice-call.js'
 import { CALL_FOLDER_TOOLS, callFolderTools } from './voice-call-folder.js'
 import { createVoiceSettingsStore } from './voice-settings.js'
@@ -3724,7 +3724,18 @@ if (!ownsSingleInstanceLock) {
     let voiceCallWindow: Electron.WebContents | undefined
     /** Locust's own add-on server, a private copy for each call (0.739); set once the tools exist, below. */
     let voiceCallAddOn: { readonly open: () => Promise<VoiceAddOn | undefined>; readonly close: () => Promise<void> } | undefined
+    // Talk's voice (0.745), kept in the profile: a preference, picked again in a moment after a restore.
+    const voiceCallVoiceFile = join(app.getPath('userData'), 'voice-call.json')
+    const voiceCallVoice = async (): Promise<ChatGptVoice> => {
+      try {
+        const kept = (JSON.parse(await readFile(voiceCallVoiceFile, 'utf8')) as { voice?: unknown }).voice
+        return isChatGptVoice(kept) ? kept : DEFAULT_CHATGPT_VOICE
+      } catch {
+        return DEFAULT_CHATGPT_VOICE
+      }
+    }
     const voiceCalls = createVoiceCalls({
+      voice: voiceCallVoice,
       // The person's connectors are the call's too; one that would change something asks in the strip (0.742).
       connectors: true,
       // A drive's throwaway server, in a development build only: LOCUST_VOICE_TEST_SERVER is the path of its script.
@@ -3773,6 +3784,12 @@ if (!ownsSingleInstanceLock) {
       return voiceCalls.start(offer)
     })
     ipcMain.handle(VOICE_CALL_STOP, (event) => fromVoiceWindow(event) ? voiceCalls.stop() : undefined)
+    ipcMain.handle(VOICE_CALL_VOICES, (event) => fromOwnWindow(event) ? voiceCallVoice() : DEFAULT_CHATGPT_VOICE)
+    ipcMain.handle(VOICE_CALL_SET_VOICE, async (event, voice: unknown) => {
+      if (!fromOwnWindow(event) || !isChatGptVoice(voice)) return voiceCallVoice()
+      await writeFile(voiceCallVoiceFile, `${JSON.stringify({ voice })}\n`, 'utf8')
+      return voiceCallVoice()
+    })
     ipcMain.handle(VOICE_CALL_ANSWER, (event, id: unknown, allowed: unknown) => { if (fromVoiceWindow(event)) voiceCalls.answer(id, allowed) })
     app.once('will-quit', () => voiceCalls.dispose())
 

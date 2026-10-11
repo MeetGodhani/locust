@@ -20,6 +20,7 @@ import { FREE_ROUTE, recordRoot, say, scratchRepository, sleep, startDrive, team
 
 const arg = (name) => (process.argv.includes(name) ? process.argv[process.argv.indexOf(name) + 1] : undefined)
 const packaged = arg('--packaged')
+const voice = arg('--voice')
 if (process.platform !== 'win32') {
   say('Voice calls are on Windows only for now.')
   process.exit(0)
@@ -81,6 +82,27 @@ try {
   await drive.ready()
   await drive.resize(1215, 800)
   await sleep(1500)
+  // --voice <id> (0.745): Settings > General > Talk's voice first, so the call speaks in it.
+  if (voice !== undefined) {
+    const chosen = String(await drive.capture(`Talk’s voice: ${voice}`, () => drive.evaluate(`(async () => {
+      document.querySelector('button[title="Settings (Ctrl 3)"]').click()
+      await new Promise(r => setTimeout(r, 900))
+      ;[...document.querySelectorAll('.lc-settings__navitem')].find((n) => n.innerText.trim().startsWith('General'))?.click()
+      let select
+      for (let i = 0; i < 40 && !(select = document.querySelector('select[aria-label="Talk’s voice"]')); i += 1) await new Promise(r => setTimeout(r, 250))
+      if (!select) return 'no voice picker'
+      select.scrollIntoView({ block: 'center' })
+      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(select, ${JSON.stringify(voice)})
+      select.dispatchEvent(new Event('change', { bubbles: true }))
+      await new Promise(r => setTimeout(r, 900))
+      return select.value + ' :: ' + (select.closest('.lc-settingline')?.querySelector('.lc-settings__lede')?.innerText ?? '')
+    })()`)))
+    check(`Settings keeps the voice: ${voice}`, chosen.startsWith(`${voice} ::`), chosen)
+    await drive.evaluate(`document.querySelector('button[title="Settings (Ctrl 3)"]')?.click()`)
+    await sleep(600)
+    await drive.evaluate(`document.querySelector('button[aria-label="Home"]')?.click()`)
+    await sleep(900)
+  }
   await drive.evaluate(`(async () => { ${teammateFace('Wren')}.click(); await new Promise(r => setTimeout(r, 800)) })()`)
   const beside = String(await drive.capture('Talk, beside the microphone', () => drive.evaluate(`(async () => {
     for (let i = 0; i < 40 && !document.querySelector('button[aria-label="Talk"]'); i += 1) await new Promise(r => setTimeout(r, 250))

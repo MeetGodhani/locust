@@ -4,6 +4,7 @@ import { boardSectionOf, teamBoard } from '../teamBoard.js'
 import { durationText, runSpanMs } from '../missionView.js'
 import { WhatsNew } from './WhatsNew.js'
 import { RemoteControlSetting } from './RemoteControlSetting.js'
+import { TalkVoice } from './TalkVoice.js'
 import { VoiceSettings } from './VoiceSettings.js'
 import { LocustMcpSettings } from './LocustMcpSettings.js'
 import { SETTINGS_PAGES, matchedHeadings, pageMatches } from '../settingsPages.js'
@@ -3041,6 +3042,7 @@ export function SettingsScreen({
           </div>
         </section>
         )}
+        {shownPage === 'app' && <TalkVoice />}
         {shownPage === 'app' && (
         <section className="lc-settings__section">
           <h2 className="lc-settings__heading">Startup</h2>

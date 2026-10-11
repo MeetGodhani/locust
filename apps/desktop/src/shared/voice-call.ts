@@ -21,6 +21,35 @@ export const VOICE_CALL_STOP = 'voice-call:stop'
 export const VOICE_CALL_EVENT = 'voice-call:event'
 /** The person's Allow or Deny for something a call asked to do (0.742). */
 export const VOICE_CALL_ANSWER = 'voice-call:answer'
+/** Which voice a call speaks in (0.745): read, and set. */
+export const VOICE_CALL_VOICES = 'voice-call:voices'
+export const VOICE_CALL_SET_VOICE = 'voice-call:set-voice'
+
+/*
+ * CHATGPT'S OWN VOICES (0.745). Colin, 2026-10-11, holding ChatGPT's "Choose your voice" (Sol, "Savvy and
+ * relaxed", the eighth of nine): "see if we can set this up". `thread/realtime/listVoices` on Codex 0.162.1 answers
+ * two lists: v1, the nine ChatGPT's app offers, in its order -- juniper, maple, spruce, ember, vale, breeze, arbor,
+ * sol, cove (default cove) -- and v2, the API's (alloy ... marin, default marin). The words beside each are the
+ * ones ChatGPT's app shows.
+ */
+export const CHATGPT_VOICES = [
+  { id: 'juniper', about: 'Open and upbeat' },
+  { id: 'maple', about: 'Cheerful and candid' },
+  { id: 'spruce', about: 'Calm and affirming' },
+  { id: 'ember', about: 'Confident and optimistic' },
+  { id: 'vale', about: 'Bright and inquisitive' },
+  { id: 'breeze', about: 'Animated and earnest' },
+  { id: 'arbor', about: 'Easygoing and versatile' },
+  { id: 'sol', about: 'Savvy and relaxed' },
+  { id: 'cove', about: 'Composed and direct' }
+] as const
+export type ChatGptVoice = (typeof CHATGPT_VOICES)[number]['id']
+/** Codex's own choice when the person has not made one. */
+export const DEFAULT_CHATGPT_VOICE: ChatGptVoice = 'cove'
+export function isChatGptVoice(value: unknown): value is ChatGptVoice {
+  return typeof value === 'string' && CHATGPT_VOICES.some((voice) => voice.id === value)
+}
+export const voiceName = (id: string): string => id.charAt(0).toUpperCase() + id.slice(1)
 
 export type VoiceCallAvailability = { readonly available: true } | { readonly available: false; readonly why: string }
 export type VoiceCallStartResult = { readonly ok: true; readonly answer: string } | { readonly ok: false; readonly message: string }
@@ -51,6 +80,9 @@ export interface VoiceCallApi {
   stop(): Promise<void>
   /** Allow or Deny one `asks`. */
   answer(id: string, allowed: boolean): Promise<void>
+  /** The voice a call speaks in, and setting it; the next call uses it. */
+  voice(): Promise<ChatGptVoice>
+  setVoice(voice: ChatGptVoice): Promise<ChatGptVoice>
   onEvent(listener: (event: VoiceCallEvent) => void): () => void
 }
 

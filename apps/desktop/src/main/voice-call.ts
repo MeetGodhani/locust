@@ -58,6 +58,8 @@ export interface VoiceCallDeps {
   readonly askWaitMs?: number
   /** A drive's throwaway server for a development build's call, so a question can be asked and denied (0.742). */
   readonly testServer?: VoiceAddOn
+  /** The voice the person chose in Settings (0.745); Codex's own when there is none. */
+  readonly voice?: () => Promise<string | undefined>
 }
 
 export interface VoiceCalls {
@@ -294,6 +296,9 @@ export function createVoiceCalls(deps: VoiceCallDeps): VoiceCalls {
         const threadId = isRecord(thread) && isRecord(thread.thread) && typeof thread.thread.id === 'string' ? thread.thread.id : undefined
         if (threadId === undefined) return refuse('Codex did not start the call’s conversation.')
         call.threadId = threadId
+        // The voice chosen in Settings; one that cannot be read is Codex's own, never a refused call.
+        const voice = await deps.voice?.().catch(() => undefined)
+        if (!going()) return refuse(ENDED)
         const answered = new Promise<string>((resolve, reject) => {
           call.answer = resolve
           call.failed = (message) => reject(new Said(message))
@@ -306,7 +311,8 @@ export function createVoiceCalls(deps: VoiceCallDeps): VoiceCalls {
           outputModality: 'audio',
           transport: { type: 'webrtc', sdp: offer },
           version: 'v3',
-          realtimeStartInstructions: voiceCallInstructions(basename(folder) || folder, addOn !== undefined, deps.connectors === true)
+          realtimeStartInstructions: voiceCallInstructions(basename(folder) || folder, addOn !== undefined, deps.connectors === true),
+          ...(voice === undefined ? {} : { voice })
         })
         const answer = await answered
         call.answer = undefined

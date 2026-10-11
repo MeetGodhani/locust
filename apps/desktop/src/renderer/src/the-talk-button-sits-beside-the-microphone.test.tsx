@@ -16,6 +16,8 @@ const api: VoiceCallApi = {
   start: async () => ({ ok: false, message: 'not in a test' }),
   stop: async () => undefined,
   answer: async () => undefined,
+  voice: async () => 'cove' as const,
+  setVoice: async (voice) => voice,
   onEvent: () => () => undefined
 }
 
