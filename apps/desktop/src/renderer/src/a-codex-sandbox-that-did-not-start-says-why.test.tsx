@@ -44,7 +44,7 @@ describe('a command Codex’s sandbox never started', () => {
   it('says nothing of the sort for a command that ran and failed (control)', () => {
     const html = fold({ failed: true, output: 'node : The term node is not recognized', exitCode: 1 })
     expect(html).not.toContain('sandbox did not start')
-    expect(html).not.toContain('Quit the Codex app')
+    expect(html).not.toContain('Task Manager')
   })
 })
 
