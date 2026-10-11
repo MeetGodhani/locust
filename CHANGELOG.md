@@ -209,7 +209,7 @@ A sweep through Locust's code turned up 24 mistakes; each is fixed and has a tes
 
 ### Improved
 
-- **An attached PDF can be read by every agent.** Locust now opens the PDF itself as soon as you attach it: its text goes into one file, and each page becomes a picture, both in Locust's own folder beside the attachment. Your teammate is told where they are, so it no longer needs a PDF tool of its own. On Windows, Codex could not open a PDF without Python packages most machines do not have, and its sandbox stops it from installing them, so it spent minutes and several failed commands decoding the file by hand. The page pictures keep what text cannot, such as equations, tables and charts.
+- **An attached PDF can be read by every agent.** Locust now opens the PDF itself as soon as you attach it: its text goes into one file, and each page becomes a picture, both in Locust's own folder beside the attachment. Your teammate is told where they are, so it no longer needs a PDF tool of its own. On a tester's Windows computer, Codex's PDF tool needed Python packages that weren't installed, and its sandbox stopped it from installing them, so it took 1 minute 39 seconds and four failed commands to decode the file by hand. The page pictures keep what text cannot, such as equations, tables and charts.
 
 ### Fixed
 
