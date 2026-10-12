@@ -11,6 +11,18 @@ Settings shows this file as What's new. An entry may group its changes under
 about when they arrive on it carries `<!-- big -->` on the line under its
 heading: the home screen then shows it once, as a splash.
 
+## 0.762.0 - 2026-10-12
+
+### New
+
+- **A pull request from your cloud computer.** A change waiting on your cloud computer can go to GitHub instead of this folder. Open a pull request drafts the message from what you asked; Locust then puts just that change on a branch of its own, committed as you, and opens the pull request. While it is open, your next change there can be added to it. A change that builds on edits only this folder has is refused in words, and nothing is pushed.
+
+### Fixed
+
+- **Files you attach reach your cloud computer.** A picture, a file from outside the folder or a PDF attached to a message there now goes with it. Before, the teammate was told to read files that were only on this PC.
+- **The teammate on your cloud computer knows where it is working.** It was given this PC's folder path, went looking for it there, and said so in its reply.
+- **A cloud turn's files no longer offer this folder's copy.** While its change is on your cloud computer, a file row still shows what changed, but no longer offers to open, copy or show the file here: those acted on this folder's file of that name, not the one the teammate made.
+
 ## 0.761.0 - 2026-10-12
 <!-- big -->
 
