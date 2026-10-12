@@ -150,6 +150,15 @@ export function createScout(deps: ScoutDeps) {
     deps.changed(state)
     return state
   }
+  /*
+   * EVERY CHANGE IS ONE STEP ON THE NEWEST STATE. A change read what Scout held, awaited, then wrote: a card dismissed
+   * while a look was writing its own came back. Now each change is worked out from what is held at the moment it is
+   * kept, with nothing awaited between the reading and the keeping.
+   */
+  const mutate = async (change: (from: Kept) => Kept): Promise<ScoutState> => {
+    const loaded = await load()
+    return keep(change(kept ?? loaded))
+  }
 
   const restart = (settings: ScoutSettings): void => {
     if (timer !== undefined) clear(timer)
@@ -188,20 +197,24 @@ export function createScout(deps: ScoutDeps) {
       const teammateId = from.settings.teammateId
       // Scout taken off the team is Scout turned off: nothing looks for a teammate who is gone.
       if (!(await deps.teammateExists(teammateId).catch(() => true))) {
-        const off = { ...from, settings: { ...from.settings, on: false } }
-        restart(off.settings)
-        return await keep(off)
+        const state = await mutate((latest) => ({ ...latest, settings: { ...latest.settings, on: false } }))
+        restart(state.settings)
+        return state
       }
       const at = now()
       const stamp = at.toISOString()
       const { facts, prs } = await gather(from, stamp)
-      if (facts.length === 0) return await keep({ ...(await load()), prs, lastLookAt: stamp })
+      if (facts.length === 0) return await mutate((latest) => ({ ...latest, prs, lastLookAt: stamp }))
       const team = (await deps.team().catch(() => [])).filter((mate) => mate.teammateId !== teammateId)
       const cards = facts.map((fact) => cardOf(fact, `card_${randomBytes(6).toString('hex')}`, at, true))
-      const latest = await load()
-      const seen = [...latest.seen, ...facts.map((fact) => fact.key)].slice(-MAX_SCOUT_SEEN)
-      let state = await keep({ ...latest, cards: withNewCards(latest.cards, cards), seen, prs, lastLookAt: stamp })
-      if (latest.settings.notify) for (const card of cards) if (card.urgency === 'now') deps.notify(card)
+      let state = await mutate((latest) => ({
+        ...latest,
+        cards: withNewCards(latest.cards, cards),
+        seen: [...latest.seen, ...facts.map((fact) => fact.key)].slice(-MAX_SCOUT_SEEN),
+        prs,
+        lastLookAt: stamp
+      }))
+      if (state.settings.notify) for (const card of cards) if (card.urgency === 'now') deps.notify(card)
       // Then Scout's model, for its take and the next step.
       const asked = await deps.ask(teammateId, scoutPrompt({ facts, team: team.map((mate) => ({ name: mate.name, role: mate.role })) }))
         .catch((error: unknown) => ({ refused: error instanceof Error ? error.message : 'The look could not start.' }))
@@ -211,26 +224,26 @@ export function createScout(deps: ScoutDeps) {
       }
       const expires = later(() => { void ended(asked.missionId, true) }, deps.answerWaitMs ?? ANSWER_WAIT_MS)
       pending.set(asked.missionId, { cardIds: cards.map((card) => card.cardId), team, expires })
-      const withLook = await load()
-      return await keep({ ...withLook, lookIds: [...withLook.lookIds, asked.missionId].slice(-MAX_LOOK_IDS) })
+      return await mutate((latest) => ({ ...latest, lookIds: [...latest.lookIds, asked.missionId].slice(-MAX_LOOK_IDS) }))
     } finally {
       looking = false
     }
   }
 
   /** The cards a look asked about, no longer waiting: with what the model added, or why it added nothing. */
-  const settle = async (cardIds: readonly string[], answers: ReadonlyMap<number, { readonly take?: string; readonly draft?: ScoutCard['draft'] }> | undefined, why?: string): Promise<ScoutState> => {
-    const from = await load()
-    const cards = from.cards.map((card) => {
-      const at = cardIds.indexOf(card.cardId)
-      if (at < 0) return card
-      const { reading: _reading, ...rest } = card
-      const answer = answers?.get(at + 1)
-      return { ...rest, ...(answer?.take === undefined ? {} : { take: answer.take }), ...(answer?.draft === undefined ? {} : { draft: answer.draft }) }
+  const settle = (cardIds: readonly string[], answers: ReadonlyMap<number, { readonly take?: string; readonly draft?: ScoutCard['draft'] }> | undefined, why?: string): Promise<ScoutState> =>
+    mutate((from) => {
+      const cards = from.cards.map((card) => {
+        const at = cardIds.indexOf(card.cardId)
+        if (at < 0) return card
+        const { reading: _reading, ...rest } = card
+        const answer = answers?.get(at + 1)
+        return { ...rest, ...(answer?.take === undefined ? {} : { take: answer.take }), ...(answer?.draft === undefined ? {} : { draft: answer.draft }) }
+      })
+      // An answer that came clears the last one's excuse; one that did not says why.
+      const { modelSaid: _was, ...base } = from
+      return { ...base, cards, ...(why === undefined ? {} : { modelSaid: why }) }
     })
-    const { modelSaid: _was, ...base } = from
-    return keep({ ...base, cards, ...(why === undefined ? {} : { modelSaid: why }) })
-  }
 
   const ended = async (missionId: string, timedOut = false): Promise<void> => {
     const look = pending.get(missionId)
@@ -255,7 +268,7 @@ export function createScout(deps: ScoutDeps) {
     async start(firstLookMs = 30_000): Promise<void> {
       const from = await load()
       // A look's cards from before a restart wait on nothing now.
-      if (from.cards.some((card) => card.reading === true)) await keep({ ...from, cards: from.cards.map(({ reading: _reading, ...card }) => card) })
+      if (from.cards.some((card) => card.reading === true)) await mutate((latest) => ({ ...latest, cards: latest.cards.map(({ reading: _reading, ...card }) => card) }))
       restart(from.settings)
       if (from.settings.on) firstLook = later(() => { firstLook = undefined; void look() }, firstLookMs)
     },
@@ -271,21 +284,22 @@ export function createScout(deps: ScoutDeps) {
           return { refused: error instanceof Error ? error.message : 'Scout could not be added to the team.' }
         }
       }
-      const settings = { ...from.settings, on: true, teammateId }
-      restart(settings)
-      await keep({ ...from, settings })
+      const madeId = teammateId
+      const state = await mutate((latest) => ({ ...latest, settings: { ...latest.settings, on: true, teammateId: madeId } }))
+      restart(state.settings)
       return look()
     },
     async set(change: unknown): Promise<ScoutState> {
-      const from = await load()
-      const settings = scoutSettingsFrom({ ...(typeof change === 'object' && change !== null ? change : {}), teammateId: from.settings.teammateId }, from.settings)
-      if (settings.everyMinutes !== from.settings.everyMinutes || settings.on !== from.settings.on) restart(settings)
-      return keep({ ...from, settings })
+      let before: ScoutSettings | undefined
+      const state = await mutate((latest) => {
+        before = latest.settings
+        // The window may not name Scout's teammate: Scout made it, and keeps it.
+        return { ...latest, settings: scoutSettingsFrom({ ...(typeof change === 'object' && change !== null ? change : {}), teammateId: latest.settings.teammateId }, latest.settings) }
+      })
+      if (state.settings.everyMinutes !== before?.everyMinutes || state.settings.on !== before.on) restart(state.settings)
+      return state
     },
-    async dismiss(cardId: unknown): Promise<ScoutState> {
-      const from = await load()
-      return keep({ ...from, cards: from.cards.filter((card) => card.cardId !== cardId) })
-    },
+    dismiss: (cardId: unknown): Promise<ScoutState> => mutate((latest) => ({ ...latest, cards: latest.cards.filter((card) => card.cardId !== cardId) })),
     look,
     /** Every run that ends: a look's turn fills its cards in; a teammate's failed turn is news for the next look. */
     async onRunEnded(mission: { readonly missionId: string }): Promise<void> {

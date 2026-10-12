@@ -36,16 +36,16 @@ describe('pull requests', () => {
     expect(pullRequestFacts(new Map(), [pr()], 'look1')).toEqual([])
     const [failing] = pullRequestFacts(new Map(), [pr({ checks: 'failing', notPassed: 2 })], 'look1')
     expect(failing).toMatchObject({ urgency: 'now', said: 'Your pull request #212, Talk starts from any app: 2 of 9 checks did not pass.', open: { kind: 'url', url: URL } })
-    expect(failing?.key).toBe('pr:212:failing::')
+    expect(failing?.key).toBe(`pr:${URL}:failing::`)
     expect(pullRequestFacts(new Map(), [pr({ review: 'changes-requested', conflicts: true })], 'look1')[0]).toMatchObject({ urgency: 'soon', said: expect.stringContaining('changes were asked for, and it conflicts with its base branch') })
   })
 
   it('tell what changed since the last look, keyed by the look, so the same state coming back is news again', () => {
     const before = new Map([[URL, pr()]])
     const [news] = pullRequestFacts(before, [pr({ checks: 'failing', notPassed: 1 })], 'look7')
-    expect(news).toMatchObject({ key: 'pr:212:look7', urgency: 'now', said: 'Your pull request #212, Talk starts from any app: 1 of 9 checks did not pass.' })
+    expect(news).toMatchObject({ key: `pr:${URL}:look7`, urgency: 'now', said: 'Your pull request #212, Talk starts from any app: 1 of 9 checks did not pass.' })
     const [passed] = pullRequestFacts(new Map([[URL, pr({ checks: 'failing', notPassed: 1 })]]), [pr()], 'look8')
-    expect(passed).toMatchObject({ key: 'pr:212:look8', urgency: 'later', said: expect.stringContaining('all 9 checks passed') })
+    expect(passed).toMatchObject({ key: `pr:${URL}:look8`, urgency: 'later', said: expect.stringContaining('all 9 checks passed') })
     expect(pullRequestFacts(before, [pr()], 'look9')).toEqual([])
   })
 
@@ -65,7 +65,7 @@ describe('reviews asked, and the default branch', () => {
   it('a review asked of the person names who asked', () => {
     const asked = reviewsAskedOf(JSON.stringify([{ number: 214, title: 'Rename the call log', url: 'https://github.com/acme/app/pull/214', author: { login: 'ada' } }, { number: 5, url: 'https://evil.example/pull/5' }]))
     expect(asked).toEqual([{ number: 214, title: 'Rename the call log', url: 'https://github.com/acme/app/pull/214', author: 'ada' }])
-    expect(reviewFacts(asked)[0]).toMatchObject({ key: 'review:214', urgency: 'soon', said: 'ada asked you to review pull request #214, Rename the call log.' })
+    expect(reviewFacts(asked)[0]).toMatchObject({ key: 'review:https://github.com/acme/app/pull/214', urgency: 'soon', said: 'ada asked you to review pull request #214, Rename the call log.' })
   })
 
   it('the newest finished run of each workflow says how the branch stands; only a failed one is news', () => {

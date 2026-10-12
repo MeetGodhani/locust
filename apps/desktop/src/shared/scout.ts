@@ -142,7 +142,7 @@ export function pullRequestFacts(before: ReadonlyMap<string, FolderPullRequest>,
       if (needs.length === 0) continue
       const sentence = needs.join(', and ')
       facts.push({
-        key: `pr:${String(pr.number)}:${pr.checks}:${pr.review ?? ''}:${pr.conflicts === true ? 'c' : ''}`,
+        key: `pr:${pr.url}:${pr.checks}:${pr.review ?? ''}:${pr.conflicts === true ? 'c' : ''}`,
         urgency: pr.checks === 'failing' ? 'now' : 'soon',
         said: `Your pull request #${String(pr.number)}, ${title}: ${sentence}.`,
         chips: [{ text: `#${String(pr.number)}`, tone: 'quiet' }, ...(pr.checks === 'failing' ? [{ text: `${String(pr.notPassed)} of ${String(pr.checkCount)} checks not passed`, tone: 'red' as const }] : [])],
@@ -153,7 +153,7 @@ export function pullRequestFacts(before: ReadonlyMap<string, FolderPullRequest>,
     const news = pullRequestNews(was, pr)
     if (news === undefined) continue
     facts.push({
-      key: `pr:${String(pr.number)}:${look}`,
+      key: `pr:${pr.url}:${look}`,
       urgency: news.needsWork ? (pr.checks === 'failing' ? 'now' : 'soon') : 'later',
       said: `Your pull request #${String(pr.number)}, ${title}: ${news.said.charAt(0).toLowerCase()}${news.said.slice(1)}.`,
       chips: [{ text: `#${String(pr.number)}`, tone: 'quiet' }, { text: news.said, tone: news.needsWork ? 'red' : 'green' }],
@@ -192,7 +192,8 @@ export function reviewsAskedOf(json: string): readonly ReviewAsked[] {
 
 export function reviewFacts(asked: readonly ReviewAsked[]): readonly ScoutFact[] {
   return asked.map((pr) => ({
-    key: `review:${String(pr.number)}`,
+    // By its address: another repository's #214 is another review.
+    key: `review:${pr.url}`,
     urgency: 'soon',
     said: `${pr.author ?? 'Someone'} asked you to review pull request #${String(pr.number)}, ${pr.title}.`,
     chips: [{ text: `#${String(pr.number)}`, tone: 'quiet' }, { text: 'review asked', tone: 'amber' }],

@@ -205,7 +205,7 @@ describe('what Scout keeps', () => {
     expect(state.settings.on).toBe(true)
     expect(state.cards).toHaveLength(1)
     expect(state.cards[0]).not.toHaveProperty('reading')
-    expect(JSON.parse(await readFile(h.deps.file, 'utf8')).seen).toEqual(['review:214'])
+    expect(JSON.parse(await readFile(h.deps.file, 'utf8')).seen).toEqual(['review:https://github.com/acme/app/pull/214'])
     again.dispose()
   })
 
