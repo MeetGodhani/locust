@@ -1146,8 +1146,9 @@ onResume,
    * another budget's worth; opening another conversation starts over.
    */
   const shownIdentity = shownMissionId ?? restoredMission?.missionId ?? startedAtIso ?? ''
-  // Who began the conversation: its first turn's starter (0.748), for the marker at its top.
-  const firstStarter = earlierTurns[0]?.startedBy ?? startedBy
+  // Who began the conversation: its first turn's starter (0.748), for the marker at its top. A first turn the person
+  // typed has none, and that is the answer (0.750): 0.748 fell through to the newest turn's, a call's, and said so.
+  const firstStarter = earlierTurns.length > 0 ? earlierTurns[0]?.startedBy : startedBy
   const [earlierBudget, setEarlierBudget] = useState({ identity: shownIdentity, rows: EARLIER_ROWS_SHOWN })
   let earlierRows = earlierBudget.rows
   if (earlierBudget.identity !== shownIdentity) {

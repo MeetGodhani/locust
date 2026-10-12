@@ -71,7 +71,9 @@ const STRIP = `(() => {
     face: strip?.querySelector('.lc-call__head [data-teammate]') !== null && strip?.querySelector('.lc-call__head [data-teammate]') !== undefined,
     // A call with a teammate says its lines in the thread (0.747); the strip keeps the call's controls.
     lines: [...document.querySelectorAll('.lc-callsaid')].map((line) => (line.classList.contains('is-you') ? 'You' : ${JSON.stringify(MATE.name)}) + (line.querySelector('.lc-callsaid__bubble, .lc-callsaid__text')?.innerText ?? '').replace(/\\s+/g, ' ').trim()),
-    message: strip?.querySelector('.lc-call__message')?.innerText ?? ''
+    message: strip?.querySelector('.lc-call__message')?.innerText ?? '',
+    // The conversation's row in the sidebar says the call is on (0.750).
+    onCall: document.querySelectorAll('.lc-convrow .lc-conv__oncall').length
   })
 })()`
 const strip = async () => JSON.parse(String(await drive.evaluate(STRIP)))
@@ -94,14 +96,16 @@ try {
   check(`Talk says it calls ${MATE.name}`, titled.startsWith(`Talk to ${MATE.name}`), titled)
   await drive.evaluate(`document.querySelector('button[aria-label="Talk"]').click()`)
 
-  let state = { status: '', face: false, lines: [], message: '' }
+  let state = { status: '', face: false, lines: [], message: '', onCall: 0 }
   const heard = []
   let sawFace = false
+  let sawOnCall = false
   let sawName = false
   for (let second = 0; second < 170; second += 1) {
     await sleep(1000)
     state = await strip()
     sawFace = sawFace || state.face
+    sawOnCall = sawOnCall || state.onCall === 1
     sawName = sawName || new RegExp(`^${MATE.name}`).test(state.status) || state.lines.some((line) => line.startsWith(MATE.name))
     for (const line of state.lines) if (!heard.includes(line)) heard.push(line)
     if (heard.some((line) => line.startsWith(MATE.name) && /cardamom/i.test(line)) || state.message) break
@@ -111,17 +115,21 @@ try {
   check(`the voice speaks as ${MATE.name}`, sawName, heard.slice(0, 4).join(' | '))
   check(`${MATE.name} said what the README says: cardamom`, heard.some((line) => line.startsWith(MATE.name) && /cardamom/i.test(line)), heard.join(' | '))
   check('no error on the way', state.message === '', state.message)
+  check(`${MATE.name}'s conversation row says it is on a call`, sawOnCall, String(state.onCall))
 
   const rowsAfter = await matesRows()
   check(`it stayed ONE conversation of ${MATE.name}'s`, rowsAfter.length === rowsBefore.length && rowsAfter.length === 1, `${String(rowsBefore.length)} -> ${String(rowsAfter.length)}: ${rowsAfter.join(' | ')}`)
   const read = JSON.parse(await thread())
-  check('the asked turn is in that conversation, marked as from the call, and it found the answer', read.markers.some((marker) => /voice call/i.test(marker)) && /cardamom/i.test(read.text), `${read.markers.join(' | ')} :: ${read.text.slice(-240)}`)
+  check('the asked turn is in that conversation, under the call, and it found the answer', /call with/i.test(read.text) && /cardamom/i.test(read.text), read.text.slice(-240))
+  // The person typed this conversation's first turn: it is not marked as started from the call (0.748, true since 0.750).
+  check('the conversation, begun typed, is not marked as started from the call', !read.markers.some((marker) => /voice call/i.test(marker)), read.markers.join(' | '))
 
   await drive.evaluate(`[...document.querySelectorAll('[role=region][aria-label="Voice call"] button')].find((b) => b.innerText.trim() === 'End')?.click()`)
   await sleep(2500)
   say(`  lines: ${heard.filter((line, index) => !heard.slice(index + 1).some((later) => later.startsWith(line))).join(' | ').slice(0, 1400)}`)
   // Ended, the call folds to one row in the conversation, and opens to every word again (0.747).
   const folded = JSON.parse(String(await drive.capture('the call, ended', () => drive.evaluate(`JSON.stringify({ row: document.querySelector('.lc-callrow')?.innerText.replace(/\\s+/g, ' ').trim() ?? '', open: document.querySelectorAll('.lc-callsaid').length })`))))
+  check('ended, the row no longer says on a call', (await strip()).onCall === 0)
   check('ended, the call folds to one row in the conversation', /Call with/.test(folded.row) && /lines? said/.test(folded.row) && folded.open === 0, JSON.stringify(folded))
   const reopened = String(await drive.capture('the call, opened again', () => drive.evaluate(`(async () => {
     document.querySelector('.lc-callrow')?.click()

@@ -87,6 +87,19 @@ export function useLiveCall(): LiveCall | undefined {
   return useSyncExternalStore(subscribe, liveCall, liveCall)
 }
 
+/**
+ * WHERE THE CALL IS, AS ONE KEY (0.750): the turns of the conversation a call that is on lives in. It changes when the
+ * call moves, not with every word said, so a sidebar row that says "on a call" draws again only then.
+ */
+export function liveCallPlace(): string {
+  const call = current
+  if (call === undefined || call.phase === 'ended') return ''
+  return [...(call.afterMissionId === undefined ? [] : [call.afterMissionId]), ...call.turns.map((turn) => turn.missionId)].join(' ')
+}
+export function useLiveCallPlace(): string {
+  return useSyncExternalStore(subscribe, liveCallPlace, liveCallPlace)
+}
+
 /** Bumped each time a call is saved, so the thread reads its conversation's calls again. */
 let saved = 0
 const savedListeners = new Set<() => void>()

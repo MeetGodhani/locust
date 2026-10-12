@@ -18096,6 +18096,8 @@ textarea {
   color: var(--lc-text-muted);
   font-variant-numeric: tabular-nums;
 }
+/* The conversation a call is in (0.750): "on a call", with the call's mark. */
+.lc-conv__oncall { display: inline-flex; align-items: center; gap: 4px; }
 
 /*
  * THE ROW'S `...` SHOWS, AND TAKES THE AGE'S PLACE -- the way Claude's list

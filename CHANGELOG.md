@@ -11,6 +11,16 @@ Settings shows this file as What's new. An entry may group its changes under
 about when they arrive on it carries `<!-- big -->` on the line under its
 heading: the home screen then shows it once, as a splash.
 
+## 0.750.0 - 2026-10-12
+
+### Improved
+
+- **The conversation you're on a call in says so in the list.** Its row reads "on a call" until the call ends.
+
+### Fixed
+
+- **"Started from a voice call" now really marks only conversations a call began.** 0.748 said so, but a conversation you typed still carried the label once a call joined it.
+
 ## 0.749.0 - 2026-10-12
 
 ### Improved

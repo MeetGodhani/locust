@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { BOT_SIZE } from '../botSizes.js'
 import type { ReactElement, ReactNode } from 'react'
 
@@ -34,6 +34,7 @@ import { teammateTooltip } from '../teammateTooltip.js'
 import { railCountBadge } from '../railFlyout.js'
 import { conversationRows, heldFor, narrowingLine, ownerOf, unreadableSentence, withRoomsFolded } from '../conversationList.js'
 import { RailFlyout } from './RailFlyout.js'
+import { useLiveCallPlace } from '../liveCall.js'
 import { routineStepLabel } from '../routines.js'
 
 /**
@@ -366,6 +367,9 @@ export function Sidebar({
   readonly currentFolderId?: string
 }): ReactElement {
   const [query, setQuery] = useState('')
+  // The conversation a call is in (0.750): its row says so, as the canvas's "On a call" did.
+  const callPlace = useLiveCallPlace()
+  const onCall = useMemo(() => new Set(callPlace.split(' ').filter((id) => id.length > 0)), [callPlace])
   // The rail flyout: who it is open for, whether a click pinned it, and where
   // its trigger sits on screen. Hover opens after 120ms of intent and closes
   // a moment after the pointer leaves both the avatar and the panel; a pin
@@ -976,7 +980,9 @@ export function Sidebar({
                       * while one runs, where its age would be -- the clock
                       * before the title already says it is a routine.
                       */}
-                    {delegating ? (
+                    {(mission.memberIds ?? [mission.missionId]).some((id) => onCall.has(id)) ? (
+                      <span className="lc-conv__age lc-mono lc-conv__oncall"><Icon name="waveform" size={11} />on a call</span>
+                    ) : delegating ? (
                       <span className="lc-conv__age lc-mono">subagent working</span>
                     ) : runningStep !== undefined ? (
                       <span className="lc-conv__age lc-mono" title={`${runningStep.name}: step ${String(runningStep.step)} of ${String(runningStep.of)}`}>
