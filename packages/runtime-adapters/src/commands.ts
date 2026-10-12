@@ -1671,8 +1671,8 @@ export function createMuseExecCommand(
   });
 }
 
-/** The reasoning efforts `muse exec --help` lists, measured 2026-09-21. */
-const MUSE_EFFORTS: readonly string[] = [
+/** The reasoning efforts `muse exec --help` lists, measured 2026-09-21; the same on 1.4.6 (2026-10-12). */
+export const MUSE_EFFORTS: readonly string[] = [
   "none",
   "minimal",
   "low",

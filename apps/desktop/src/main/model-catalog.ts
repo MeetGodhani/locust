@@ -1,4 +1,4 @@
-import { createAppServerClient, usageWindowFromSnapshot } from '@teammate/runtime-adapters'
+import { createAppServerClient, MUSE_EFFORTS, usageWindowFromSnapshot } from '@teammate/runtime-adapters'
 import type { ClaudeListedModel, MissionRuntimeId, RuntimeDiscovery } from '@teammate/runtime-adapters'
 
 import type { PublicModel, ModelCatalogResponse } from '../shared/ipc.js'
@@ -474,6 +474,30 @@ export function copilotModelsFrom(runtimes: readonly RuntimeDiscovery[]): readon
 }
 
 /**
+ * Muse Code's models (0.759). Its CLI lists none, so this offered nothing and every Muse teammate ran on whatever the
+ * CLI chose. MEASURED 2026-10-12 on Muse Code 1.4.6 the one way it allows: a run on a name Meta does not serve ends
+ * "does not exist or you lack access" before any model is asked, and these two reached the model -- Muse Wonder 1.0,
+ * out that day and what 1.4.6 runs when no model is named, and Muse Spark 1.3. Its efforts are its own eight.
+ */
+export function museModelsFrom(runtimes: readonly RuntimeDiscovery[]): readonly PublicModel[] {
+  const muse = runtimes.find((entry) => entry.id === 'muse')
+  if (muse?.readiness !== 'ready') return []
+  const model = (id: string, displayName: string, description: string): PublicModel => ({
+    id,
+    runtime: 'muse' as const,
+    displayName,
+    description,
+    supportedEfforts: MUSE_EFFORTS,
+    // Muse Code's own default (`muse exec --help`: "default: high").
+    defaultEffort: 'high'
+  })
+  return [
+    model('muse-wonder-1.0', 'Muse Wonder 1.0', "Meta's newest, and Muse Code's default"),
+    model('muse-spark-1.3', 'Muse Spark 1.3', 'The Muse before it')
+  ]
+}
+
+/**
  * Antigravity's three model tiers, exactly as its agent API names them. The
  * names are the host's, from the measured `--model=<flash_lite|flash|pro>`.
  */
@@ -544,7 +568,8 @@ export function createModelCatalog(options: ModelCatalogOptions): ModelCatalog {
       ...cursorModelsFrom(runtimes),
       ...opencodeModelsFrom(runtimes),
       ...copilotModelsFrom(runtimes),
-      ...antigravityModelsFrom(runtimes)
+      ...antigravityModelsFrom(runtimes),
+      ...museModelsFrom(runtimes)
     ]
     const antigravity = runtimes.find((entry) => entry.id === 'antigravity')
     const readAntigravity = options.readAntigravity ?? (async (runtime: RuntimeDiscovery) =>

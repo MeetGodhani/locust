@@ -164,6 +164,8 @@ export function createMuseEventNormalizer(
   const taskKinds = new Map<string, string>();
   /** `operation`, from `side_effect_intent`: what the task is about to do. */
   const taskOperations = new Map<string, string>();
+  /** The model calls already said to be tried again, by attempt: each said once. */
+  const retriesSaid = new Set<number>();
 
   const MESSAGE_ITEM = "msg_0";
 
@@ -208,7 +210,8 @@ export function createMuseEventNormalizer(
     return {
       itemId: taskId,
       toolKind: kind,
-      name: kind,
+      // `tool.search` is the task's kind; the tool is `search` (MEASURED 2026-10-12, muse 1.4.6, Muse Wonder 1.0).
+      name: kind.replace(/^tool\./, ""),
       ...(operation === undefined ? {} : { command: boundedMessageText(operation) }),
     };
   };
@@ -277,6 +280,44 @@ export function createMuseEventNormalizer(
         }),
       ];
     }
+    /*
+     * THE REST OF A REAL RUN (MEASURED 2026-10-12, muse 1.4.6, Muse Wonder 1.0 on a paid plan): every one of these
+     * was an "Unhandled Muse task state" line until then, sixteen on one short run, because the fixtures were all
+     * `--provider echo`, which never calls a model or a tool.
+     */
+    // A task's output: kept out of the record, as every runtime's tool output is.
+    if (kind === "output") return [];
+    if (kind === "rejected") {
+      // `skip_if_running`: Muse's own reminder, not run twice. A tool of the person's that it would not run fails on its row.
+      if (internal) return [];
+      const reason = stringValue(event.reason);
+      return [
+        emit("tool.failed", {
+          ...toolRow(taskId),
+          status: `Muse Code did not run it${reason === undefined ? "" : ` (${reason.slice(0, 400)})`}`,
+          phase: "completed",
+          evidence,
+        }),
+      ];
+    }
+    if (kind === "status") {
+      // Its progress, in its own words. Only a model call tried again is news: the provider did not answer at once.
+      const details = isObject(event.details) ? event.details : {};
+      const facets = Array.isArray(details.facets) ? details.facets.filter(isObject) : [];
+      const attempt = facets.find((facet) => stringValue(facet.kind) === "external_attempt");
+      const at = typeof attempt?.attempt === "number" ? attempt.attempt : undefined;
+      const of = typeof attempt?.max_attempts === "number" ? attempt.max_attempts : undefined;
+      if (at === undefined || at < 2 || retriesSaid.has(at)) return [];
+      retriesSaid.add(at);
+      return [
+        diagnostic(
+          "warning",
+          "muse.provider_busy",
+          `Meta's model did not answer at once, and Muse Code is trying again on its own (attempt ${String(at)}${of === undefined ? "" : ` of ${String(of)}`}).`,
+          evidence,
+        ),
+      ];
+    }
     return [
       diagnostic("info", "muse.unknown_task_state", `Unhandled Muse task state: ${kind ?? "none"}`, evidence),
     ];
@@ -306,6 +347,10 @@ export function createMuseEventNormalizer(
     // The prompt, read back to us. The ledger already holds the person's own
     // words; recording these would put their question in the thread twice.
     if (payloadType === "turn.input.user") return [];
+
+    // Which model the run is on (`model_id`, MEASURED 2026-10-12: Muse Wonder 1.0, 1.4.6's own default), and a tool's
+    // result, which the task that ran it has already closed: neither is something the thread draws.
+    if (payloadType === "run.model.configured" || payloadType === "tool.result") return [];
 
     if (payloadType === "run.lifecycle.started") {
       if (runOpen) return [];

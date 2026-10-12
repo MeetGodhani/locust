@@ -38,3 +38,11 @@ The three tasks in it are Muse's own machinery — a skill reminder, the model
 turn, a verify reminder. The adapter's tool rows are therefore exercised by a
 synthetic lifecycle built on this envelope, and that test says so where it
 stands.
+
+`wonder-tool-run-1.4.6.jsonl` is the first paid run, 2026-10-12: Muse Code
+1.4.6-R6000.1, `--model muse-wonder-1.0 --reasoning-effort low
+--max-model-steps 4 --disable-write --disable-shell`, asked to list the files
+in a folder of four. It called `search` three times and answered (missing two
+of the four files: the model's miss, kept as it was). Its 95 records showed
+what the echo capture never could: `run.model.configured`, `tool.result`,
+and the task states `status`, `output` and `rejected`.

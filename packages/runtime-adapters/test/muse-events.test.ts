@@ -195,8 +195,9 @@ describe("a Muse task that is not Muse's own machinery", () => {
     for (const event of events) {
       const payload = event.payload as { itemId: string; name: string; command?: string };
       // The kind is carried only by `proposed`, four records before the row
-      // that needs it.
-      expect(payload.name).toBe("tool.shell.command");
+      // that needs it -- and the row names the tool, not the task: `tool.`
+      // is the task kind's prefix (0.759, a real run's `tool.search`).
+      expect(payload.name).toBe("shell.command");
       expect(payload.itemId).toBe(TASK);
       expect(payload.command).toBe("shell.execute");
     }
