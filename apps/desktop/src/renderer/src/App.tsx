@@ -8262,7 +8262,8 @@ export default function App(): ReactElement {
                       onSend={sendScoutDraft} onDraftIntoBox={draftScoutIntoBox}
                       onDismiss={(cardId) => { void window.desktop?.scout?.dismiss(cardId).catch(() => undefined) }} />
                   }
-                  if (scoutNotNow || scoutModel === undefined || workspacePath === undefined) return undefined
+                  // Met once is enough: a Scout turned off, or taken off the team, is turned on again from Settings.
+                  if (scout.settings.teammateId !== undefined || scoutNotNow || scoutModel === undefined || workspacePath === undefined) return undefined
                   return <ScoutInvite model={scoutModelWords({ runtime: 'opencode', model: scoutModel })} onTurnOn={() => { void turnOnScout() }} onNotNow={scoutNotNowPressed} busy={scoutBusy}
                     {...(scoutMessage === undefined ? {} : { message: scoutMessage })} />
                 })())}
