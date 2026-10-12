@@ -27,6 +27,8 @@ async function harness(overrides: Partial<ScoutDeps> = {}) {
   let waiting: WaitingCard[] = []
   let clock = new Date('2026-10-12T06:00:00.000Z')
   const asked: string[] = []
+  const models: (string | undefined)[] = []
+  const stopped: string[] = []
   const answers = new Map<string, { text: string } | { failed: string }>()
   const changes: ScoutState[] = []
   const notified: string[] = []
@@ -39,7 +41,9 @@ async function harness(overrides: Partial<ScoutDeps> = {}) {
     waiting: async () => waiting,
     failedTurn: async (missionId) => missionId.startsWith('failed_') ? { missionId, teammateId: 'tm_wren', name: 'Wren', asked: 'Fix the save', why: 'The model is overloaded.' } : undefined,
     team: async () => [{ teammateId: 'tm_scout_1', name: 'Scout', role: 'Keeps watch' }, { teammateId: 'tm_wren', name: 'Wren', role: 'Code & Migrations' }],
-    ask: async (_teammateId, prompt) => { asked.push(prompt); return { missionId: `look_${String(asked.length)}` } },
+    ask: async (_teammateId, prompt, model) => { asked.push(prompt); models.push(model); return { missionId: `look_${String(asked.length)}`, runId: `run_${String(asked.length)}` } },
+    stop: (runId) => { stopped.push(runId) },
+    nextFreeModel: async (_teammateId, tried) => ['opencode/longcat-2.5-preview-free', 'opencode/nemotron-3-ultra-free'].find((id) => !tried.includes(id)),
     answerOf: async (missionId) => answers.get(missionId) ?? { failed: 'It said nothing.' },
     makeTeammate: async () => { made += 1; const id = `tm_scout_${String(made)}`; teammates.add(id); return id },
     teammateExists: async (id) => teammates.has(id),
@@ -51,7 +55,7 @@ async function harness(overrides: Partial<ScoutDeps> = {}) {
   }
   const scout = createScout(deps)
   return {
-    scout, deps, asked, answers, changes, notified, teammates,
+    scout, deps, asked, answers, changes, notified, teammates, models, stopped,
     setGithub: (next: ScoutGithub | undefined) => { github = next },
     setWaiting: (next: WaitingCard[]) => { waiting = next },
     tick: (ms: number) => { clock = new Date(clock.getTime() + ms) },
@@ -104,6 +108,7 @@ describe('a look', () => {
     h.setGithub({ prs: [pr({ checks: 'failing', notPassed: 2 })], reviews: [{ number: 214, title: 'Rename the call log', url: 'https://github.com/acme/app/pull/214' }] })
     await h.scout.turnOn({ runtime: 'opencode', model: 'opencode/space-bunny-free' })
     expect(h.asked).toHaveLength(1)
+    h.answers.set('look_1', { text: 'ITEM 1\nTAKE: Read it.' })
     await h.scout.onRunEnded({ missionId: 'look_1' })
     await h.scout.look()
     expect(h.asked).toHaveLength(1)
@@ -115,16 +120,47 @@ describe('a look', () => {
     expect((await h.scout.state()).cards[0]?.said).toContain('all 9 checks passed')
   })
 
-  it('leaves the cards in Locust’s words, and says why, when its model does not answer', async () => {
+  it('tries the next free models when its own does not answer, then leaves the cards in Locust’s words and says why', async () => {
     const h = await harness()
     h.setGithub({ prs: [], reviews: [{ number: 214, title: 'Rename the call log', url: 'https://github.com/acme/app/pull/214' }] })
     await h.scout.turnOn({ runtime: 'opencode', model: 'opencode/space-bunny-free' })
     await h.scout.onRunEnded({ missionId: 'look_1' })
+    await h.scout.onRunEnded({ missionId: 'look_2' })
+    expect((await h.scout.state()).cards[0]).toHaveProperty('reading')
+    await h.scout.onRunEnded({ missionId: 'look_3' })
+    // Its own model, then two free ones in its place -- and no more.
+    expect(h.models).toEqual([undefined, 'opencode/longcat-2.5-preview-free', 'opencode/nemotron-3-ultra-free'])
     const state = await h.scout.state()
     expect(state.cards[0]).toMatchObject({ said: 'Someone asked you to review pull request #214, Rename the call log.' })
     expect(state.cards[0]).not.toHaveProperty('reading')
     expect(state.cards[0]).not.toHaveProperty('take')
-    expect(state.modelSaid).toBe('It said nothing.')
+    expect(state.modelSaid).toBe('It said nothing. These cards are in Locust’s words.')
+  })
+
+  it('on a model that is not free, never moves to another: the cards say why at once', async () => {
+    const h = await harness({ nextFreeModel: async () => undefined })
+    h.setGithub({ prs: [], reviews: [{ number: 214, title: 'x', url: 'https://github.com/acme/app/pull/214' }] })
+    await h.scout.turnOn({ runtime: 'claude', model: 'haiku' })
+    await h.scout.onRunEnded({ missionId: 'look_1' })
+    expect(h.models).toEqual([undefined])
+    expect((await h.scout.state()).modelSaid).toBe('It said nothing. These cards are in Locust’s words.')
+  })
+
+  it('stops a look whose provider will not answer while the runtime keeps trying, and asks the next free model at once', async () => {
+    const h = await harness()
+    h.setGithub({ prs: [], reviews: [{ number: 214, title: 'x', url: 'https://github.com/acme/app/pull/214' }] })
+    await h.scout.turnOn({ runtime: 'opencode', model: 'opencode/space-bunny-free' })
+    await h.scout.providerRefused('look_1', 'The model\'s provider answered "Free usage exceeded, subscribe to Go".')
+    expect(h.stopped).toEqual(['run_1'])
+    expect(h.models).toEqual([undefined, 'opencode/longcat-2.5-preview-free'])
+    h.answers.set('look_2', { text: 'ITEM 1\nTAKE: Worth a look today.' })
+    await h.scout.onRunEnded({ missionId: 'look_2' })
+    const state = await h.scout.state()
+    expect(state.cards[0]).toMatchObject({ take: 'Worth a look today.' })
+    expect(state.modelSaid).toBeUndefined()
+    // A refusal for a look that has ended changes nothing.
+    await h.scout.providerRefused('look_1', 'late')
+    expect(h.stopped).toEqual(['run_1'])
   })
 
   it('does not wait for ever on a model that never ends its turn', async () => {
@@ -134,8 +170,14 @@ describe('a look', () => {
     h.setGithub({ prs: [], reviews: [{ number: 214, title: 'x', url: 'https://github.com/acme/app/pull/214' }] })
     await h.scout.turnOn({ runtime: 'opencode', model: 'opencode/space-bunny-free' })
     expect(waits.map((wait) => wait.ms)).toEqual([1_000])
+    // Out of time: its turn is stopped, and the next free model is given the look -- up to two of them.
     waits[0]!.task()
+    await vi.waitFor(() => { expect(waits).toHaveLength(2) })
+    waits[1]!.task()
+    await vi.waitFor(() => { expect(waits).toHaveLength(3) })
+    waits[2]!.task()
     await vi.waitFor(async () => { expect((await h.scout.state()).modelSaid).toBeDefined() })
+    expect(h.stopped).toEqual(['run_1', 'run_2', 'run_3'])
     const state = await h.scout.state()
     expect(state.cards[0]).not.toHaveProperty('reading')
     expect(state.modelSaid).toContain('took too long')

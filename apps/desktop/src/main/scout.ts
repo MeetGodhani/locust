@@ -55,8 +55,15 @@ export interface ScoutDeps {
   readonly failedTurn: (missionId: string) => Promise<FailedTurn | undefined>
   /** The team Scout may hand work to, without Scout. */
   readonly team: () => Promise<readonly ScoutTeammate[]>
-  /** Starts one look on Scout's route: its turn, or why it did not start. */
-  readonly ask: (teammateId: string, prompt: string) => Promise<{ readonly missionId: string } | { readonly refused: string }>
+  /** Starts one look on Scout's route -- or on this free model in its place: its turn, or why it did not start. */
+  readonly ask: (teammateId: string, prompt: string, model?: string) => Promise<{ readonly missionId: string; readonly runId: string } | { readonly refused: string }>
+  /** Stops a look's turn that will not end by itself: a provider refusing, and the runtime trying again for ever. */
+  readonly stop: (runId: string) => void
+  /**
+   * The next free model a look may try when Scout's own free model's provider will not answer: none when Scout's
+   * route is not a free one, or every one has been tried.
+   */
+  readonly nextFreeModel: (teammateId: string, tried: readonly string[]) => Promise<string | undefined>
   /** What a look's turn said last, once it has ended; why not, when it said nothing. */
   readonly answerOf: (missionId: string) => Promise<{ readonly text: string } | { readonly failed: string }>
   /** Makes Scout's own teammate. */
@@ -87,9 +94,22 @@ interface Kept {
 }
 
 const EMPTY: Kept = { settings: DEFAULT_SCOUT_SETTINGS, cards: [], seen: [], lookIds: [], prs: [] }
-/** A look's turn, past this, no longer keeps its cards waiting. */
-const ANSWER_WAIT_MS = 5 * 60_000
+/** A look's turn, past this, no longer keeps its cards waiting: a short read, on a model that answers in seconds. */
+const ANSWER_WAIT_MS = 3 * 60_000
 const MAX_LOOK_IDS = 400
+/** Free models a look tries after Scout's own, each when the one before it would not answer. */
+const MAX_FALLBACKS = 2
+
+/** A look's turn under way: what it asked about, of whom, on which run, and which free models it has tried. */
+interface PendingLook {
+  readonly teammateId: string
+  readonly prompt: string
+  readonly cardIds: readonly string[]
+  readonly team: readonly ScoutTeammate[]
+  readonly runId: string
+  readonly tried: readonly string[]
+  readonly expires: unknown
+}
 
 export function createScout(deps: ScoutDeps) {
   const now = deps.now ?? (() => new Date())
@@ -103,8 +123,8 @@ export function createScout(deps: ScoutDeps) {
   let looking = false
   /** Failed turns heard as they ended, for the next look. */
   const failedSince: FailedTurn[] = []
-  /** A look's turn, by its mission id: the cards it was asked about and the team it could hand work to. */
-  const pending = new Map<string, { readonly cardIds: readonly string[]; readonly team: readonly ScoutTeammate[]; readonly expires: unknown }>()
+  /** A look's turn, by its mission id. */
+  const pending = new Map<string, PendingLook>()
   let writing: Promise<unknown> = Promise.resolve()
 
   const load = async (): Promise<Kept> => {
@@ -216,18 +236,47 @@ export function createScout(deps: ScoutDeps) {
       }))
       if (state.settings.notify) for (const card of cards) if (card.urgency === 'now') deps.notify(card)
       // Then Scout's model, for its take and the next step.
-      const asked = await deps.ask(teammateId, scoutPrompt({ facts, team: team.map((mate) => ({ name: mate.name, role: mate.role })) }))
-        .catch((error: unknown) => ({ refused: error instanceof Error ? error.message : 'The look could not start.' }))
-      if ('refused' in asked) {
-        state = await settle(cards.map((card) => card.cardId), undefined, asked.refused)
-        return state
-      }
-      const expires = later(() => { void ended(asked.missionId, true) }, deps.answerWaitMs ?? ANSWER_WAIT_MS)
-      pending.set(asked.missionId, { cardIds: cards.map((card) => card.cardId), team, expires })
-      return await mutate((latest) => ({ ...latest, lookIds: [...latest.lookIds, asked.missionId].slice(-MAX_LOOK_IDS) }))
+      const prompt = scoutPrompt({ facts, team: team.map((mate) => ({ name: mate.name, role: mate.role })) })
+      state = await askFor({ teammateId, prompt, cardIds: cards.map((card) => card.cardId), team, tried: [] }) ?? state
+      return state
     } finally {
       looking = false
     }
+  }
+
+  /**
+   * One turn for a look, on Scout's model or on the free one given in its place. A turn that does not start settles
+   * its cards with why; one that starts is waited on, and stops waiting -- and is stopped -- if it runs out of time.
+   */
+  const askFor = async (look: Omit<PendingLook, 'runId' | 'expires'>, model?: string): Promise<ScoutState | undefined> => {
+    const asked = await deps.ask(look.teammateId, look.prompt, model)
+      .catch((error: unknown) => ({ refused: error instanceof Error ? error.message : 'The look could not start.' }))
+    if ('refused' in asked) return settle(look.cardIds, undefined, asked.refused)
+    const expires = later(() => { void gaveUp(asked.missionId, 'Scout’s model took too long to answer.') }, deps.answerWaitMs ?? ANSWER_WAIT_MS)
+    pending.set(asked.missionId, { ...look, runId: asked.runId, expires })
+    return mutate((latest) => ({ ...latest, lookIds: [...latest.lookIds, asked.missionId].slice(-MAX_LOOK_IDS) }))
+  }
+
+  /*
+   * A LOOK WHOSE MODEL WILL NOT ANSWER (2026-10-12, the packaged 0.756 drive): Space Bunny's provider answered "Free
+   * usage exceeded", OpenCode tried again on its own for as long as it ran, and the cards said "Scout is reading it"
+   * until the look's time ran out -- its turn still running, so every later look found Scout busy. Now the turn is
+   * stopped, and the look tries the next free model, as the design said it would; past MAX_FALLBACKS, or on a route
+   * that is not a free one, the cards stay in Locust's words and say why.
+   */
+  const gaveUp = async (missionId: string, why: string): Promise<void> => {
+    const look = pending.get(missionId)
+    if (look === undefined) return
+    pending.delete(missionId)
+    cancel(look.expires)
+    try { deps.stop(look.runId) } catch { /* it has ended already */ }
+    const next = look.tried.length >= MAX_FALLBACKS ? undefined : await deps.nextFreeModel(look.teammateId, look.tried).catch(() => undefined)
+    if (next === undefined) {
+      await settle(look.cardIds, undefined, `${why} These cards are in Locust’s words.`)
+      return
+    }
+    const { runId: _runId, expires: _expires, ...rest } = look
+    await askFor({ ...rest, tried: [...look.tried, next] }, next)
   }
 
   /** The cards a look asked about, no longer waiting: with what the model added, or why it added nothing. */
@@ -245,20 +294,17 @@ export function createScout(deps: ScoutDeps) {
       return { ...base, cards, ...(why === undefined ? {} : { modelSaid: why }) }
     })
 
-  const ended = async (missionId: string, timedOut = false): Promise<void> => {
+  const ended = async (missionId: string): Promise<void> => {
     const look = pending.get(missionId)
     if (look === undefined) return
+    const answer = await deps.answerOf(missionId).catch(() => ({ failed: 'Scout’s model’s answer could not be read.' }))
+    // A turn that ended without an answer is a model that would not answer: the next free one is tried.
+    if ('failed' in answer) {
+      await gaveUp(missionId, answer.failed)
+      return
+    }
     pending.delete(missionId)
     cancel(look.expires)
-    if (timedOut) {
-      await settle(look.cardIds, undefined, 'Scout’s model took too long to answer, so these cards are in Locust’s words.')
-      return
-    }
-    const answer = await deps.answerOf(missionId).catch(() => ({ failed: 'Scout’s model’s answer could not be read.' }))
-    if ('failed' in answer) {
-      await settle(look.cardIds, undefined, answer.failed)
-      return
-    }
     await settle(look.cardIds, scoutAnswers(answer.text, look.cardIds.length, look.team))
   }
 
@@ -301,6 +347,10 @@ export function createScout(deps: ScoutDeps) {
     },
     dismiss: (cardId: unknown): Promise<ScoutState> => mutate((latest) => ({ ...latest, cards: latest.cards.filter((card) => card.cardId !== cardId) })),
     look,
+    /** A look's turn whose provider will not answer while the runtime keeps trying: stopped, and the next model tried. */
+    async providerRefused(missionId: string, why: string): Promise<void> {
+      if (pending.has(missionId)) await gaveUp(missionId, why)
+    },
     /** Every run that ends: a look's turn fills its cards in; a teammate's failed turn is news for the next look. */
     async onRunEnded(mission: { readonly missionId: string }): Promise<void> {
       if (pending.has(mission.missionId)) {
@@ -317,7 +367,10 @@ export function createScout(deps: ScoutDeps) {
       timer = undefined
       if (firstLook !== undefined) cancel(firstLook)
       firstLook = undefined
-      for (const look of pending.values()) cancel(look.expires)
+      for (const look of pending.values()) {
+        cancel(look.expires)
+        try { deps.stop(look.runId) } catch { /* ended already */ }
+      }
       pending.clear()
     }
   }

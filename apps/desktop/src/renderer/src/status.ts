@@ -1,4 +1,5 @@
 import { FREE_START_RUNTIME, installSentence } from '../../shared/runtime-install.js'
+import { FREE_MODELS_BEST_FIRST } from '../../shared/free-models.js'
 import { integrationOf, RUNTIME_INTEGRATION } from '../../shared/runtime-integration.js'
 import type { IntegrationLevel } from '../../shared/runtime-integration.js'
 import { hostCanRunMission, isMissionRuntime, runtimeDisplayName } from '../../shared/runtimes.js'
@@ -1842,23 +1843,8 @@ export function freeStartModel(
 
 const NONE_DOWN: ReadonlySet<string> = new Set()
 
-/**
- * OpenCode's free models that answered the drive sweeps, steadiest first
- * (0.712): the 2026-10-05 scorecard (three tasks each, in Edit), the sweeps'
- * own turn list since (_tools/sweep-drives.mjs FREE_MODELS), and one word asked
- * of each on 2026-10-09. Kept with that list at each release's sweep. Muse
- * Spark is last: rate-limited for whole days (2026-10-06). Not named: Ling 3.0
- * (failing since 2026-10-05), and any model newer than the last sweep.
- */
-export const FREE_MODELS_BEST_FIRST: readonly string[] = [
-  'opencode/space-bunny-free',
-  'opencode/longcat-2.5-preview-free',
-  'opencode/nemotron-3-ultra-free',
-  'opencode/nemotron-3.5-lightning-free',
-  'opencode/mimo-v2.6-flash-free',
-  'opencode/ling-3.1-flash-free',
-  'opencode/muse-spark-1.3-contributor-free'
-]
+// OpenCode's free models, steadiest first (0.712): kept in shared/free-models.ts since 0.756, where Scout reads it too.
+export { FREE_MODELS_BEST_FIRST }
 
 /** The listed free models of the free-start runtime, FREE_MODELS_BEST_FIRST's first, then the rest as listed. */
 export function freeModelsBestFirst(models: readonly PublicModel[]): readonly PublicModel[] {

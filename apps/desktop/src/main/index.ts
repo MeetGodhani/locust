@@ -15,6 +15,7 @@ import { createTalkShortcut, type TalkShortcut } from './talk-shortcut.js'
 import { createScout, type Scout } from './scout.js'
 import { readScoutGithub } from './scout-github.js'
 import { SCOUT_CHANGED, SCOUT_DISMISS, SCOUT_LOOK, SCOUT_SET, SCOUT_STATE, SCOUT_TURN_ON } from '../shared/scout.js'
+import { FREE_MODELS_BEST_FIRST } from '../shared/free-models.js'
 import { DEFAULT_CHATGPT_VOICE, VOICE_CALL_ANSWER, VOICE_CALL_AVAILABLE, VOICE_CALL_EVENT, VOICE_CALL_PREVIEW, VOICE_CALL_SET_VOICE, VOICE_CALL_START, VOICE_CALL_STOP, VOICE_CALL_TOOLS, VOICE_CALL_VOICES, VOICE_PREVIEW_SAVE, VOICE_PREVIEW_SAVED, VOICE_PREVIEW_TRIGGER, isChatGptVoice, isVoiceCallOffer, isVoiceCallTarget, type ChatGptVoice, type VoiceAddOn, type VoiceCallTarget } from '../shared/voice-call.js'
 import { createVoiceCalls } from './voice-call.js'
 import { createCallLog } from './call-log.js'
@@ -217,7 +218,7 @@ import { createRuntimeFactsStore } from './runtime-facts.js'
 import { createAcpCapabilitiesStore } from './acp-capabilities.js'
 import { createRuntimeInstaller } from './runtime-installer.js'
 import { openSignIn } from './runtime-sign-in.js'
-import { FREE_ONLY_REFUSAL, freeRoutesOnly } from './free-routes.js'
+import { FREE_ONLY_REFUSAL, freeRoutesOnly, isFreeRoute } from './free-routes.js'
 import {
   FIRST_LOOK_AFTER_MS,
   createRuntimeUpdates,
@@ -6534,6 +6535,18 @@ if (!ownsSingleInstanceLock) {
         env: { ...process.env, GH_PROMPT_DISABLED: '1', GH_NO_UPDATE_NOTIFIER: '1' }
       }, (error, stdout) => { if (error) reject(error); else resolve(String(stdout)) })
     })
+    /*
+     * A look's events go to the window like any run's; one saying its provider will not answer while the runtime
+     * keeps trying (the same notice the thread offers another model beside, missionView RETRYING_NOTE) stops the
+     * look and moves it to the next free model, rather than leaving it to run out of time.
+     */
+    const SCOUT_RETRYING = /^opencode\.runtime_error$|\.provider_busy\.runtime_error$/
+    const scoutEmit = (update: CodexMissionUpdate): void => {
+      sendToWindow(update)
+      if (update.kind === 'event' && update.event.type === 'adapter.diagnostic' && SCOUT_RETRYING.test(update.event.payload.code)) {
+        void keptScout.providerRefused(update.missionId, update.event.payload.message.replace(/,? and OpenCode is trying again on its own\.(?: To go on now, press Stop and pick another model\.)?$/, '.'))
+      }
+    }
     const scoutNameOf = async (teammateId: string | undefined): Promise<string | undefined> =>
       teammateId === undefined ? undefined : (await teammates.list().catch(() => [])).find((mate) => mate.teammateId === teammateId)?.name
     const keptScout = createScout({
@@ -6561,27 +6574,38 @@ if (!ownsSingleInstanceLock) {
         }
       },
       team: async () => (await teammates.list()).map((mate) => ({ teammateId: mate.teammateId, name: mate.name, role: mate.roleTitle ?? mate.role })),
-      ask: async (teammateId, prompt) => {
+      ask: async (teammateId, prompt, model) => {
         if (!workspaceChosen) return { refused: NO_WORKSPACE_MESSAGE }
         const route = (await teammates.list()).find((mate) => mate.teammateId === teammateId)?.route
         if (route === undefined) return { refused: 'Scout has no model to read with. Pick one for it on the Team screen.' }
+        // A free model in Scout's own one's place, when that one's provider would not answer (scout.ts gaveUp).
+        const runtime = model === undefined ? route.runtime : 'opencode'
+        const chosen = model ?? route.model
         const response = await codexMissions.start(
           prompt,
-          route.runtime,
+          runtime,
           'ask',
-          { ...(route.model === 'account-default' ? {} : { model: route.model }), ...(typeof route.effort === 'string' ? { effort: route.effort } : {}) },
-          sendToWindow,
+          { ...(chosen === 'account-default' ? {} : { model: chosen }), ...(model === undefined && typeof route.effort === 'string' ? { effort: route.effort } : {}) },
+          scoutEmit,
           undefined,
           undefined,
           undefined,
           undefined,
           undefined,
           undefined,
-          { key: `scout:${teammateId}` }
+          // One look at a time on each model: a look moved to the next free model starts while the stopped one ends.
+          { key: `scout:${teammateId}:${chosen}` }
         )
         if (!response.ok) return { refused: response.error.code === 'RUN_ALREADY_ACTIVE' ? 'Scout is still reading its last look.' : response.error.message }
         sendToWindow({ kind: 'mission-started', runId: response.data.runId, missionId: response.data.missionId, prompt: 'Scout looked', data: response.data, startedBy: { kind: 'scout' } })
-        return { missionId: response.data.missionId }
+        return { missionId: response.data.missionId, runId: response.data.runId }
+      },
+      stop: (runId) => { codexMissions.cancel(runId) },
+      // Along the free models, best first, for a Scout on a free model: never onto a paid one.
+      nextFreeModel: async (teammateId, tried) => {
+        const route = (await teammates.list()).find((mate) => mate.teammateId === teammateId)?.route
+        if (route === undefined || !isFreeRoute(route.runtime, route.model)) return undefined
+        return FREE_MODELS_BEST_FIRST.find((id) => id !== route.model && !tried.includes(id))
       },
       answerOf: async (missionId) => {
         const recorded = await missionLedger.getMission(missionId).catch(() => undefined)

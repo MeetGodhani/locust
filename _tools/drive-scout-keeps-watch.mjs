@@ -89,6 +89,8 @@ try {
   const after = await state()
   await drive.capture('Scout noticed, settled', () => JSON.stringify({ cards: settled, modelSaid: after.modelSaid }))
   check('the card settles once Scout’s model has answered', settled.length > 0 && !settled.some((card) => card.reading), JSON.stringify(settled))
+  // With an answer, or -- every free model refusing -- Locust's words and why; never stuck behind its own last look.
+  check('and it settled on an answer, or says why none came', (settled[0]?.take ?? '') !== '' || /These cards are in Locust’s words/.test(after.modelSaid ?? ''), JSON.stringify({ take: settled[0]?.take, modelSaid: after.modelSaid }))
   say(`  Scout's model added: ${JSON.stringify({ take: settled[0]?.take, draft: settled[0]?.draft, modelSaid: after.modelSaid })}`)
   check('Scout’s look is never listed as a conversation', !JSON.parse(String(await drive.evaluate(`JSON.stringify(${conversationRows()}.map((row) => row.title))`))).some((title) => /Scout looked|keeps watch for the person/i.test(title)), after.lookIds.join(' '))
   check('the card offers Open and Dismiss', settled[0]?.buttons.includes('Open it') && settled[0]?.buttons.includes('Dismiss'), JSON.stringify(settled[0]?.buttons))
@@ -108,13 +110,17 @@ try {
   check('Settings says Scout is on, what it reads with, and what it watches', /Scout keeps watch/.test(line) && /^.*On\. Scout looks every 10 minutes/.test(line) && /It reads with Space Bunny Free through OpenCode/.test(line) && /Pull requests and their checks/.test(line) && /Tell me in Windows/.test(line), line)
   // Its model is changed where any teammate's is (Colin: "allow the user to change the model of proactive teammate").
   await drive.evaluate(`[...document.querySelectorAll('[data-setting="scout"] button')].find((b) => b.innerText.trim() === 'Change its model')?.click()`)
-  let dialog = ''
-  for (let i = 0; i < 20 && dialog === ''; i += 1) {
+  let dialog = { text: '', name: '' }
+  for (let i = 0; i < 20 && dialog.text === ''; i += 1) {
     await sleep(250)
-    dialog = String(await drive.evaluate(`document.querySelector('[role="dialog"][aria-label="Edit teammate"]')?.innerText.replace(/\\s+/g, ' ') ?? ''`))
+    // The name is in the dialog's name field: a field's value is not the dialog's text.
+    dialog = JSON.parse(String(await drive.evaluate(`JSON.stringify((() => {
+      const box = document.querySelector('[role="dialog"][aria-label="Edit teammate"]')
+      return { text: box?.innerText.replace(/\\s+/g, ' ') ?? '', name: box?.querySelector('input')?.value ?? '' }
+    })())`)))
   }
-  await drive.capture('Change its model', () => dialog.slice(0, 300))
-  check('Change its model opens Scout’s own Edit teammate, with its Model row', /Scout/.test(dialog) && /Model/.test(dialog) && /Space Bunny/.test(dialog), dialog.slice(0, 300))
+  await drive.capture('Change its model', () => JSON.stringify(dialog).slice(0, 300))
+  check('Change its model opens Scout’s own Edit teammate, with its Model row', dialog.name === 'Scout' && /Model/i.test(dialog.text) && /Space Bunny/.test(dialog.text), JSON.stringify(dialog).slice(0, 300))
 } catch (error) {
   failures += 1
   say(`drive failed: ${error instanceof Error ? error.message : String(error)}`)
