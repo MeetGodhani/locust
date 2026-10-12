@@ -31,6 +31,10 @@ describe('code in a reply', () => {
   })
 
   it('is coloured with the theme’s own variables, and keeps every character', async () => {
+    // The grammar warmed first, on other code (a different cache key): Shiki gives each line 500 ms, and on a loaded
+    // machine the first call's grammar compiling spent it -- the gate of 2026-10-12 saw line 2's string left plain.
+    // This test is about the colours, not the first call's speed; the limit itself stays, for the window's sake.
+    await colourCode('let warm = "up" // first', 'ts')
     const code = 'const total = items.reduce((sum, item) => sum + item.price, 0) // the cart\nexport default "done"'
     const lines = await colourCode(code, 'ts')
     expect(lines).toBeDefined()
