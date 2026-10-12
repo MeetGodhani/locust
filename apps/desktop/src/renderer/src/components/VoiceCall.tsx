@@ -4,6 +4,7 @@ import { voiceCallText, type VoiceCallApi, type VoiceCallAvailability, type Voic
 import type { AvatarSpec } from '../../../shared/avatar.js'
 import type { TeammateHue } from '../../../shared/ipc.js'
 import { TeammateBot } from './TeammateBot.js'
+import { VoiceOrb } from './VoiceOrb.js'
 import { MAX_CALL_LINE } from '../../../shared/calls.js'
 import { keptCall, liveCall, markCallSaved, setLiveCall, setLiveCallAnswer, updateLiveCall } from '../liveCall.js'
 import type { LiveVoiceCall } from '../voiceCall.js'
@@ -296,11 +297,14 @@ export function VoiceCallButton({ platform, onText, api = typeof window === 'und
           : <>
             {talkTo !== undefined && <TeammateBot hue={talkTo.hue} avatar={talkTo.avatar} size={28} teammateId={talkTo.teammateId} motion="full" hopsWhenDone={false}
               activity={faceActivity} presence={asks.length > 0 ? 'approval' : working ? 'working' : 'none'} />}
-            <span className={`lc-call__bars${speaking ? ' is-voice' : ''}`} aria-hidden="true">
-              {[0.55, 0.85, 1, 0.85, 0.55].map((weight, index) => (
-                <span key={index} className="lc-call__bar" style={{ transform: `scaleY(${String(0.18 + 0.82 * Math.sqrt(Math.min(1, loud * weight * (phase === 'live' ? 1 : 0))))})` }} />
-              ))}
-            </span>
+            {/* ChatGPT's own voice has a face too (0.752): the orb, where a teammate's call wears the teammate's. */}
+            {talkTo === undefined
+              ? <VoiceOrb size={28} level={phase === 'live' ? (speaking ? levels.voice : levels.you * 0.6) : 0} speaking={speaking} active={phase === 'live'} />
+              : <span className={`lc-call__bars${speaking ? ' is-voice' : ''}`} aria-hidden="true">
+                {[0.55, 0.85, 1, 0.85, 0.55].map((weight, index) => (
+                  <span key={index} className="lc-call__bar" style={{ transform: `scaleY(${String(0.18 + 0.82 * Math.sqrt(Math.min(1, loud * weight * (phase === 'live' ? 1 : 0))))})` }} />
+                ))}
+              </span>}
             <span className="lc-call__status" role="status">{status}{phase === 'live' ? ` · ${clock}` : ''}</span>
           </>}
         <span className="lc-call__acts">

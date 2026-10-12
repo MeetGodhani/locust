@@ -21072,6 +21072,8 @@ textarea {
 }
 .lc-call__head { display: flex; align-items: center; gap: 10px; min-height: 28px; }
 .lc-call__bars { display: inline-flex; align-items: center; gap: 3px; height: 18px; flex: 0 0 auto; }
+/* ChatGPT's voice in the call bar (0.752): a canvas the size of a teammate's face, coloured from the tokens it reads. */
+.lc-voiceorb { flex: none; display: block; color: var(--lc-text-secondary); }
 .lc-call__bar { width: 3px; height: 18px; border-radius: 2px; background: var(--lc-text-secondary); transform-origin: center; transition: transform 90ms linear; }
 .lc-call__bars.is-voice .lc-call__bar { background: var(--lc-lime); }
 .lc-call__status { flex: 1 1 auto; min-width: 0; font-size: 12px; color: var(--lc-text-secondary); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

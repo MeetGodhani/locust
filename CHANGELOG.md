@@ -11,6 +11,12 @@ Settings shows this file as What's new. An entry may group its changes under
 about when they arrive on it carries `<!-- big -->` on the line under its
 heading: the home screen then shows it once, as a splash.
 
+## 0.752.0 - 2026-10-12
+
+### Improved
+
+- **ChatGPT's voice has a face on Home calls.** In a call with a teammate, the call bar shows the teammate's face. On Home it now shows an orb, a dotted sphere that swells with the voice, ripples while ChatGPT speaks, and brightens when it does. It replaces the five level bars. The design is after "Halftone Sphere" from Book of Shapes.
+
 ## 0.751.0 - 2026-10-12
 
 ### New

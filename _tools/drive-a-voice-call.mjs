@@ -16,7 +16,7 @@ import { existsSync, mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-import { FREE_ROUTE, recordRoot, say, scratchRepository, sleep, startDrive, teammateFace } from './drive-lib.mjs'
+import { FREE_ROUTE, recordRoot, say, scratchRepository, sleep, startDrive } from './drive-lib.mjs'
 
 const arg = (name) => (process.argv.includes(name) ? process.argv[process.argv.indexOf(name) + 1] : undefined)
 const packaged = arg('--packaged')
@@ -103,7 +103,8 @@ try {
     await drive.evaluate(`document.querySelector('button[aria-label="Home"]')?.click()`)
     await sleep(900)
   }
-  await drive.evaluate(`(async () => { ${teammateFace('Wren')}.click(); await new Promise(r => setTimeout(r, 800)) })()`)
+  // On Home, where Talk is ChatGPT's own voice: in a teammate's conversation it is a call with them (0.746).
+  await drive.evaluate(`(async () => { document.querySelector('button[aria-label="Home"]')?.click(); await new Promise(r => setTimeout(r, 800)) })()`)
   const beside = String(await drive.capture('Talk, beside the microphone', () => drive.evaluate(`(async () => {
     for (let i = 0; i < 40 && !document.querySelector('button[aria-label="Talk"]'); i += 1) await new Promise(r => setTimeout(r, 250))
     const talk = document.querySelector('button[aria-label="Talk"]')
@@ -139,6 +140,25 @@ try {
     if (/Listening|speaking|looking/i.test(state.status) || state.message) break
   }
   check('pressing Talk reaches the call: it listens', /Listening|speaking|looking/i.test(state.status), JSON.stringify(state))
+  // ChatGPT's own voice wears the orb (0.752) where a teammate's call wears the face: in the bar, drawing, moving.
+  const orbSeen = JSON.parse(String(await drive.evaluate(`(async () => {
+    const strip = document.querySelector('[role=region][aria-label="Voice call"]')
+    const canvas = strip?.querySelector('canvas.lc-voiceorb')
+    if (!canvas) return JSON.stringify({ orb: false, bars: strip?.querySelectorAll('.lc-call__bars').length ?? 0 })
+    const sample = () => {
+      const data = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data
+      let lit = 0
+      let sum = 0
+      for (let i = 3; i < data.length; i += 4) { if (data[i] > 0) lit += 1; sum += data[i] }
+      return { lit, sum }
+    }
+    const first = sample()
+    await new Promise((r) => setTimeout(r, 300))
+    const second = sample()
+    return JSON.stringify({ orb: true, bars: strip.querySelectorAll('.lc-call__bars').length, size: canvas.getBoundingClientRect().width, lit: first.lit, moved: first.sum !== second.sum })
+  })()`)))
+  check('ChatGPT’s voice wears the orb in the bar, in place of the level bars', orbSeen.orb && orbSeen.bars === 0 && orbSeen.size === 28, JSON.stringify(orbSeen))
+  check('the orb draws, and moves while the call is on', orbSeen.lit > 50 && orbSeen.moved, JSON.stringify(orbSeen))
 
   // The fake microphone asks once; the answer is a line from ChatGPT with "four" in it.
   for (let second = 0; second < 45; second += 1) {
