@@ -1278,6 +1278,12 @@ export type ThreadItem =
        */
       readonly spoken?: boolean
       /**
+       * When the runtime last said anything, on a line that names no command (0.758): five minutes past it the
+       * line says the turn has gone quiet, with Stop beside it (`quiet.ts`). Absent while a command runs, whose
+       * line already says what the turn waits on, and before the runtime has spoken (`spoken` covers that).
+       */
+      readonly lastHeardAt?: string
+      /**
        * The plan the turn already has, set only when `detail` says "step N of M":
        * the mini plan that step opens on hover reads these, so nothing new is
        * fetched or stored.
@@ -4198,6 +4204,8 @@ export function buildThread(
      * it is a fact about that call rather than a clock a person is watching.
      */
     const turnStartedAt = options.startedAt ?? events[0]?.occurredAt ?? events.at(-1)?.occurredAt
+    // When the runtime last said anything at all: the quiet line's clock (quiet.ts, 0.758).
+    const lastHeardAt = events.at(-1)?.occurredAt
     const openToolId = [...openTools.keys()].at(-1)
     const openTool = openToolId === undefined ? undefined : openTools.get(openToolId)
     const openToolMeta = openToolId === undefined ? undefined : openToolAt.get(openToolId)
@@ -4237,7 +4245,8 @@ export function buildThread(
         // run is planning; anything else keeps its dots rather than borrow an
         // orb that would be describing work nobody reported.
         orb: orbStateFor(undefined, options.planMode === true, runningStep.register),
-        ...(runningStep.kind === 'reasoning' ? { waiting: true } : {})
+        ...(runningStep.kind === 'reasoning' ? { waiting: true } : {}),
+        ...(lastHeardAt === undefined ? {} : { lastHeardAt })
       })
     } else if (streaming) {
       /*
@@ -4260,7 +4269,8 @@ export function buildThread(
           detail: planAside,
           startedAt: turnStartedAt,
           kind: 'turn',
-          orb: orbStateFor(undefined, options.planMode === true, 'writing')
+          orb: orbStateFor(undefined, options.planMode === true, 'writing'),
+          ...(lastHeardAt === undefined ? {} : { lastHeardAt })
         })
       }
     } else {
@@ -4325,7 +4335,9 @@ export function buildThread(
           orb: orbStateFor(undefined, options.planMode === true, spoken ? 'working' : 'starting'),
           // Past twenty seconds with nothing from the runtime the line says so
           // as well; see `quiet.ts` for the measured run above.
-          spoken
+          spoken,
+          // And once it has spoken, five quiet minutes say so too (quiet.ts, 0.758).
+          ...(spoken && lastHeardAt !== undefined ? { lastHeardAt } : {})
         })
       }
     }

@@ -25,3 +25,21 @@ export function hasBeenQuiet(startedAt: string, now: number): boolean {
   if (!Number.isFinite(started)) return false
   return (now - started) / 1000 >= QUIET_SECONDS_BEFORE_SAYING_SO
 }
+
+/*
+ * AND A RUN THAT HAS SPOKEN, THEN GONE QUIET (0.758): five minutes.
+ *
+ * The 0.755 sweep's drive-queue-after-a-turn: the free model answered "ONE", opened Notepad on the file it had
+ * written, and the turn waited on it -- the line said "Working… 6m 8s", then the same for forty minutes, nothing to
+ * tell it from a turn at work, until the drive gave up. A line naming a command that runs is left alone: it already
+ * says what the turn waits on, and a test suite may run for ten minutes.
+ */
+export const QUIET_MINUTES_BEFORE_SAYING_SO = 5
+
+/** Whole minutes since the turn was last heard from, once that is long enough to say; otherwise undefined. */
+export function quietMinutes(lastHeardAt: string | undefined, now: number): number | undefined {
+  const heard = lastHeardAt === undefined ? Number.NaN : Date.parse(lastHeardAt)
+  if (!Number.isFinite(heard)) return undefined
+  const minutes = Math.floor((now - heard) / 60_000)
+  return minutes >= QUIET_MINUTES_BEFORE_SAYING_SO ? minutes : undefined
+}

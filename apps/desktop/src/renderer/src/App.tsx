@@ -8801,6 +8801,8 @@ export default function App(): ReactElement {
                 eventsTruncated={liveRun.eventsTruncated === true}
                 running={running}
                 {...(busyOffer === undefined ? {} : { busyModel: busyOffer })}
+                /* The same press as the chat box's Stop, from a live line gone quiet (0.758). */
+                onStopRun={cancelMission}
                 {...(limitOffer === undefined ? {} : { limitModel: limitOffer })}
                 {...(continueOffer === undefined || running ? {} : { onContinueAfterBusy: continueOffer })}
                 {...(signInOffer === undefined ? {} : { signInRuntime: signInOffer })}

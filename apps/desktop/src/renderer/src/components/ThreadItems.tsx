@@ -9,6 +9,7 @@ import type { AvatarSpec } from '../../../shared/avatar.js'
 import { parseAgentText, splitInlineCode } from '../agentText.js'
 import type { ListItem } from '../agentText.js'
 import { splitSettled } from '../settledText.js'
+import { quietMinutes } from '../quiet.js'
 import { linkHost } from '../../../shared/outbound-links.js'
 import type { OrbState, PlanStep } from '../missionView.js'
 import { TeammateBot } from './TeammateBot.js'
@@ -971,8 +972,14 @@ export function LiveRegisterLine({
   startedAt,
   orb,
   thinking,
-  plan
+  plan,
+  lastHeardAt,
+  onStop
 }: {
+  /** When the runtime last said anything (0.758): five minutes past it, the line says the turn has gone quiet. */
+  readonly lastHeardAt?: string
+  /** Stops the turn, from that note: the same press as the chat box's Stop. */
+  readonly onStop?: () => void
   /**
    * The orb, drawn BESIDE THE WORD IT IS ABOUT.
    *
@@ -998,6 +1005,7 @@ export function LiveRegisterLine({
   readonly plan?: readonly PlanStep[]
 }): ReactElement {
   const elapsed = useElapsed(startedAt)
+  const quiet = quietMinutes(lastHeardAt, elapsed.now)
   /*
    * THE START SAYS ITS PHASE (0.602). While a run starts, the host knows what
    * it is doing -- looking for the runtime, briefing it, reading the folder,
@@ -1135,6 +1143,21 @@ export function LiveRegisterLine({
         * ellipsize only when they alone do not fit.
         */}
       <span className="lc-rail__meta lc-livestep__clock">{elapsed.label}</span>
+      {/*
+        * GONE QUIET (0.758): a turn that has said nothing for five minutes says so, right after the clock and never
+        * clipped, with Stop beside it -- the drive that watched "Working… 6m 8s" for forty minutes had nothing on
+        * screen to tell a hung turn from one at work (quiet.ts).
+        */}
+      {quiet !== undefined && (
+        <span className="lc-rail__meta lc-livestep__quiet">
+          {`no word for ${String(quiet)} min`}
+          {onStop !== undefined && (
+            <button type="button" className="lc-linkbutton lc-livestep__stop" onClick={onStop}>
+              Stop
+            </button>
+          )}
+        </span>
+      )}
       {/* The "step N of M" part, when the turn has a plan to show: a control of its own, outside the note's clipping box. */}
       {peek !== undefined && <PlanPeek label={peek} steps={plan ?? []} />}
       {rest.length > 0 && (
@@ -1211,8 +1234,14 @@ export function LiveStepCard({
   owner,
   activity,
   face: showFace = true,
-  plan
+  plan,
+  lastHeardAt,
+  onStop
 }: {
+  /** When the runtime last said anything, for the quiet note (0.758, quiet.ts). */
+  readonly lastHeardAt?: string
+  /** Stops the turn from the quiet note. */
+  readonly onStop?: () => void
   /**
    * The thinking orb for this step, when one is truthful.
    *
@@ -1309,6 +1338,8 @@ export function LiveStepCard({
          */
         thinking={thinking && orb === undefined}
         {...(plan === undefined ? {} : { plan })}
+        {...(lastHeardAt === undefined ? {} : { lastHeardAt })}
+        {...(onStop === undefined ? {} : { onStop })}
       />
     </div>
   )

@@ -9324,6 +9324,22 @@ textarea {
   content: '· ';
 }
 
+/* A turn gone quiet (0.758): said after the clock in amber, never clipped, with its Stop. */
+.lc-livestep__quiet {
+  flex: none;
+  white-space: nowrap;
+  color: var(--lc-amber-text);
+}
+
+.lc-livestep__quiet::before {
+  content: '· ';
+}
+
+.lc-livestep__stop {
+  margin-left: var(--lc-space-2);
+  color: var(--lc-amber-text);
+}
+
 /*
  * THE NOTE SAYS SOMETHING OR IS NOT SHOWN.
  *

@@ -195,8 +195,11 @@ export function ThreadItems({
   onDraft,
   planMode = false,
   faces = true,
-  busyModel
+  busyModel,
+  onStop
 }: {
+  /** Stops the running turn from its live line's quiet note (0.758); only on the turn that runs. */
+  readonly onStop?: () => void
   readonly items: readonly ThreadItem[]
   /**
    * Another model to go on with, when this turn's model is busy (C9): drawn
@@ -468,6 +471,8 @@ export function ThreadItems({
               activity={activity}
               face={faces}
               {...(item.plan === undefined ? {} : { plan: item.plan })}
+              {...(item.lastHeardAt === undefined ? {} : { lastHeardAt: item.lastHeardAt })}
+              {...(onStop === undefined ? {} : { onStop })}
             />
           )
         }
@@ -850,6 +855,8 @@ export interface ThreadProps {
    * busy notice.
    */
   readonly busyModel?: { readonly label: string; readonly onPress: () => void }
+  /** Stop the running turn: offered on its live line once it has gone quiet (0.758, quiet.ts). */
+  readonly onStopRun?: () => void
   /**
    * Pick up an interrupted mission from its last checkpoint. Absent when this
    * thread cannot start a run at all, so the offer can never appear without a
@@ -1043,6 +1050,7 @@ export function Thread({
   wasPlan,
   onAnswer,
   busyModel,
+  onStopRun,
 onResume,
   resumeRefusal,
   sandbox,
@@ -1638,6 +1646,7 @@ onResume,
               : { onChoose: onAnswer, busy: running, standing: decisionStanding({ sandbox: sandbox ?? restoredMission?.sandbox, events }) }
           }
           {...(busyModel === undefined || !running ? {} : { busyModel })}
+          {...(onStopRun === undefined || !running ? {} : { onStop: onStopRun })}
         />
 
         {cardsFor(earlierTurns.length, 'after-work').map(peerCard)}
