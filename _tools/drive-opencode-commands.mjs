@@ -112,7 +112,7 @@ const sendAnswering = `(async () => {
     if (i > 8 && !document.querySelector('button[aria-label^="Stop the running"]')) break
   }
   await new Promise((r) => setTimeout(r, 2500))
-  return JSON.stringify({ cards, thread: (document.querySelector('.lc-thread')?.innerText ?? '').replace(/\\s+/g, ' ').slice(-500) })
+  return JSON.stringify({ cards, thread: (document.querySelector('.lc-thread')?.innerText ?? '').replace(/\\s+/g, ' ').slice(-3000) })
 })()`
 
 try {
@@ -143,7 +143,7 @@ try {
 
   const reviewed = JSON.parse(String(await drive.capture('/review sent', () => drive.evaluate(sendAnswering))))
   say(`  review: ${reviewed.thread.slice(-300)}`)
-  check('OpenCode reviewed the uncommitted change: add now subtracts', /calc|add|subtract|a - b|minus/i.test(reviewed.thread.slice(reviewed.thread.indexOf('/review') + 7)), reviewed.thread.slice(-300))
+  check('OpenCode reviewed the uncommitted change: add now subtracts', /calc|\badd\b|subtract|a - b|minus/i.test(reviewed.thread.slice(reviewed.thread.indexOf('/review') + 7)), reviewed.thread.slice(-300))
 
   await drive.evaluate(openTeammateScript('Bea'))
   await sleep(1000)
