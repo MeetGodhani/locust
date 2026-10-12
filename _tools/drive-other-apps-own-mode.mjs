@@ -107,7 +107,7 @@ try {
   await openSettings(drive)
   check('the own-mode switch is not offered while the server is off', await drive.evaluate(`!document.querySelector(\`${OWN}\`)`))
   await drive.evaluate(`document.querySelector('${SERVER}').click()`)
-  await wait(`document.querySelector('${SERVER}').getAttribute('aria-checked') === 'true' && document.querySelectorAll('.lc-mcp-setup').length === 2 && !!document.querySelector(\`${OWN}\`)`)
+  await wait(`document.querySelector('${SERVER}').getAttribute('aria-checked') === 'true' && document.querySelectorAll('.lc-mcp-setup').length === 3 && !!document.querySelector(\`${OWN}\`)`)
   const offLine = await drive.capture('the server on; own mode offered, off', () => drive.evaluate(`document.querySelector(\`${OWN}\`).closest('.lc-settingline').innerText`))
   check('own mode starts off and says turns are Ask', await drive.evaluate(`document.querySelector(\`${OWN}\`).getAttribute('aria-checked') === 'false'`) && /Ask mode \(read only\)/.test(offLine), offLine)
   setup = await setupOf(drive)

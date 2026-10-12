@@ -156,8 +156,9 @@ are the nine ChatGPT offers.
 **Other apps.** Your other AI apps can ask your teammates through a local MCP
 server that is off until you turn it on, listens on 127.0.0.1 only, and starts
 turns in Ask mode unless you say otherwise. The Claude app is added in one
-press (a copy of its settings is kept first); Claude Code and Codex get the
-command or config entry to paste.
+press (a copy of its settings is kept first); Claude Code, Codex and OpenClaw
+get the command or config entry to paste. Through OpenClaw, your chat apps
+(WhatsApp, Telegram, iMessage, Slack) can ask the team too.
 
 **Compare.** The same mission on two or three models at once, each in its own
 copy of the folder, side by side; keep the one you like. Blind hides the names

@@ -23,7 +23,7 @@ const button = (element: ReactElement, at = 0): { onClick(): void; disabled: boo
   return line.children[1]!.props as { onClick(): void; disabled: boolean }
 }
 const api = (first: LocustMcpState) => ({ settings: vi.fn(async () => first), setEnabled: vi.fn(async () => enabled), setOwnMode: vi.fn(async (ownMode: boolean) => ({ ...first, ownMode })) })
-const enabled: LocustMcpState = { enabled: true, ownMode: false, claudeCommand: 'claude mcp add example', codexConfig: '[mcp_servers.locust]\ncommand = "example"' }
+const enabled: LocustMcpState = { enabled: true, ownMode: false, claudeCommand: 'claude mcp add example', codexConfig: '[mcp_servers.locust]\ncommand = "example"', openclawCommand: 'openclaw mcp add locust --command example' }
 describe('other-app access is an explicit setting', () => {
   it('loads the actual setting, makes no enable request on mount, and shows no setup while off', async () => {
     const api = { settings: vi.fn(async () => ({ enabled: false, ownMode: false })), setEnabled: vi.fn(async () => enabled), setOwnMode: vi.fn(async () => enabled) }
@@ -44,6 +44,11 @@ describe('other-app access is an explicit setting', () => {
     const html = renderToStaticMarkup(surface(api))
     expect(html).toContain('claude mcp add example')
     expect(html).toContain('[mcp_servers.locust]')
+    // OpenClaw's line too (0.754), with its own Copy, and what decides where it is used.
+    expect(html).toContain('openclaw mcp add locust --command example')
+    expect(html).toContain('aria-label="Copy the OpenClaw command"')
+    expect(html).toContain('its tool policy decides which of its chats can use it')
+    expect(html).toContain('Add Locust to Claude Code, Codex or OpenClaw by hand')
     expect(html).toContain('New turns are Ask mode (read only)')
     // Since 0.704 they can run routines too, and the line says so.
     expect(html).toContain('can ask teammates, run your routines and read replies')

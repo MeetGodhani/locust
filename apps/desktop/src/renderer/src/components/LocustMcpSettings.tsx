@@ -90,7 +90,7 @@ export function LocustMcpSettings({ heading, api = typeof window === 'undefined'
       * the loudest thing on General. They are for Claude Code and Codex, which take a command or a config entry.
       */}
     {state?.enabled && <details className="lc-settings__fold lc-mcp-byhand">
-      <summary>Add Locust to Claude Code or Codex by hand</summary>
+      <summary>Add Locust to Claude Code, Codex or OpenClaw by hand</summary>
       <div className="lc-settings__note">
       {/* A Copy on each (0.691): the lines run to three paths, and selecting a wrapped block by hand is fiddly. */}
       <p>Claude Code — run this in PowerShell:</p>
@@ -99,6 +99,16 @@ export function LocustMcpSettings({ heading, api = typeof window === 'undefined'
       <p>Codex — add this to ~/.codex/config.toml:</p>
       <div className="lc-mcp-setupwrap"><pre className="lc-mcp-setup lc-mono">{state.codexConfig}</pre>
         {state.codexConfig !== undefined && <CopyButton className="lc-mcp-setup__copy" label="the Codex settings" text={state.codexConfig} />}</div>
+      {/*
+        * OpenClaw (0.754): the assistant people message from WhatsApp, Telegram, iMessage or Slack. With this line its
+        * chats can ask the team here. It checks the connection before it saves; its own tool policy decides which of
+        * its chats may use the tools.
+        */}
+      {state.openclawCommand !== undefined && <>
+        <p>OpenClaw — run this in PowerShell. It checks the connection first, and its tool policy decides which of its chats can use it:</p>
+        <div className="lc-mcp-setupwrap"><pre className="lc-mcp-setup lc-mono">{state.openclawCommand}</pre>
+          <CopyButton className="lc-mcp-setup__copy" label="the OpenClaw command" text={state.openclawCommand} /></div>
+      </>}
       <p>Locust changes another app’s settings only when you press Add to the Claude app; it keeps a copy of the file first, and Remove takes its entry out again. Turning this off stops new requests, not turns already running.</p>
       </div>
     </details>}

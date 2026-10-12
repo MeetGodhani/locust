@@ -74,7 +74,7 @@ try {
   await wait(`!!document.querySelector('[aria-label="Let your other AI apps use Locust"]:not(:disabled)')`)
   check('the switch starts off, with no server', await drive.evaluate(`document.querySelector('[aria-label="Let your other AI apps use Locust"]').getAttribute('aria-checked') === 'false'`))
   await drive.evaluate(`document.querySelector('[aria-label="Let your other AI apps use Locust"]').click()`)
-  await wait(`document.querySelector('[aria-label="Let your other AI apps use Locust"]').getAttribute('aria-checked') === 'true' && document.querySelectorAll('.lc-mcp-setup').length === 2`)
+  await wait(`document.querySelector('[aria-label="Let your other AI apps use Locust"]').getAttribute('aria-checked') === 'true' && document.querySelectorAll('.lc-mcp-setup').length === 3`)
   const shown = await drive.capture('Settings > General: the switch on, with the setup lines', () => drive.evaluate(`[...document.querySelectorAll('.lc-mcp-setup')].map(p => p.innerText)`))
   // The Codex block is TOML whose strings are JSON strings: the three paths, exactly.
   const codex = shown[1]
@@ -84,7 +84,7 @@ try {
   check('the setup names this Locust, its bridge and the connection file, and no token', /locust-mcp-bridge\.mjs$/.test(setup.bridge) && /locust-mcp-connection\.json$/.test(setup.connection) && !/[0-9a-f]{64}/.test(shown.join('\n')), JSON.stringify(setup))
   // Present, never pressed: a press would write over the person's own clipboard.
   const copies = await drive.evaluate(`[...document.querySelectorAll('.lc-mcp-setup__copy')].map(b => b.getAttribute('aria-label'))`)
-  check('each setup line has its own Copy', copies.length === 2 && copies[0] === 'Copy the Claude Code command' && copies[1] === 'Copy the Codex settings', copies.join(' | '))
+  check('each setup line has its own Copy', copies.length === 3 && copies[0] === 'Copy the Claude Code command' && copies[1] === 'Copy the Codex settings' && copies[2] === 'Copy the OpenClaw command', copies.join(' | '))
 
   // A REAL client: Claude Code, one-off config, its own settings untouched.
   const config = join(scratch, `mcp-${String(Date.now())}.json`)

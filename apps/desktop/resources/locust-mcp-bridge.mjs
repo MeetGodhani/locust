@@ -19,17 +19,20 @@ const TOOLS = [
   { name: 'routine_status', description: 'The step a routine started by run_routine is on, a wait for the person in Locust, or, once it ends, its last answer. Read only.', inputSchema: schema({ routine: string }, ['routine']) }
 ]
 /*
- * A voice call's copy (0.742, `call` after the connection file): the hand-off tools, and three that read the
- * folder. Each that only reads says so, and Codex runs a tool marked read only without asking first.
+ * Each tool that only reads says so (0.742 for a voice call's copy; 0.754 for every app): a client may run a tool
+ * marked read only without asking first -- Codex does -- and OpenClaw's doctor said of the unmarked list "calls require
+ * approval". Starting or continuing a conversation, and running a routine, are not marked, and still ask.
  */
-const READS = new Set(['list_teammates', 'read_reply', 'list_background_runs'])
+const READS = new Set(['list_teammates', 'read_reply', 'list_background_runs', 'list_routines', 'routine_status'])
+const MARKED = TOOLS.map(t => READS.has(t.name) ? { ...t, annotations: { readOnlyHint: true } } : t)
+/* A voice call's copy (0.742, `call` after the connection file): the hand-off tools, and three that read the folder. */
 const CALL_TOOLS = process.argv[3] === 'call' ? [
   ...TOOLS.filter(t => ['list_teammates', 'start_conversation', 'send_message', 'read_reply', 'list_background_runs'].includes(t.name)),
   { name: 'find_files', description: 'List the files in the folder Locust has open, or those whose path contains query. Read only.', inputSchema: schema({ query: { type: 'string', maxLength: 200 } }) },
   { name: 'read_file', description: 'Read a text file in the folder Locust has open, by its path in the folder, 400 lines at a time from from_line. Never a file of secrets. Read only.', inputSchema: schema({ path: { type: 'string', minLength: 1, maxLength: 1000 }, from_line: { type: 'integer', minimum: 1 } }, ['path']) },
   { name: 'search_files', description: 'Find the lines that contain text in the folder Locust has open. Read only.', inputSchema: schema({ text: string }, ['text']) }
 ].map(t => READS.has(t.name) || ['find_files', 'read_file', 'search_files'].includes(t.name) ? { ...t, annotations: { readOnlyHint: true } } : t) : undefined
-const LISTED = CALL_TOOLS ?? TOOLS
+const LISTED = CALL_TOOLS ?? MARKED
 
 async function call(name, args) {
   let connection

@@ -11,14 +11,21 @@ export type McpToolResult = { readonly content: readonly { readonly type: 'text'
 export const mcpText = (text: string, isError = false): McpToolResult => ({ content: [{ type: 'text', text }], ...(isError ? { isError: true } : {}) })
 
 /** The setup carries a file path, never the bearer token or a changing port. */
-export function mcpSetup(node: string, bridge: string, connection: string): Pick<LocustMcpState, 'claudeCommand' | 'codexConfig'> {
+export function mcpSetup(node: string, bridge: string, connection: string): Pick<LocustMcpState, 'claudeCommand' | 'codexConfig' | 'openclawCommand'> {
   // Double-quoted PowerShell arguments (the shipped Windows app). Escape
   // expansion as well as quotes; a folder name is data, not shell syntax.
   const quote = (value: string) => `"${value.replace(/`/g, '``').replace(/\$/g, '`$').replace(/"/g, '`"')}"`
   return {
     // --env is variadic: another option must separate it from the server name.
     claudeCommand: `claude mcp add --env ELECTRON_RUN_AS_NODE=1 --transport stdio --scope user locust -- ${quote(node)} ${quote(bridge)} ${quote(connection)}`,
-    codexConfig: `[mcp_servers.locust]\ncommand = ${JSON.stringify(node)}\nargs = [${JSON.stringify(bridge)}, ${JSON.stringify(connection)}]\nenv = { ELECTRON_RUN_AS_NODE = "1" }`
+    codexConfig: `[mcp_servers.locust]\ncommand = ${JSON.stringify(node)}\nargs = [${JSON.stringify(bridge)}, ${JSON.stringify(connection)}]\nenv = { ELECTRON_RUN_AS_NODE = "1" }`,
+    /*
+     * OpenClaw (0.754; Colin, on github.com/openclaw/openclaw: "anything we can take from here"): its chat apps --
+     * WhatsApp, Telegram, iMessage, Slack -- can then ask the person's Locust team. `openclaw mcp add` on OpenClaw
+     * 2026.10.1 takes --command, a repeatable --arg and a repeatable --env (its own --help, read 2026-10-12), and
+     * connects to the server before it saves, so a line that was saved is one that worked.
+     */
+    openclawCommand: `openclaw mcp add locust --command ${quote(node)} --arg ${quote(bridge)} --arg ${quote(connection)} --env ELECTRON_RUN_AS_NODE=1`
   }
 }
 

@@ -61,6 +61,10 @@ describe('other apps reach Locust through stdio', () => {
     expect(described('start_conversation')).toContain("answered by the person in Locust's window, never from here")
     for (const name of ['start_conversation', 'send_message']) expect(described(name)).toMatch(/no automatic teammate handoffs/i)
     expect(answer.result.tools[1].description).toContain('monthly limits apply')
+    // Each that only reads says so (0.754), so an app may run it without asking -- OpenClaw's doctor said of the
+    // unmarked list "calls require approval"; what starts work, or continues it, is unmarked and still asks.
+    const readOnly = answer.result.tools.filter((tool: { annotations?: { readOnlyHint?: boolean } }) => tool.annotations?.readOnlyHint === true).map((tool: { name: string }) => tool.name)
+    expect(readOnly).toEqual(['list_teammates', 'read_reply', 'list_background_runs', 'list_routines', 'routine_status'])
     expect(f.call).not.toHaveBeenCalled()
   })
   it('answers every tool call with the required plain sentence when Locust is not running', async () => {

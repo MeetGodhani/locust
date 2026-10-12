@@ -97,7 +97,7 @@ try {
   await drive.evaluate(`[...document.querySelectorAll('.lc-sidebar__nav button')].find(b => /Settings/.test(b.innerText))?.click()`)
   await wait(`!!document.querySelector('${SERVER}:not(:disabled)')`)
   await drive.evaluate(`document.querySelector('${SERVER}').click()`)
-  await wait(`document.querySelectorAll('.lc-mcp-setup').length === 2 && !!document.querySelector(\`${OWN}\`)`)
+  await wait(`document.querySelectorAll('.lc-mcp-setup').length === 3 && !!document.querySelector(\`${OWN}\`)`)
   const codex = await drive.evaluate(`[...document.querySelectorAll('.lc-mcp-setup')][1].innerText`)
   const args = JSON.parse(codex.match(/args = (\[.*\])/)[1])
   const setup = { node: JSON.parse(codex.match(/command = (".*")/)[1]), bridge: args[0], connection: args[1] }

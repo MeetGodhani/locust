@@ -147,7 +147,10 @@ reads of your folder stays on this machine.
   limits, and appear in history marked as started from another app. Shares
   remain visible in Locust, but never start automatic teammate handoffs. Listing
   teammates, replies and background runs is read only. Running turns are not
-  cancelled when the listener is switched off.
+  cancelled when the listener is switched off. An app you add carries what it
+  is asked to that listener from wherever it was asked: with OpenClaw's line
+  (0.754), a message you send OpenClaw from a chat app on your phone reaches
+  your teammates, through OpenClaw's own connections, not Locust's.
 - **The spellchecker downloads no dictionary.**
 - **Memory recall** runs a small model that ships with Locust.
 - **A report reaches Locust's makers only when you send it.** Send feedback,

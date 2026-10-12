@@ -11,6 +11,16 @@ Settings shows this file as What's new. An entry may group its changes under
 about when they arrive on it carries `<!-- big -->` on the line under its
 heading: the home screen then shows it once, as a splash.
 
+## 0.754.0 - 2026-10-12
+
+### New
+
+- **Ask your team from your chat apps, through OpenClaw.** Settings > General > Let your other AI apps use Locust now gives OpenClaw's line too, beside Claude Code's and Codex's. Run it once, and a message you send OpenClaw from WhatsApp, Telegram, iMessage or Slack can ask your Locust teammates. OpenClaw checks the connection before it saves it.
+
+### Improved
+
+- **Other apps can read without asking each time.** Listing teammates, routines and background runs, and reading a reply, are now marked as read-only, so OpenClaw and Codex run them without a question. Starting a conversation, sending a message and running a routine still ask.
+
 ## 0.753.0 - 2026-10-12
 
 ### Fixed

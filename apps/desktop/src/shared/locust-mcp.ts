@@ -33,6 +33,8 @@ export interface LocustMcpState {
   readonly ownMode: boolean
   readonly claudeCommand?: string
   readonly codexConfig?: string
+  /** OpenClaw's `openclaw mcp add` line (0.754): its chat apps reach the team through it. */
+  readonly openclawCommand?: string
   readonly message?: string
 }
 export interface LocustMcpApi {
