@@ -48,7 +48,9 @@ function manualWatch() {
   }
 }
 
-describe('a background turn comes back', () => {
+// Each step waits up to 5 s for what happens on its own clock; the test as a whole had the 5 s default, and ran
+// past it under load (0.751's ship, 2026-10-12, with the same steps passing alone).
+describe('a background turn comes back', { timeout: 30_000 }, () => {
   it('starts on the conversation\'s own session, is remembered, and comes back into it when it is done', async () => {
     const path = await file()
     const state = { agents: [] as unknown[], calls: [] as string[][] }
