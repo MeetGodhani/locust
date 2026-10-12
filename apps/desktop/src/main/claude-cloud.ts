@@ -1,6 +1,6 @@
 import { execFile, spawn } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
-import { mkdir, readdir, readFile, rename, stat, writeFile } from 'node:fs/promises'
+import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { dirname, isAbsolute, join, resolve as resolvePath } from 'node:path'
 
@@ -16,6 +16,7 @@ import { isResumableSessionId, openInTerminal } from './open-in-terminal.js'
 import type { TerminalRequest } from './open-in-terminal.js'
 import type { OpenInTerminalResponse } from '../shared/ipc.js'
 import { isCloudEnvironmentId } from '../shared/claude-cloud.js'
+import { replaceFile } from './replace-file.js'
 
 /**
  * CLAUDE'S CLOUD (0.538): a task handed to a Claude Code cloud session, from
@@ -229,7 +230,7 @@ export function createClaudeCloud(options: ClaudeCloudOptions) {
     await mkdir(join(options.storePath, '..'), { recursive: true })
     const temp = `${options.storePath}.${randomUUID()}.tmp`
     await writeFile(temp, JSON.stringify({ sessions }, null, 2), 'utf8')
-    await rename(temp, options.storePath)
+    await replaceFile(temp, options.storePath)
   }
   // Non-secret, per-folder choice; kept separately so refreshing the session list cannot erase it.
   const environmentPath = `${options.storePath}.environments.json`
@@ -251,7 +252,7 @@ export function createClaudeCloud(options: ClaudeCloudOptions) {
       await mkdir(dirname(environmentPath), { recursive: true })
       const temp = `${environmentPath}.${randomUUID()}.tmp`
       await writeFile(temp, JSON.stringify(id === undefined ? previous : [{ folder, id }, ...previous].slice(0, MAX_KEPT)), 'utf8')
-      await rename(temp, environmentPath)
+      await replaceFile(temp, environmentPath)
     })
     environmentWrites = pending.catch(() => undefined)
     return pending

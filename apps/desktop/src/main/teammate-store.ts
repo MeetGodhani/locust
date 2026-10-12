@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { constants as fsConstants } from 'node:fs'
-import { mkdir, open, readFile, rename, unlink } from 'node:fs/promises'
+import { mkdir, open, readFile, unlink } from 'node:fs/promises'
 import { isAbsolute, join } from 'node:path'
 
 import { cleanAvatar, isAvatarSpec, seedAvatar } from '../shared/avatar.js'
@@ -12,6 +12,7 @@ import { isMonthlyLimit } from '../shared/spend.js'
 import { isChatGptVoice } from '../shared/voice-call.js'
 import { parsedAboutYou, parsedAboutYouSuggestions } from '../shared/about-you.js'
 import { aboutYouSecretRefusal, secretIn } from '../shared/secrets.js'
+import { replaceFile } from './replace-file.js'
 
 /**
  * Teammates are local identity plus routing defaults: a name, an avatar hue, a
@@ -681,7 +682,7 @@ export function createTeammateStore(options: { readonly rootDirectory: string })
       await handle.close()
     }
     try {
-      await rename(temporary, path)
+      await replaceFile(temporary, path)
     } catch (error) {
       await unlink(temporary).catch(() => undefined)
       throw error

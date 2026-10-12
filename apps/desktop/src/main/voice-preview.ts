@@ -1,7 +1,8 @@
-import { mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
 import { VOICE_PREVIEW_MAX_BYTES, isChatGptVoice, isVoicePreviewAudio } from '../shared/voice-call.js'
+import { replaceFile } from './replace-file.js'
 
 /*
  * WHAT A VOICE SOUNDED LIKE, KEPT (0.751). The first time a voice is played it makes a short call and greets the
@@ -50,7 +51,7 @@ export function createVoicePreviews(deps: {
         // Whole or not at all: a play never meets half a recording.
         const temporary = `${fileOf(voice)}.${String(process.pid)}.tmp`
         await writeFile(temporary, audio)
-        await rename(temporary, fileOf(voice))
+        await replaceFile(temporary, fileOf(voice))
         return true
       } catch {
         return false

@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 
 import { workspaceIdFor } from './workspace.js'
@@ -15,6 +15,7 @@ import type { MissionReadResponse,
   PublicPeerMessage,
   PublicRecoveredMission
 } from '../shared/ipc.js'
+import { replaceFile } from './replace-file.js'
 
 const MAX_HISTORY_MISSIONS = 20
 /**
@@ -214,7 +215,7 @@ export async function rememberedUsageWindows(
     try {
       await mkdir(dirname(file), { recursive: true })
       await writeFile(`${file}.tmp`, JSON.stringify(merged), 'utf8')
-      await rename(`${file}.tmp`, file)
+      await replaceFile(`${file}.tmp`, file)
     } catch {
       // Not kept this time: the reading shown is still right, and the next load tries again.
     }

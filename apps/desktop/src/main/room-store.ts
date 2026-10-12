@@ -8,6 +8,7 @@ import type { PublicRoom, RoomPost, RoomTask, RoomTaskRequest } from '../shared/
 import { boundedTaskText, taskKey } from '../shared/room-task.js'
 import type { TaskOp } from '../shared/room-task.js'
 import { safeId } from './teammate-store.js'
+import { replaceFile } from './replace-file.js'
 
 /**
  * Rooms: a named set of teammates and the posts a person made to all of
@@ -368,7 +369,7 @@ export function createRoomStore(options: {
       await handle.close()
     }
     try {
-      await rename(temporary, path)
+      await replaceFile(temporary, path)
     } catch (error) {
       await unlink(temporary).catch(() => undefined)
       throw error

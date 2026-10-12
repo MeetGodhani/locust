@@ -5,6 +5,7 @@ import { isAbsolute, join } from 'node:path'
 
 import type { PublicGroup } from '../shared/ipc.js'
 import { isTeammateRoute } from './teammate-store.js'
+import { replaceFile } from './replace-file.js'
 
 /**
  * Groups: named sets of conversations, per folder.
@@ -298,7 +299,7 @@ export function createGroupStore(options: {
       await handle.close()
     }
     try {
-      await rename(temporary, path)
+      await replaceFile(temporary, path)
     } catch (error) {
       await unlink(temporary).catch(() => undefined)
       throw error

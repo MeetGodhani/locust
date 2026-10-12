@@ -1,9 +1,10 @@
 import { execFile } from 'node:child_process'
 import { randomBytes, timingSafeEqual } from 'node:crypto'
-import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import { join } from 'node:path'
 import type { LocustMcpState } from '../shared/locust-mcp.js'
+import { replaceFile } from './replace-file.js'
 
 export const MCP_CONNECTION_FILE = 'locust-mcp-connection.json'
 export const MCP_SETTINGS_FILE = 'locust-mcp.json'
@@ -112,7 +113,7 @@ export function createLocustMcpHost(options: {
   const save = async (): Promise<void> => {
     await mkdir(options.directory, { recursive: true })
     await writeFile(settings + '.tmp', JSON.stringify({ enabled: server !== undefined, ownMode }), 'utf8')
-    await rename(settings + '.tmp', settings)
+    await replaceFile(settings + '.tmp', settings)
   }
   const stop = async (): Promise<void> => {
     token = undefined
@@ -143,7 +144,7 @@ export function createLocustMcpHost(options: {
       // No bearer bytes are written until the account-only ACL is in place.
       await (options.protectFile ?? privateMcpFile)(temp)
       await writeFile(temp, JSON.stringify({ url: `http://127.0.0.1:${String(address.port)}/tools/call`, token: next }), { mode: 0o600 })
-      await rename(temp, connection)
+      await replaceFile(temp, connection)
       token = next
     } catch {
       await stop()

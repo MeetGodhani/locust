@@ -1,8 +1,9 @@
-import { readFile, rename, writeFile } from 'node:fs/promises'
+import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
 import type { AcpCapabilities } from '@teammate/runtime-adapters'
 import type { LocalRuntimeId, PublicAgentCapabilities } from '../shared/ipc.js'
+import { replaceFile } from './replace-file.js'
 
 /**
  * WHAT EACH ACP AGENT LAST SAID IT CAN DO (W12, 0.566).
@@ -68,7 +69,7 @@ export function createAcpCapabilitiesStore(options: { readonly rootDirectory: st
       .then(async () => {
         const temp = `${path}.${String(process.pid)}.tmp`
         await writeFile(temp, body, 'utf8')
-        await rename(temp, path)
+        await replaceFile(temp, path)
       })
       .catch(() => undefined)
   }

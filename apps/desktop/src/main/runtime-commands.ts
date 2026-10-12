@@ -1,7 +1,8 @@
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 
 import type { RuntimeCommandInfo } from '@teammate/runtime-adapters'
+import { replaceFile } from './replace-file.js'
 
 /**
  * EACH RUNTIME'S OWN SLASH COMMANDS, IN THE `/` MENU (0.426).
@@ -118,7 +119,7 @@ export function createRuntimeCommands(options: { readonly file: string }): Runti
       const temporary = `${options.file}.tmp`
       await mkdir(dirname(options.file), { recursive: true })
       await writeFile(temporary, JSON.stringify({ schemaVersion: 1, byRuntime: held }), 'utf8')
-      await rename(temporary, options.file)
+      await replaceFile(temporary, options.file)
       return true
     },
     isCommand(runtime, prompt) {

@@ -1,7 +1,8 @@
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { isVoiceMode, type VoiceSettings, type VoiceSettingsResult } from '../shared/voice.js'
 import type { SecretBox } from './own-models.js'
+import { replaceFile } from './replace-file.js'
 
 /** Separate from public workspace settings: an OS-account-encrypted key never leaves main. */
 export function createVoiceSettingsStore(directory: string, secrets: SecretBox) {
@@ -47,7 +48,7 @@ export function createVoiceSettingsStore(directory: string, secrets: SecretBox) 
         await mkdir(directory, { recursive: true })
         const temp = path + '.tmp'
         await writeFile(temp, JSON.stringify(row), 'utf8')
-        await rename(temp, path)
+        await replaceFile(temp, path)
         return { ok: true, settings: publicOf(row) }
       } catch { return { ok: false, message: 'Voice typing settings could not be saved. Your message is unchanged.' } }
     })

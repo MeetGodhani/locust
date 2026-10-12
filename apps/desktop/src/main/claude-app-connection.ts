@@ -1,10 +1,11 @@
 import { execFile } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
 import { constants } from 'node:fs'
-import { access, chmod, copyFile, lstat, mkdir, readFile, realpath, rename, rm, stat, writeFile } from 'node:fs/promises'
+import { access, chmod, copyFile, lstat, mkdir, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 
 import type { ClaudeAppConnection } from '../shared/locust-mcp.js'
+import { replaceFile } from './replace-file.js'
 
 /**
  * LOCUST IN THE CLAUDE APP, IN ONE PRESS (0.740).
@@ -217,7 +218,7 @@ export function createClaudeAppConnector(options: {
             if (error.code !== 'EEXIST') throw error
           })
         }
-        await rename(temp, path)
+        await replaceFile(temp, path)
         return { ok: true }
       } catch {
         await rm(temp, { force: true }).catch(() => undefined)

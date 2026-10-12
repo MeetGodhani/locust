@@ -1,7 +1,8 @@
-import { readFile, rename, writeFile } from 'node:fs/promises'
+import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
 import type { RuntimeBinaryFacts, RuntimeFactsCache } from '@teammate/runtime-adapters'
+import { replaceFile } from './replace-file.js'
 
 /**
  * What each runtime's CLI said about itself, kept between launches.
@@ -119,7 +120,7 @@ export function createRuntimeFactsStore(options: {
         const binaries = [...held.values()].sort((left, right) => left.at - right.at).slice(-MAX_REMEMBERED_BINARIES)
         const temp = `${path}.${String(process.pid)}.tmp`
         await writeFile(temp, JSON.stringify({ schemaVersion: SCHEMA_VERSION, binaries }), 'utf8')
-        await rename(temp, path)
+        await replaceFile(temp, path)
       })
       .catch(() => {
         // A cache that cannot be written is a cache that is not used next

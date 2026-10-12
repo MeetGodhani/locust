@@ -1,8 +1,9 @@
 import { readFileSync, statSync } from 'node:fs'
-import { mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, resolve } from 'node:path'
 
 import { workspaceIdFor } from './workspace.js'
+import { replaceFile } from './replace-file.js'
 
 /**
  * EVERY FOLDER LOCUST HAS WORKED IN, BY ID AND PATH (0.458).
@@ -151,7 +152,7 @@ export function createFolderRegistry(options: { readonly file: string; readonly 
       await mkdir(dirname(options.file), { recursive: true })
       const body: FoldersFile = { schemaVersion: 1, folders }
       await writeFile(`${options.file}.tmp`, `${JSON.stringify(body, null, 2)}\n`, 'utf8')
-      await rename(`${options.file}.tmp`, options.file)
+      await replaceFile(`${options.file}.tmp`, options.file)
     }).catch(() => undefined)
     return writing
   }

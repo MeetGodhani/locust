@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { constants as fsConstants } from 'node:fs'
-import { mkdir, open, readFile, rename, unlink } from 'node:fs/promises'
+import { mkdir, open, readFile, unlink } from 'node:fs/promises'
 import { isAbsolute, join } from 'node:path'
 
 import type { MemoryScope, PublicForgottenMemory, PublicMemory } from '../shared/ipc.js'
@@ -9,6 +9,7 @@ import { secretIn, secretRefusal } from '../shared/secrets.js'
 import { MAX_MERGED } from '../shared/memory-tidy.js'
 import type { TidySuggestion } from '../shared/memory-tidy.js'
 import { safeId } from './teammate-store.js'
+import { replaceFile } from './replace-file.js'
 
 /**
  * Team memory on disk: one file for every folder, in the app's own data
@@ -373,7 +374,7 @@ export function createMemoryStore(options: {
       await handle.close()
     }
     try {
-      await rename(temporary, path)
+      await replaceFile(temporary, path)
     } catch (error) {
       await unlink(temporary).catch(() => undefined)
       throw error

@@ -1,9 +1,10 @@
 import { randomUUID } from 'node:crypto'
-import { mkdir, readdir, readFile, rename, stat, writeFile } from 'node:fs/promises'
+import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 
 import type { MissionLedger, MissionLedgerMetadata } from '@teammate/mission-store'
 import type { MissionRuntimeId, NormalizedRuntimeEvent } from '@teammate/runtime-adapters'
+import { replaceFile } from './replace-file.js'
 
 /**
  * WHAT HAPPENED IN THE TERMINAL COMES BACK (0.391).
@@ -285,7 +286,7 @@ export function createTerminalImports(file: string): TerminalImports {
       // Whole or not at all: a torn file would read as nothing brought back.
       const partial = `${file}.${String(process.pid)}.tmp`
       await writeFile(partial, JSON.stringify(all), 'utf8')
-      await rename(partial, file)
+      await replaceFile(partial, file)
     }
   }
 }

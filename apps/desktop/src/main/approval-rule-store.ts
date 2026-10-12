@@ -1,9 +1,10 @@
 import { randomUUID } from 'node:crypto'
 import { constants as fsConstants } from 'node:fs'
-import { mkdir, open, readFile, rename, unlink } from 'node:fs/promises'
+import { mkdir, open, readFile, unlink } from 'node:fs/promises'
 import { isAbsolute, join } from 'node:path'
 
 import type { ApprovalRule, RuleEffect, RuleKind } from '../shared/approval-rules.js'
+import { replaceFile } from './replace-file.js'
 
 /**
  * SAVED APPROVAL RULES, remembered (0.521, shared/approval-rules.ts).
@@ -119,7 +120,7 @@ export function createApprovalRuleStore(options: { readonly rootDirectory: strin
       await handle.close()
     }
     try {
-      await rename(temporary, path)
+      await replaceFile(temporary, path)
     } catch (error) {
       await unlink(temporary).catch(() => undefined)
       throw error

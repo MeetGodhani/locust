@@ -1,9 +1,10 @@
 import { constants as fsConstants } from 'node:fs'
 import { randomUUID } from 'node:crypto'
-import { mkdir, open, readFile, rename, unlink } from 'node:fs/promises'
+import { mkdir, open, readFile, unlink } from 'node:fs/promises'
 import { isAbsolute, join } from 'node:path'
 
 import type { NormalizedRuntimeEvent } from '@teammate/runtime-adapters'
+import { replaceFile } from './replace-file.js'
 
 /**
  * WHAT EACH CLI SESSION HAS BEEN TOLD (A2.5).
@@ -164,7 +165,7 @@ export function createBriefSessions(options: {
       await handle.close()
     }
     try {
-      await rename(temporary, path)
+      await replaceFile(temporary, path)
     } catch (error) {
       await unlink(temporary).catch(() => undefined)
       throw error

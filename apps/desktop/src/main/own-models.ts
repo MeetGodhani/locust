@@ -1,10 +1,11 @@
 import { randomBytes } from 'node:crypto'
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
 import type { OpenCodeProvider } from '@teammate/runtime-adapters'
 
 import type { PublicModel, PublicOwnModel } from '../shared/ipc.js'
+import { replaceFile } from './replace-file.js'
 
 /**
  * YOUR OWN MODELS (0.357).
@@ -171,7 +172,7 @@ export function createOwnModelStore(options: {
     await mkdir(options.rootDirectory, { recursive: true })
     const temporary = `${path}.${String(process.pid)}.tmp`
     await writeFile(temporary, JSON.stringify(file), 'utf8')
-    await rename(temporary, path)
+    await replaceFile(temporary, path)
   }
   const decryptKey = (model: StoredOwnModel): string | undefined => {
     if (model.key === undefined) return undefined

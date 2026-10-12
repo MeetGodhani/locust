@@ -10,6 +10,7 @@ import type {
   SkillLibrarySkill,
   SkillLibrarySource
 } from '../shared/ipc.js'
+import { replaceFile } from './replace-file.js'
 
 /**
  * SKILLS FROM A GITHUB REPOSITORY (0.710).
@@ -298,7 +299,7 @@ export function createSkillLibrary(options: { readonly root: string; readonly fe
     await mkdir(options.root, { recursive: true })
     const temporary = `${recordFile}.${randomUUID()}.tmp`
     await writeFile(temporary, `${JSON.stringify(record, null, 2)}\n`, 'utf8')
-    await rename(temporary, recordFile)
+    await replaceFile(temporary, recordFile)
   }
 
   const splitSource = (source: string): { readonly owner: string; readonly repo: string } => {

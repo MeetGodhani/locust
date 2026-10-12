@@ -1,4 +1,5 @@
-import { readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { readFile, rm, writeFile } from 'node:fs/promises'
+import { replaceFile } from './replace-file.js'
 
 /**
  * A CURSOR RUN LEAVES THE PERSON'S OWN CURSOR AS IT FOUND IT (0.431).
@@ -95,7 +96,7 @@ export function createCursorDefaultModel(options: {
     const indent = /^\{\r?\n( +)"/.exec(now.text)?.[1]?.length ?? 0
     const temporary = `${options.file}.locust-${String(process.pid)}.tmp`
     await writeFile(temporary, `${JSON.stringify(restored, null, indent)}${now.text.endsWith('\n') ? '\n' : ''}`, 'utf8')
-    await rename(temporary, options.file)
+    await replaceFile(temporary, options.file)
     const back = await read()
     const held = back !== undefined && FIELDS.every((field) => same(fieldsOf(back.config)[field], record.fields[field]))
     options.note?.(held ? 'the Cursor default put back as it was before the run' : 'the Cursor default could not be read back after putting it back')

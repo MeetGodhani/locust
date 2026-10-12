@@ -1,8 +1,9 @@
 import { randomUUID } from 'node:crypto'
-import { mkdir, open, rename, stat, unlink } from 'node:fs/promises'
+import { mkdir, open, stat, unlink } from 'node:fs/promises'
 import { join } from 'node:path'
 import { savedQueuedMessages } from '../shared/queued-messages.js'
 import type { SavedQueuedMessage } from '../shared/queued-messages.js'
+import { replaceFile } from './replace-file.js'
 
 const MAX_BYTES = 4 * 1024 * 1024
 
@@ -42,7 +43,7 @@ export function createQueuedMessageStore(root: string) {
       try {
         const file = await open(temporary, 'wx', 0o600)
         try { await file.writeFile(text, 'utf8'); await file.sync() } finally { await file.close() }
-        await rename(temporary, path)
+        await replaceFile(temporary, path)
         // Catch a failed replacement rather than acknowledging an absent file.
         await stat(path)
       } finally { await unlink(temporary).catch(() => undefined) }

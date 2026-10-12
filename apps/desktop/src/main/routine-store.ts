@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { constants as fsConstants } from 'node:fs'
-import { mkdir, open, readFile, rename, unlink } from 'node:fs/promises'
+import { mkdir, open, readFile, unlink } from 'node:fs/promises'
 import { isAbsolute, join } from 'node:path'
 
 import { MAX_GOAL_TRIES } from '../shared/ipc.js'
@@ -15,6 +15,7 @@ import { isTeammateRoute, safeId } from './teammate-store.js'
 import type { RoutineExecution } from '../shared/routine-recovery.js'
 import { routineAwaitsReview } from '../shared/routine-recovery.js'
 import { STEP_BUDGET } from '../shared/step-budget.js'
+import { replaceFile } from './replace-file.js'
 
 /**
  * Routines: conversations a person saved as steps a teammate can replay.
@@ -368,7 +369,7 @@ export function createRoutineStore(options: { readonly rootDirectory: string }):
       await handle.close()
     }
     try {
-      await rename(temporary, path)
+      await replaceFile(temporary, path)
     } catch (error) {
       await unlink(temporary).catch(() => undefined)
       throw error

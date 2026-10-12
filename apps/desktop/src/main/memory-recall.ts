@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto'
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { replaceFile } from './replace-file.js'
 
 /**
  * MEMORY RECALL BY MEANING, on this machine, with no network.
@@ -209,7 +210,7 @@ export function createMemoryRecall(input: {
       await mkdir(dirname(input.cacheFile), { recursive: true })
       // Whole or not at all: a half-written cache would be read as empty.
       await writeFile(`${input.cacheFile}.tmp`, body)
-      await rename(`${input.cacheFile}.tmp`, input.cacheFile)
+      await replaceFile(`${input.cacheFile}.tmp`, input.cacheFile)
     }).catch((error: unknown) => {
       input.note?.(`memory recall could not keep its cache: ${error instanceof Error ? error.message : String(error)}`)
     })
