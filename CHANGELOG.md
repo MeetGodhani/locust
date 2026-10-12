@@ -11,6 +11,13 @@ Settings shows this file as What's new. An entry may group its changes under
 about when they arrive on it carries `<!-- big -->` on the line under its
 heading: the home screen then shows it once, as a splash.
 
+## 0.757.0 - 2026-10-12
+
+### Fixed
+
+- **A free model OpenCode turns away says so, and offers the next one.** When OpenCode's free service refuses a free model (on October 12 it refused every one of them for a while), Locust now says that's on OpenCode's side and offers the next free model in one press. It used to tell you to sign in, which free models never need. New conversations also stop starting on the refused model for a while.
+- **A teammate who just finished says so.** Her card on Home says "last worked just now" the moment a run ends, and a finished conversation is dated by when it ended rather than when it was sent.
+
 ## 0.756.0 - 2026-10-12
 <!-- big -->
 
