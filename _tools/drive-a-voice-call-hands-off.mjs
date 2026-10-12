@@ -110,6 +110,9 @@ try {
   // Ended, the call folds to one row in Wren's conversation; opened, it says every line (0.747).
   const folded = String(await drive.evaluate(`document.querySelector('.lc-callrow')?.innerText.replace(/\\s+/g, ' ').trim() ?? ''`))
   check('ended, the call folds to one row', /Call with Wren/.test(folded) && /lines? said/.test(folded), folded)
+  // A call that asked Wren one thing has that turn right above it: no summary repeats it (0.755).
+  const summary = String(await drive.evaluate(`document.querySelector('.lc-thread .lc-calltodos')?.innerText ?? ''`))
+  check('one ask, right above: no summary card repeats it', summary === '', summary)
   await drive.evaluate(`(async () => { document.querySelector('.lc-callrow')?.click(); await new Promise((r) => setTimeout(r, 500)) })()`)
   const ended = { lines: JSON.parse(String(await drive.evaluate(THREAD_LINES))) }
   // Windows' voice saying "Wren" is often heard as "Ren".

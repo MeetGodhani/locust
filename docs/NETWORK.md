@@ -107,7 +107,11 @@ reaches them for any of your runs. One that only reads answers at once; one that
 would send, change or buy something waits for your Allow in the call's strip.
 Add-ons your computer runs as programs, plugins and hooks stay switched off for
 that thread. Nothing is sent before you press Talk, and End, leaving the
-conversation, or closing Locust ends it.
+conversation, or closing Locust ends it. Talk's keys (0.755, Ctrl+Alt+Space unless you change
+them) are a press of Talk from any app: Windows tells Locust they were pressed,
+and nothing leaves this computer until the call they start does. A call's
+summary of its to-dos is drawn from what this window already knows, and sends
+nothing.
 
 **Hearing a voice (0.751).** Hear it, beside a voice picker, plays that voice
 saying hello. The first time for each voice it is a call like Talk's, a few

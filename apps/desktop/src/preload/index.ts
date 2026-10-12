@@ -4,6 +4,7 @@ import { VOICE_READY, VOICE_DOWNLOAD, VOICE_TRANSCRIBE, VOICE_CANCEL, VOICE_PROG
 import { CALLS_LIST, CALLS_SAVE } from '../shared/calls.js'
 import { VOICE_CALL_ANSWER, VOICE_CALL_AVAILABLE, VOICE_CALL_EVENT, VOICE_CALL_PREVIEW, VOICE_CALL_SET_VOICE, VOICE_CALL_START, VOICE_CALL_STOP, VOICE_CALL_VOICES, VOICE_PREVIEW_SAVE, VOICE_PREVIEW_SAVED, VOICE_PREVIEW_TRIGGER } from '../shared/voice-call.js'
 import type { VoiceCallEvent } from '../shared/voice-call.js'
+import { TALK_SHORTCUT_PENDING, TALK_SHORTCUT_PRESSED, TALK_SHORTCUT_READ, TALK_SHORTCUT_SET, type TalkShortcutPress } from '../shared/talk-shortcut.js'
 import { REMOTE_CONTROL_GET_CHANNEL, REMOTE_CONTROL_SET_CHANNEL, type RemoteControlState } from '../shared/claude-remote-control.js'
 import { FOLDER_CHANGES_CHANNEL, FOLDER_COMMIT_CHANNEL, type CommitResult, type FolderChanges } from '../shared/folder-commit.js'
 import {
@@ -425,6 +426,16 @@ const desktopApi: DesktopApi = {
   calls: {
     save: (call) => ipcRenderer.invoke(CALLS_SAVE, call),
     list: (missionIds) => ipcRenderer.invoke(CALLS_LIST, missionIds)
+  },
+  talkShortcut: {
+    read: () => ipcRenderer.invoke(TALK_SHORTCUT_READ),
+    set: (keys) => ipcRenderer.invoke(TALK_SHORTCUT_SET, keys),
+    pending: () => ipcRenderer.invoke(TALK_SHORTCUT_PENDING),
+    onPressed: (listener) => {
+      const receive = (_event: Electron.IpcRendererEvent, press: TalkShortcutPress): void => { listener(press) }
+      ipcRenderer.on(TALK_SHORTCUT_PRESSED, receive)
+      return () => { ipcRenderer.removeListener(TALK_SHORTCUT_PRESSED, receive) }
+    }
   },
   voiceCall: {
     available: () => ipcRenderer.invoke(VOICE_CALL_AVAILABLE),

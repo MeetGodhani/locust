@@ -3528,6 +3528,8 @@ export interface DesktopApi {
   readonly voiceCall?: import('./voice-call.js').VoiceCallApi
   /** What was said on each call with a teammate, kept with its conversation (0.747). */
   readonly calls?: import('./calls.js').CallsApi
+  /** The keys that start Talk from any app (0.755). */
+  readonly talkShortcut?: import('./talk-shortcut.js').TalkShortcutApi
   readonly locustMcp?: import('./locust-mcp.js').LocustMcpApi
   readQueuedMessages(): Promise<QueuedMessagesResponse>
   writeQueuedMessages(rows: readonly SavedQueuedMessage[]): Promise<QueuedMessagesResponse>

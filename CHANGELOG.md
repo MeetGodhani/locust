@@ -11,6 +11,14 @@ Settings shows this file as What's new. An entry may group its changes under
 about when they arrive on it carries `<!-- big -->` on the line under its
 heading: the home screen then shows it once, as a splash.
 
+## 0.755.0 - 2026-10-12
+<!-- big -->
+
+### New
+
+- **Start Talk from any app.** Press Ctrl+Alt+Space anywhere, even with Locust minimized or in the tray. Locust comes up and starts Talk: with the teammate whose conversation is open, or with ChatGPT's voice on Home. Press the keys again to end the call. Change the keys or turn them off in Settings > General > Talk from any app. They work once Talk is ready on this computer, and Settings says if another app already uses them.
+- **Each Talk call sums up what it handed out.** Every to-do a call starts shows who has it, what was asked and how it's going (Working, Needs you, Done, Failed), as it happens. When a call from Home ends, its summary comes first, with Open beside each to-do. A call with a teammate that handed out more than one thing, or something to another teammate, keeps its summary in their conversation, where the call ends.
+
 ## 0.754.0 - 2026-10-12
 
 ### New

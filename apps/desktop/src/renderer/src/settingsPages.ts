@@ -85,10 +85,12 @@ export const SETTINGS_PAGES: readonly SettingsPage[] = [
     label: 'General',
     group: 'Locust',
     icon: 'settings',
-    headings: ['Let your other AI apps use Locust', 'Voice typing', 'Startup', 'Updates', 'Report a problem', 'Help'],
+    headings: ['Let your other AI apps use Locust', 'Voice typing', 'Talk from any app', 'Startup', 'Updates', 'Report a problem', 'Help'],
     alsoKnownAs: {
       'Let your other AI apps use Locust': ['MCP server', 'stdio', 'Claude Code', 'Codex', 'Cursor', 'other apps'],
       'Voice typing': ['dictation', 'microphone', 'speech', 'whisper', 'transcription'],
+      // The keys that start Talk from any app (0.755).
+      'Talk from any app': ['shortcut', 'hotkey', 'keyboard shortcut', 'voice call', 'Ctrl+Alt+Space'],
       Startup: ['login item', 'tray', 'keep running', 'sign-in'],
       Updates: ['version', 'upgrade'],
       'Report a problem': ['bug', 'feedback', 'crash'],

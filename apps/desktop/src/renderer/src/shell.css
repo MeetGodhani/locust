@@ -21089,6 +21089,10 @@ textarea {
 /* The Claude app line in Settings (0.740): a line of its own, spaced from the sub-setting above it, and its buttons side by side. */
 .lc-claudeapp { margin-top: var(--lc-space-4); }
 .lc-claudeapp__acts { display: inline-flex; align-items: center; gap: var(--lc-space-2); flex: 0 0 auto; }
+/* Talk from any app (0.755): the keys, pressed to change them, beside the switch. */
+.lc-talkkeys { display: inline-flex; align-items: center; gap: var(--lc-space-3); flex: 0 0 auto; }
+.lc-talkkeys__keys { font-family: var(--lc-font-mono); font-size: var(--lc-text-description); }
+.lc-talkkeys__keys.is-recording { color: var(--lc-lime-text); border-color: var(--lc-lime-border); }
 .lc-call__line.is-handed .lc-call__who { color: var(--lc-text-primary); }
 .lc-call__who { margin-right: 6px; font-size: 12px; font-weight: 600; }
 .lc-call__message { margin: 0; font-size: 12px; color: var(--lc-amber-text); }
@@ -21177,6 +21181,19 @@ textarea {
 .lc-callrow__open { flex: none; font-size: var(--lc-text-description); color: var(--lc-text-secondary); }
 /* A connector's question on a call with a teammate (0.749): the approval card, at the call's place in the thread. */
 .lc-callask { align-self: stretch; }
+/*
+ * A CALL'S TO-DOS (0.755, CallWords.tsx CallTodoList): one row each -- who has it, what was asked, how it is going,
+ * Open -- in the strip during and after a call from Home, and as the summary where a call with a teammate ends in
+ * their conversation, a card like the folded call's own row.
+ */
+.lc-calltodos { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.lc-calltodos__label { margin: 0; font-size: var(--lc-text-mono-label); letter-spacing: var(--lc-tracking-label); text-transform: uppercase; color: var(--lc-text-muted); }
+.lc-calltodos__list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; }
+.lc-calltodo { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; column-gap: 8px; min-height: 26px; font-size: 13px; line-height: 1.45; }
+.lc-calltodo__who { font-size: 12px; font-weight: 600; color: var(--lc-text-primary); }
+.lc-calltodo__task { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--lc-text-secondary); }
+.lc-calltodo__open { padding: 1px var(--lc-space-3); font-size: var(--lc-text-description); }
+.lc-thread .lc-calltodos { align-self: stretch; padding: 10px 14px; border: 1px solid var(--lc-border-card); border-radius: var(--lc-radius-card); background: var(--lc-bg-terminal); }
 @media (prefers-reduced-motion: reduce) { .lc-call__bar { transition: none; } }
 
 /*

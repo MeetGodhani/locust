@@ -228,7 +228,10 @@ import type { TeammateStatusView } from './status.js'
 import { shortAgo } from './railFlyout.js'
 import type { WorktreeRemoval } from './components/WorktreeRow.js'
 import { approvalsOfLiveRuns } from './approvalsOfLiveRuns.js'
-import { addLiveCallTurn, liveCall, useCallsSaved, useLiveCall } from './liveCall.js'
+import { addCallHandOff, addLiveCallTurn, liveCall, useCallHandOffs, useCallsSaved, useLiveCall } from './liveCall.js'
+import { CallTodosContext, callTodoState, type CallTodoState, type CallTodos } from './callTodos.js'
+import { pressTalk } from './talkPress.js'
+import type { TalkShortcutPress } from '../../shared/talk-shortcut.js'
 import type { SavedCall } from '../../shared/calls.js'
 
 /** The board's trash set (0.585): the sidebar's rows already leave deleted conversations out. */
@@ -3002,6 +3005,11 @@ export default function App(): ReactElement {
         // A turn a call with a teammate started (0.747): kept with the call, so its words go around it.
         if (update.startedBy?.kind === 'mcp' && update.startedBy.via === 'voice' && update.teammateId !== undefined && update.teammateId === liveCall()?.teammateId) {
           addLiveCallTurn(update.missionId)
+        }
+        // And every turn a call started, to anyone, is one of its to-dos (0.755): listed in the strip, summed up after.
+        if (update.startedBy?.kind === 'mcp' && update.startedBy.via === 'voice' && update.teammateId !== undefined) {
+          const teammateId = update.teammateId
+          addCallHandOff({ missionId: update.missionId, teammateId, name: teammatesRef.current.find((entry) => entry.teammateId === teammateId)?.name ?? '', task: update.prompt, at: Date.now() })
         }
         // A call with a teammate who had no conversation on screen (0.746): its first ask starts one, and the window
         // opens it, as a message the person typed would. A hand-off to someone else in the same call stays a row.
@@ -6596,6 +6604,29 @@ export default function App(): ReactElement {
     return () => window.clearTimeout(clear)
   }, [rowNotice])
   /*
+   * THE KEYS THAT START TALK FROM ANY APP (0.755, shared/talk-shortcut.ts): main brings the window up, and the Talk
+   * button on screen takes the press -- or the chat box's, once the window is back on it. Talk not ready says why,
+   * where the other one-press answers are said, instead of a call that would fail.
+   */
+  const [talkNotice, setTalkNotice] = useState<string>()
+  useEffect(() => {
+    const shortcut = window.desktop?.talkShortcut
+    if (shortcut === undefined) return
+    const take = (press: TalkShortcutPress): void => {
+      if (press.why !== undefined) { setScreen('workroom'); setTalkNotice(`Talk isn’t ready: ${press.why}`); return }
+      if (!pressTalk()) setScreen('workroom')
+    }
+    const stop = shortcut.onPressed(take)
+    // A press made while the window was opening (Locust started in the tray).
+    void shortcut.pending().then((press) => { if (press !== undefined) take(press) }).catch(() => undefined)
+    return stop
+  }, [])
+  useEffect(() => {
+    if (talkNotice === undefined) return
+    const clear = window.setTimeout(() => setTalkNotice(undefined), 8_000)
+    return () => window.clearTimeout(clear)
+  }, [talkNotice])
+  /*
    * Why a conversation did not open in a terminal (0.387), said where the
    * delete refusal is said, and gone on its own: it answers one press.
    */
@@ -7450,6 +7481,31 @@ export default function App(): ReactElement {
     return [...savedCalls.filter((call) => call.callId !== callNow?.callId), ...(here && callNow !== undefined ? [{ ...callNow, live: callNow.phase !== 'ended' }] : [])]
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [savedCalls, callNow, conversationTurnKey])
+  /*
+   * HOW EACH OF A CALL'S TO-DOS IS GOING (0.755, callTodos.ts): the call on now's and those of the calls in the thread
+   * on screen. Worked out on every render only while there are any, and handed down as a map that changes when a
+   * to-do's state does -- not with every word a teammate streams.
+   */
+  const handOffsNow = useCallHandOffs()
+  const callTodoIds = useMemo(
+    () => [...new Set([...handOffsNow, ...threadCalls.flatMap((call) => call.handed ?? [])].map((handOff) => handOff.missionId))],
+    [handOffsNow, threadCalls]
+  )
+  let callTodoKey = ''
+  if (callTodoIds.length > 0) {
+    const wanted = new Set(callTodoIds)
+    const runPhase = new Map<string, string>()
+    for (const [key, run] of runs) {
+      const missionId = run.data?.missionId ?? key
+      if (wanted.has(missionId)) runPhase.set(missionId, run.phase)
+    }
+    const waiting = new Set(needsYouItems.flatMap((item) => ('missionId' in item && typeof item.missionId === 'string' ? [item.missionId] : [])))
+    callTodoKey = callTodoIds.map((id) => `${id}=${callTodoState({ ...(runPhase.has(id) ? { runPhase: runPhase.get(id)! } : {}), ...(historyById.get(id)?.phase === undefined ? {} : { recordPhase: historyById.get(id)!.phase }), needsYou: waiting.has(id) })}`).join(' ')
+  }
+  const callTodos = useMemo<CallTodos>(() => ({
+    states: new Map(callTodoKey.length === 0 ? [] : callTodoKey.split(' ').map((pair) => pair.split('=') as [string, CallTodoState])),
+    open: (missionId) => { openMissionRef.current(missionId) }
+  }), [callTodoKey])
   // Which teammate is replaying a routine, and which step it is on. DERIVED
   // from the runs that are actually live rather than tracked alongside them:
   // a step that ended stops being reported because its run stopped running,
@@ -7546,6 +7602,7 @@ export default function App(): ReactElement {
    * rule, whichever of the two is occupying the space.
    */
   return (
+    <CallTodosContext.Provider value={callTodos}>
     <ApprovalRuleContext.Provider value={ruleOfCard}>
     <div className={`lc-shell${layoutMode === 'compact' ? ' is-compact' : ''}${changesOpen && screen === 'workroom' && viewingFile === undefined && viewerRefusal === undefined && besideRun === undefined && reviewing === undefined ? ' has-viewer has-changes' : ''}${(viewingFile !== undefined || viewerRefusal !== undefined || besideRun !== undefined || reviewing !== undefined) && screen === 'workroom' ? ' has-viewer' :inspectorOpen && liveRun !== undefined && screen === 'workroom' ? ' has-inspector' : ''}`}>
       <TitleBar
@@ -8745,6 +8802,12 @@ export default function App(): ReactElement {
               <span>{rowNotice}</span>
             </div>
           )}
+          {talkNotice !== undefined && (
+            <div className="lc-diagnostic lc-tone-amber" role="alert" data-talk-notice="">
+              <Icon name="waveform" size={12} />
+              <span>{talkNotice}</span>
+            </div>
+          )}
           {lastRestore !== undefined && (
             <div className={`lc-diagnostic ${lastRestore.ok ? 'lc-tone-green' : 'lc-tone-amber'} lc-diagnostic--row lc-restored`} role="status">
               <Icon name={lastRestore.ok ? 'check' : 'shield'} size={12} />
@@ -9562,5 +9625,6 @@ export default function App(): ReactElement {
       )}
     </div>
     </ApprovalRuleContext.Provider>
+    </CallTodosContext.Provider>
   )
 }

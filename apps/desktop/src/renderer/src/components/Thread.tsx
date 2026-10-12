@@ -1131,12 +1131,17 @@ onResume,
     () => callPlacements(calls ?? [], [...earlierTurns.map((turn) => turn.missionId), ...(shownMissionId === undefined ? [] : [shownMissionId])]),
     [calls, earlierTurns, shownMissionId]
   )
+  // The turns on screen, for a call's summary (0.755): a to-do among them is right here, with nothing to open.
+  const turnsHere = useMemo(
+    () => new Set([...earlierTurns.map((turn) => turn.missionId), ...(shownMissionId === undefined ? [] : [shownMissionId])]),
+    [earlierTurns, shownMissionId]
+  )
   const [openCalls, setOpenCalls] = useState<ReadonlySet<string>>(() => new Set())
   const callsAt = (place: CallPlace) => (callPlaces.get(place) ?? []).map((piece) => {
     const source = (calls ?? []).find((call) => call.callId === piece.call.callId)
     const id = piece.call.callId
     return <CallWords key={`${id}-${place}`} piece={{ ...piece, live: source?.live === true, ...(source?.partial === undefined ? {} : { partial: source.partial }), ...(source?.asks === undefined ? {} : { asks: source.asks }) }}
-      teammate={peers.self} open={openCalls.has(id)}
+      teammate={peers.self} open={openCalls.has(id)} here={turnsHere}
       onToggle={() => setOpenCalls((was) => { const next = new Set(was); if (next.has(id)) next.delete(id); else next.add(id); return next })} />
   })
   /*

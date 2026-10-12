@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react'
 
 import type { VoiceCallAskField, VoiceCallRole } from '../../shared/voice-call.js'
-import { MAX_CALL_LINE, MAX_CALL_LINES, MAX_CALL_TURNS, type SavedCall } from '../../shared/calls.js'
+import { MAX_CALL_LINE, MAX_CALL_LINES, MAX_CALL_TURNS, MAX_HANDED_TASK, isCallId, type SavedCall, type SavedCallHandOff } from '../../shared/calls.js'
 
 /*
  * THE CALL, WHERE THE THREAD CAN READ IT (0.747). The canvas Colin passed on 2026-10-11 ("im down ... just try it
@@ -71,13 +71,53 @@ export function keptCall(call: LiveCall, began: Partial<Record<VoiceCallRole, nu
     startedAt: call.startedAt, endedAt: call.endedAt ?? now,
     // At most the turns a saved call may hold: a call that asked more than 40 times was refused whole, and every word
     // on it was lost (0.753, bug hunt 2026-10-12, TK1). Lines said after the 40th are kept under it.
-    lines: [...call.lines, ...cutOff].slice(-MAX_CALL_LINES), turns: call.turns.slice(0, MAX_CALL_TURNS)
+    lines: [...call.lines, ...cutOff].slice(-MAX_CALL_LINES), turns: call.turns.slice(0, MAX_CALL_TURNS),
+    // Its to-dos, for the summary under it (0.755).
+    ...(call.handed === undefined || call.handed.length === 0 ? {} : { handed: call.handed.slice(0, MAX_CALL_TURNS) })
   }
 }
 
 /** A turn the call started: kept with its time, so the thread puts the call's words around it. */
 export function addLiveCallTurn(missionId: string, at = Date.now()): void {
   updateLiveCall((call) => call.turns.some((turn) => turn.missionId === missionId) ? call : { ...call, turns: [...call.turns, { missionId, at }] })
+}
+
+/*
+ * WHAT THE CALL ON NOW HANDED OUT (0.755): every to-do it started, to anyone -- a call from Home hands work to any
+ * teammate, a call with a teammate may hand some to another. The strip lists them as they start, and the summary
+ * says how each is going when the call ends; a call with a teammate keeps them, so its summary stays in their
+ * conversation. Begun again with each call.
+ */
+let handOffs: readonly SavedCallHandOff[] = []
+const handOffListeners = new Set<() => void>()
+const setHandOffs = (next: readonly SavedCallHandOff[]): void => {
+  handOffs = next
+  for (const listener of [...handOffListeners]) listener()
+}
+export function callHandOffs(): readonly SavedCallHandOff[] {
+  return handOffs
+}
+export function startCallHandOffs(): void {
+  if (handOffs.length > 0) setHandOffs([])
+}
+/**
+ * A to-do the call started. One already listed, past the most a call may keep, with no words, or with an id a kept
+ * call may not hold is left out -- a call holding it would be refused whole when it is saved.
+ */
+export function addCallHandOff(handOff: SavedCallHandOff): void {
+  const task = handOff.task.trim().slice(0, MAX_HANDED_TASK)
+  if (task.length === 0 || !isCallId(handOff.missionId) || !isCallId(handOff.teammateId)) return
+  if (handOffs.length >= MAX_CALL_TURNS || handOffs.some((one) => one.missionId === handOff.missionId)) return
+  const kept = { ...handOff, task, name: (handOff.name.trim() || 'Teammate').slice(0, 80) }
+  setHandOffs([...handOffs, kept])
+  updateLiveCall((call) => ({ ...call, handed: [...(call.handed ?? []), kept] }))
+}
+export function useCallHandOffs(): readonly SavedCallHandOff[] {
+  return useSyncExternalStore(
+    (listener) => { handOffListeners.add(listener); return () => { handOffListeners.delete(listener) } },
+    callHandOffs,
+    callHandOffs
+  )
 }
 
 function subscribe(listener: () => void): () => void {

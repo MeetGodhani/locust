@@ -1,7 +1,8 @@
-import { Fragment, useRef, useState } from 'react'
+import { Fragment, useContext, useRef, useState } from 'react'
 import type { ReactElement } from 'react'
 
-import { callLength, type CallPiece, type SavedCallLine } from '../../../shared/calls.js'
+import { callLength, type CallPiece, type SavedCallHandOff, type SavedCallLine } from '../../../shared/calls.js'
+import { CALL_TODO_WORDS, CallTodosContext, todoCount } from '../callTodos.js'
 import type { PublicTeammate } from '../../../shared/ipc.js'
 import type { VoiceCallRole } from '../../../shared/voice-call.js'
 import { CONNECTOR_NOT_UNDOABLE, dataSentLine } from '../../../shared/approval-data.js'
@@ -91,17 +92,57 @@ function CallAskCard({ ask, name }: { readonly ask: LiveCallAsk; readonly name: 
   </div>
 }
 
-export function CallWords({ piece, teammate, open, onToggle }: {
+/*
+ * A CALL'S TO-DOS (0.755, callTodos.ts): who has each, what was asked, how it is going, and -- for one whose turn is
+ * not already on screen -- a press that opens its conversation. The strip lists them during a call from Home and sums
+ * them up when it ends; a call with a teammate sums them up under its place in their conversation.
+ */
+export function CallTodoList({ handed, label, here, openable = true }: {
+  readonly handed: readonly SavedCallHandOff[]
+  readonly label: string
+  /** The turns of the conversation on screen: a to-do among them is right there, and has nothing to open. */
+  readonly here?: ReadonlySet<string>
+  /** False while the call is on: opening a conversation would leave the one the call lives in, and end it. */
+  readonly openable?: boolean
+}): ReactElement {
+  const { states, open } = useContext(CallTodosContext)
+  return <section className="lc-calltodos" aria-label={label}>
+    <p className="lc-calltodos__label lc-mono">{label}</p>
+    <ul className="lc-calltodos__list">
+      {handed.map((todo) => {
+        const words = CALL_TODO_WORDS[states.get(todo.missionId) ?? 'starting']
+        const opens = openable && here?.has(todo.missionId) !== true
+        return <li key={todo.missionId} className="lc-calltodo" data-call-todo={todo.missionId}>
+          <span className="lc-calltodo__who">{todo.name}</span>
+          <span className="lc-calltodo__task" title={todo.task}>{todo.task}</span>
+          <span className={`lc-status lc-status--${words.tone}`}>{words.label}</span>
+          {opens && <button type="button" className="lc-control lc-control--boxed lc-calltodo__open" onClick={() => { open(todo.missionId) }} aria-label={`Open ${todo.name}’s conversation: ${todo.task}`}>Open</button>}
+        </li>
+      })}
+    </ul>
+  </section>
+}
+
+export function CallWords({ piece, teammate, open, onToggle, here }: {
   readonly piece: CallPieceShown
   readonly teammate: PublicTeammate | undefined
   /** An ended call shows its words only when opened. */
   readonly open: boolean
   readonly onToggle: () => void
+  /** The turns of the conversation on screen, for the summary (0.755): a to-do among them has nothing to open. */
+  readonly here?: ReadonlySet<string>
 }): ReactElement {
   const { call, live } = piece
   const shut = !live && !open
   const said = call.lines.length
   const partial = live && piece.last ? piece.partial : undefined
+  /*
+   * The summary sums up: two or more to-dos, or one in another teammate's conversation. A call that asked one thing
+   * of this teammate has its turn right above, saying how it is going -- a card repeating it was clutter (the drive's
+   * frame, 2026-10-12).
+   */
+  const handed = call.handed ?? []
+  const summed = handed.length > 1 || handed.some((todo) => here?.has(todo.missionId) !== true)
   return <>
     {piece.first && (shut
       ? <button type="button" className="lc-callrow" onClick={onToggle} aria-expanded={false}>
@@ -126,5 +167,7 @@ export function CallWords({ piece, teammate, open, onToggle }: {
       && <Line key={`partial-${role}`} line={{ role, text: partial[role].trim(), at: Date.now() }} teammate={teammate} partial />)}
     {live && piece.last && (piece.asks ?? []).map((ask) => <CallAskCard key={ask.id} ask={ask} name={call.name} />)}
     {!shut && !live && piece.last && <div className="lc-thread__marker lc-mono">{`Call ended · ${callLength(call)}`}</div>}
+    {/* The summary, where the call ends, open or folded (0.755): what it handed out and how each is going. */}
+    {!live && piece.last && summed && <CallTodoList handed={handed} label={`From the call · ${todoCount(handed.length)}`} {...(here === undefined ? {} : { here })} />}
   </>
 }

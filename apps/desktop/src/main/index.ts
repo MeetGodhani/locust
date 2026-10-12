@@ -6,10 +6,12 @@ import { ownGitArgs } from './git-guard.js'
 import { APP_USER_MODEL_ID, DEVELOPMENT_APP_USER_MODEL_ID, mayShowToasts, repairStartMenuShortcut, sweepStaleElectronShortcuts } from './stale-shortcut.js'
 import { openingPlacement, readSavedWindow } from './window-bounds.js'
 import type { SavedWindow } from './window-bounds.js'
-import { app, BrowserWindow, crashReporter, dialog, ipcMain, Menu, nativeImage, nativeTheme, Notification, powerSaveBlocker, protocol, safeStorage, screen, session, shell, Tray } from 'electron'
+import { app, BrowserWindow, crashReporter, dialog, globalShortcut, ipcMain, Menu, nativeImage, nativeTheme, Notification, powerSaveBlocker, protocol, safeStorage, screen, session, shell, Tray } from 'electron'
 import { createVoiceHost } from './voice-host.js'
 import { voicePermission } from './voice-permission.js'
 import { VOICE_READY, VOICE_DOWNLOAD, VOICE_TRANSCRIBE, VOICE_CANCEL, VOICE_PROGRESS, VOICE_SETTINGS_READ, VOICE_SETTINGS_SAVE, VOICE_OPENAI_CONSENT } from '../shared/voice.js'
+import { TALK_SHORTCUT_PENDING, TALK_SHORTCUT_PRESSED, TALK_SHORTCUT_READ, TALK_SHORTCUT_SET, isTalkShortcut, type TalkShortcutPress } from '../shared/talk-shortcut.js'
+import { createTalkShortcut, type TalkShortcut } from './talk-shortcut.js'
 import { DEFAULT_CHATGPT_VOICE, VOICE_CALL_ANSWER, VOICE_CALL_AVAILABLE, VOICE_CALL_EVENT, VOICE_CALL_PREVIEW, VOICE_CALL_SET_VOICE, VOICE_CALL_START, VOICE_CALL_STOP, VOICE_CALL_TOOLS, VOICE_CALL_VOICES, VOICE_PREVIEW_SAVE, VOICE_PREVIEW_SAVED, VOICE_PREVIEW_TRIGGER, isChatGptVoice, isVoiceCallOffer, isVoiceCallTarget, type ChatGptVoice, type VoiceAddOn, type VoiceCallTarget } from '../shared/voice-call.js'
 import { createVoiceCalls } from './voice-call.js'
 import { createCallLog } from './call-log.js'
@@ -3729,15 +3731,29 @@ if (!ownsSingleInstanceLock) {
     let voiceCallAddOn: { readonly open: () => Promise<VoiceAddOn | undefined>; readonly close: () => Promise<void> } | undefined
     // The conversation a call with a teammate may continue (0.746), while that call is on.
     let voiceCallHere: VoiceCallTarget | undefined
+    // The keys that start Talk from any app (0.755); made below, once the calls are.
+    let talkShortcut: TalkShortcut | undefined
     // Talk's voice (0.745), kept in the profile: a preference, picked again in a moment after a restore.
     const voiceCallVoiceFile = join(app.getPath('userData'), 'voice-call.json')
     const voiceCallVoice = async (): Promise<ChatGptVoice> => {
+      const kept = (await talkSettings()).voice
+      return isChatGptVoice(kept) ? kept : DEFAULT_CHATGPT_VOICE
+    }
+    /** Talk's settings in that file: its voice, and its keys (0.755). One unread is none. */
+    async function talkSettings(): Promise<Record<string, unknown>> {
       try {
-        const kept = (JSON.parse(await readFile(voiceCallVoiceFile, 'utf8')) as { voice?: unknown }).voice
-        return isChatGptVoice(kept) ? kept : DEFAULT_CHATGPT_VOICE
+        const parsed: unknown = JSON.parse(await readFile(voiceCallVoiceFile, 'utf8'))
+        return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {}
       } catch {
-        return DEFAULT_CHATGPT_VOICE
+        return {}
       }
+    }
+    /** One of them changed, the other kept: the voice was the file's only setting until the keys joined it. */
+    let talkWriting: Promise<unknown> = Promise.resolve()
+    function keepTalkSetting(change: Readonly<Record<string, unknown>>): Promise<void> {
+      const write = talkWriting.then(async () => { await writeFile(voiceCallVoiceFile, `${JSON.stringify({ ...(await talkSettings()), ...change })}\n`, 'utf8') })
+      talkWriting = write.catch(() => undefined)
+      return write
     }
     const voiceCalls = createVoiceCalls({
       voice: voiceCallVoice,
@@ -3791,9 +3807,13 @@ if (!ownsSingleInstanceLock) {
       version: app.getVersion()
     })
     const voiceCallRefused = { ok: false, message: 'A voice call could not start here.' } as const
-    ipcMain.handle(VOICE_CALL_AVAILABLE, (event) => fromVoiceWindow(event) && process.platform === 'win32'
-      ? voiceCalls.available()
-      : { available: false, why: 'Voice calls are on Windows for now.' })
+    ipcMain.handle(VOICE_CALL_AVAILABLE, async (event) => {
+      if (!fromVoiceWindow(event) || process.platform !== 'win32') return { available: false, why: 'Voice calls are on Windows for now.' }
+      const answer = await voiceCalls.available()
+      // Talk is ready: its keys may be taken now, if they were waiting for it (0.755).
+      if (answer.available) void talkShortcut?.ensure()
+      return answer
+    })
     const callWindow = (event: Electron.IpcMainInvokeEvent): void => {
       if (voiceCallWindow === event.sender) return
       voiceCallWindow = event.sender
@@ -3836,11 +3856,65 @@ if (!ownsSingleInstanceLock) {
     ipcMain.handle(VOICE_CALL_VOICES, (event) => fromOwnWindow(event) ? voiceCallVoice() : DEFAULT_CHATGPT_VOICE)
     ipcMain.handle(VOICE_CALL_SET_VOICE, async (event, voice: unknown) => {
       if (!fromOwnWindow(event) || !isChatGptVoice(voice)) return voiceCallVoice()
-      await writeFile(voiceCallVoiceFile, `${JSON.stringify({ voice })}\n`, 'utf8')
+      await keepTalkSetting({ voice })
       return voiceCallVoice()
     })
     ipcMain.handle(VOICE_CALL_ANSWER, (event, id: unknown, allowed: unknown) => { if (fromVoiceWindow(event)) voiceCalls.answer(id, allowed) })
     app.once('will-quit', () => voiceCalls.dispose())
+
+    /*
+     * TALK FROM ANY APP (0.755, talk-shortcut.ts): the keys bring the window up and press its Talk button. The press
+     * is the person's own, so the window is told it was one: a call's voice plays with no click in the window first
+     * (Chromium holds back sound a page starts on its own). A press made while there was no window to hear it -- Locust
+     * started in the tray -- waits a few seconds for the window it opens.
+     */
+    const driven = process.argv.some((argument) => argument.startsWith('--remote-debugging-port'))
+    const keysHere = process.env.LOCUST_TALK_SHORTCUT
+    let talkPressWaiting: { readonly press: TalkShortcutPress; readonly at: number } | undefined
+    const talkPressed = async (): Promise<void> => {
+      const ready = await voiceCalls.available().catch(() => ({ available: false as const, why: 'Talk could not be checked. Try again.' }))
+      const press: TalkShortcutPress = ready.available ? {} : { why: ready.why }
+      const window = approvalWindow !== undefined && !approvalWindow.isDestroyed() ? approvalWindow : undefined
+      if (window === undefined || window.webContents.isLoading()) {
+        talkPressWaiting = { press, at: Date.now() }
+        if (window === undefined) openFromBackground?.()
+        return
+      }
+      if (window.isMinimized()) window.restore()
+      if (!window.isVisible()) window.show()
+      window.focus()
+      await window.webContents.executeJavaScript('0', true).catch(() => undefined)
+      window.webContents.send(TALK_SHORTCUT_PRESSED, press)
+    }
+    const shortcut = createTalkShortcut({
+      register: (keys, onPress) => globalShortcut.register(keys, onPress),
+      unregister: (keys) => { globalShortcut.unregister(keys) },
+      read: async () => (await talkSettings()).shortcut,
+      write: (keys) => keepTalkSetting({ shortcut: keys }),
+      pressed: () => { void talkPressed() },
+      ...(process.platform !== 'win32'
+        ? { refusedHere: 'Talk is on Windows for now.' }
+        : driven
+          ? { refusedHere: 'A window a test drive opened leaves your keys alone.', ...(isTalkShortcut(keysHere) ? { keysHere } : {}) }
+          : {}),
+      ready: async () => (await voiceCalls.available()).available
+    })
+    talkShortcut = shortcut
+    ipcMain.handle(TALK_SHORTCUT_READ, (event) => fromOwnWindow(event) ? shortcut.read() : { working: false })
+    ipcMain.handle(TALK_SHORTCUT_SET, async (event, keys: unknown) => {
+      if (!fromOwnWindow(event)) return { working: false }
+      return shortcut.set(keys).catch(() => shortcut.read())
+    })
+    ipcMain.handle(TALK_SHORTCUT_PENDING, async (event) => {
+      const waiting = talkPressWaiting
+      talkPressWaiting = undefined
+      if (!fromOwnWindow(event) || waiting === undefined || Date.now() - waiting.at > 15_000) return undefined
+      await event.sender.executeJavaScript('0', true).catch(() => undefined)
+      return waiting.press
+    })
+    // At launch, once Talk has had time to be found; then each time the window finds it ready (VOICE_CALL_AVAILABLE).
+    setTimeout(() => { void shortcut.ensure() }, 4_000)
+    app.once('will-quit', () => shortcut.dispose())
 
     const teammatesUnavailable = {
       ok: false,

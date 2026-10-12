@@ -6,7 +6,10 @@ import type { TeammateHue } from '../../../shared/ipc.js'
 import { TeammateBot } from './TeammateBot.js'
 import { VoiceOrb } from './VoiceOrb.js'
 import { MAX_CALL_LINE } from '../../../shared/calls.js'
-import { keptCall, liveCall, markCallSaved, setLiveCall, setLiveCallAnswer, updateLiveCall } from '../liveCall.js'
+import { keptCall, liveCall, markCallSaved, setLiveCall, setLiveCallAnswer, startCallHandOffs, updateLiveCall, useCallHandOffs } from '../liveCall.js'
+import { todoCount } from '../callTodos.js'
+import { clearTalkPress, setTalkPress } from '../talkPress.js'
+import { CallTodoList } from './CallWords.js'
 import type { LiveVoiceCall } from '../voiceCall.js'
 import { setVoiceLevel, setVoiceState } from '../voiceLevel.js'
 import { Icon } from './Icon.js'
@@ -51,8 +54,10 @@ export function VoiceCallButton({ platform, onText, api = typeof window === 'und
   const [availability, setAvailability] = useState<VoiceCallAvailability | undefined>(given)
   const [phase, setPhase] = useState<Phase>('idle')
   const [lines, setLines] = useState<readonly Line[]>([])
-  /** What the voice handed to teammates (0.739). */
+  /** What the voice handed to teammates (0.739), as it said so: the words "Put it in the chat box" carries. */
   const [handed, setHanded] = useState<readonly { readonly to: string; readonly task: string }[]>([])
+  /** The turns those hand-offs started (0.755): the call's to-dos, each with how it is going. */
+  const todos = useCallHandOffs()
   /** A connector waiting for Allow (0.742): what it would do, until it is answered. */
   const [asks, setAsks] = useState<readonly { readonly id: string; readonly what: string; readonly detail: string }[]>([])
   const [partial, setPartial] = useState<Readonly<Record<VoiceCallRole, string>>>({ you: '', voice: '' })
@@ -217,6 +222,7 @@ export function VoiceCallButton({ platform, onText, api = typeof window === 'und
     if (api === undefined || current.current === 'calling' || current.current === 'live') return
     setLines([]); setHanded([]); setPartial({ you: '', voice: '' }); setMessage(''); setMuted(false); setWorking(false); setSeconds(0); setNotKept(false)
     lineFrom.current = {}
+    startCallHandOffs()
     if (talkTo !== undefined) {
       setLiveCall({
         callId: `call_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`,
@@ -268,7 +274,21 @@ export function VoiceCallButton({ platform, onText, api = typeof window === 'und
   }
   const close = (): void => { transition('idle'); setMessage('') }
 
-  if (platform !== 'win32' || api === undefined || availability?.available !== true) return null
+  /*
+   * PRESSED BY THE KEYS TOO (0.755, talkPress.ts): while this button is on screen and Talk is ready, the shortcut
+   * presses it from any app -- a call starts, or the one that is on ends.
+   */
+  const pressed = useRef<() => void>(() => undefined)
+  pressed.current = () => { void (current.current === 'calling' || current.current === 'live' ? end() : start()) }
+  const ready = platform === 'win32' && api !== undefined && availability?.available === true
+  useEffect(() => {
+    if (!ready) return
+    const mine = (): void => { pressed.current() }
+    setTalkPress(mine)
+    return () => { clearTalkPress(mine) }
+  }, [ready])
+
+  if (!ready) return null
   const on = phase === 'calling' || phase === 'live'
   const speaking = levels.voice > 0.08
   // Who speaks on the lines and in the status: the teammate the call is with (0.746), else ChatGPT.
@@ -298,7 +318,7 @@ export function VoiceCallButton({ platform, onText, api = typeof window === 'und
     {phase !== 'idle' && <div ref={stripBox} className="lc-call__strip" role="region" aria-label="Voice call" style={{ bottom: `calc(100% + ${String(lift + 10)}px)` }}>
       <div className="lc-call__head">
         {phase === 'ended'
-          ? <span className="lc-call__status">{talkTo === undefined ? 'Call ended' : `Call with ${talkTo.name} ended`}{seconds > 0 ? ` · ${clock}` : ''}{talkTo !== undefined && lines.length > 0 ? (notKept ? ' · not kept: it could not be saved' : ' · kept in this conversation') : ''}</span>
+          ? <span className="lc-call__status">{talkTo === undefined ? 'Call ended' : `Call with ${talkTo.name} ended`}{seconds > 0 ? ` · ${clock}` : ''}{talkTo === undefined && todos.length > 0 ? ` · ${todoCount(todos.length)}` : ''}{talkTo !== undefined && lines.length > 0 ? (notKept ? ' · not kept: it could not be saved' : ' · kept in this conversation') : ''}</span>
           : <>
             {talkTo !== undefined && <TeammateBot hue={talkTo.hue} avatar={talkTo.avatar} size={28} teammateId={talkTo.teammateId} motion="full" hopsWhenDone={false}
               activity={faceActivity} presence={asks.length > 0 ? 'approval' : working ? 'working' : 'none'} />}
@@ -322,10 +342,15 @@ export function VoiceCallButton({ platform, onText, api = typeof window === 'und
           {phase === 'ended' && <button type="button" className="lc-control" onClick={close}>Close</button>}
         </span>
       </div>
+      {/*
+        * WHAT THE CALL HANDED OUT (0.755): each to-do as it starts, with how it is going and one press to open it --
+        * and, when the call ends, first, as its summary. A call with a teammate sums them up in their conversation.
+        */}
+      {/* Opened once the call is over: opening a conversation leaves this one, and leaving it ends the call. */}
+      {talkTo === undefined && todos.length > 0 && <CallTodoList handed={todos} label={phase === 'ended' ? 'What the call handed out' : 'Handed out on this call'} openable={phase === 'ended'} />}
       {/* A call with a teammate says its lines in their conversation (0.747); the strip keeps the call's controls. */}
-      {talkTo === undefined && (shown.length > 0 || handed.length > 0 || partial.you.length > 0 || partial.voice.length > 0) && <div className="lc-call__lines">
+      {talkTo === undefined && (shown.length > 0 || partial.you.length > 0 || partial.voice.length > 0) && <div className="lc-call__lines">
         {shown.map((line, index) => <p key={index} className={`lc-call__line is-${line.role}`}><span className="lc-call__who">{line.role === 'you' ? 'You' : voiceName}</span>{line.text}</p>)}
-        {handed.map((hand, index) => <p key={`handed-${String(index)}`} className="lc-call__line is-handed"><span className="lc-call__who">Handed to {hand.to}</span>{hand.task}</p>)}
         {on && (['you', 'voice'] as const).map((role) => partial[role].trim().length > 0 && <p key={`partial-${role}`} className={`lc-call__line is-${role} is-partial`}><span className="lc-call__who">{role === 'you' ? 'You' : voiceName}</span>{partial[role].trim()}</p>)}
       </div>}
       {/* A connector that would change something, asked here: nothing happens until Allow (0.742). With a teammate

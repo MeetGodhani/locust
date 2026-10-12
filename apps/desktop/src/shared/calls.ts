@@ -23,6 +23,21 @@ export interface SavedCallTurn {
   readonly at: number
 }
 
+/**
+ * A TO-DO THE CALL HANDED OUT (0.755): the turn it started, for whom, and what was asked. Colin passed the summary on
+ * 2026-10-12 ("I'll run all your suggestions"), from Grok Bot's voice mode, where a summary arrives after the call:
+ * the call's to-dos, each with how it is going and one press to open it, under the call.
+ */
+export interface SavedCallHandOff {
+  readonly missionId: string
+  readonly teammateId: string
+  /** The teammate's name when it was handed out. */
+  readonly name: string
+  /** What was asked, as the voice put it. */
+  readonly task: string
+  readonly at: number
+}
+
 export interface SavedCall {
   readonly callId: string
   readonly teammateId: string
@@ -34,6 +49,8 @@ export interface SavedCall {
   readonly endedAt?: number
   readonly lines: readonly SavedCallLine[]
   readonly turns: readonly SavedCallTurn[]
+  /** Every to-do the call handed out, to anyone, in order (0.755). Absent on a call kept before it, which has no summary. */
+  readonly handed?: readonly SavedCallHandOff[]
 }
 
 export interface CallsApi {
@@ -45,8 +62,12 @@ export interface CallsApi {
 export const MAX_CALL_LINES = 400
 export const MAX_CALL_LINE = 2_000
 export const MAX_CALL_TURNS = 40
+/** A to-do's words, as long as a hand-off's task may be (main/voice-call.ts cuts them there). */
+export const MAX_HANDED_TASK = 400
 export const MAX_KEPT_CALLS = 500
 const ID = /^[A-Za-z0-9_-]{1,128}$/
+/** An id a kept call may hold: anything else would have the whole call refused when it is saved. */
+export const isCallId = (value: unknown): value is string => typeof value === 'string' && ID.test(value)
 
 const time = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value) && value > 0
 const record = (value: unknown): Record<string, unknown> | undefined =>
@@ -69,7 +90,14 @@ export function isSavedCall(value: unknown): value is SavedCall {
     const one = record(turn)
     return one !== undefined && typeof one.missionId === 'string' && ID.test(one.missionId) && time(one.at)
   }
-  return call.lines.every(lineOk) && call.turns.every(turnOk)
+  const handOffOk = (handOff: unknown): boolean => {
+    const one = record(handOff)
+    return one !== undefined && turnOk(one) && typeof one.teammateId === 'string' && ID.test(one.teammateId)
+      && typeof one.name === 'string' && one.name.length > 0 && one.name.length <= 80
+      && typeof one.task === 'string' && one.task.length > 0 && one.task.length <= MAX_HANDED_TASK
+  }
+  const handedOk = call.handed === undefined || (Array.isArray(call.handed) && call.handed.length <= MAX_CALL_TURNS && call.handed.every(handOffOk))
+  return call.lines.every(lineOk) && call.turns.every(turnOk) && handedOk
 }
 
 /** The calls kept with any of these turns: started from one, or after one. */
