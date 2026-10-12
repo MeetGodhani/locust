@@ -129,6 +129,8 @@ import { CompareView } from './components/CompareView.js'
 import { comparisonOf, foldComparisons } from './compareRows.js'
 import type { CompareColumnView } from './components/CompareView.js'
 import { blindName, changesLine, compareMembership, compareRecord, compareNeedsCopy, compareRefusalOf, judgeMissionIds, judgePickOf, MAX_COMPARE_SLOTS, MIN_COMPARE_SLOTS } from '../../shared/compare.js'
+import { criteriaLines, parseScorecard, withoutScorecard } from '../../shared/compare-score.js'
+import type { Scorecard } from '../../shared/compare-score.js'
 import type { CompareSlotId, PublicCompare } from '../../shared/compare.js'
 import { folderLabels } from '../../shared/folder-sections.js'
 import { nestedUnder } from '../../shared/nested-conversations.js'
@@ -4524,7 +4526,7 @@ export default function App(): ReactElement {
 
   /** The columns, from the live runs where they are going and the record where they are done. */
   /** The judge's view of a comparison, from its newest run (0.520). */
-  const judgeViewOf = (compare: PublicCompare): { readonly name: string; readonly running: boolean; readonly answer: string; readonly items: readonly ThreadItem[]; readonly pick?: CompareSlotId; readonly failed?: string } | undefined => {
+  const judgeViewOf = (compare: PublicCompare): { readonly name: string; readonly running: boolean; readonly answer: string; readonly items: readonly ThreadItem[]; readonly pick?: CompareSlotId; readonly failed?: string; readonly scorecard?: Scorecard } | undefined => {
     const judge = compare.judge
     const missionId = judge?.missionIds.at(-1)
     if (judge === undefined || missionId === undefined) return undefined
@@ -4540,7 +4542,14 @@ export default function App(): ReactElement {
     const name = judge.route.label ?? routeModelName(judge.route.runtime as MissionRuntimeId, judge.route.model, resolvedModels.get(`${judge.route.runtime}:${judge.route.model}`))
     if (!running && answer.length === 0) return { name, running, answer, items, failed: 'The judge did not answer. Ask again, or pick another model.' }
     const pick = running ? undefined : judgePickOf(answer, compare.slots.map((column) => column.slot))
-    return { name, running, answer, items, ...(pick === undefined ? {} : { pick }) }
+    // Its scorecard (0.759): read from what it said once it is done, and kept out of its words, which the table says.
+    const scorecard = running ? undefined : parseScorecard(answer, compare.slots.map((column) => column.slot), criteriaLines(judge.criteria))
+    const said = items.flatMap((item): ThreadItem[] => {
+      if (item.type !== 'agent-message') return [item]
+      const text = withoutScorecard(item.text)
+      return text.length === 0 ? [] : [{ ...item, text }]
+    })
+    return { name, running, answer, items: said, ...(pick === undefined ? {} : { pick }), ...(scorecard === undefined ? {} : { scorecard }) }
   }
   /**
    * The models a judge can be (0.520): ready ones, a free model that has

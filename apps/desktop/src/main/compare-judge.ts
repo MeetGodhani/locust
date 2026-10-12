@@ -1,3 +1,5 @@
+import { criteriaLines, scorecardRequest } from '../shared/compare-score.js'
+
 /**
  * WHAT A JUDGE IS ASKED (0.520), after Artificial Analysis's Optima, whose
  * results are graded "against custom rubric criteria" by a judge model.
@@ -33,6 +35,7 @@ function quoted(text: string): string {
 
 export function judgePrompt(input: { readonly ask: string; readonly answers: readonly JudgedAnswer[]; readonly criteria?: string }): string {
   const criteria = input.criteria?.trim()
+  const points = criteriaLines(criteria)
   const inFiles = input.answers.some((answer) => answer.file !== undefined)
   return [
     inFiles
@@ -46,6 +49,8 @@ export function judgePrompt(input: { readonly ask: string; readonly answers: rea
       `- For each answer (${input.answers.map((answer) => `Answer ${answer.letter}`).join(', ')}), one or two sentences: what it did well and what it missed${criteria === undefined || criteria.length === 0 ? '' : ', against what the person said a good answer does'}.`,
       '- Then one sentence: which answer you would keep, and why.',
       'Call them only Answer A, Answer B and so on. Do not guess which model wrote which.'
-    ].join('\n')
+    ].join('\n'),
+    // Its scorecard (0.759, shared/compare-score.ts): every answer on every point, met or not, in a line each.
+    scorecardRequest(points, input.answers.map((answer) => answer.letter))
   ].join('\n\n')
 }

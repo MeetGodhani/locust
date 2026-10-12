@@ -13374,6 +13374,84 @@ textarea {
   min-width: 0;
 }
 
+/* One point a line (0.759): one line high beside the judge's model, as the box it replaced was, then growing with
+   its points up to seven; past that it scrolls. */
+textarea.lc-compare__judgecriteria {
+  height: auto;
+  min-height: 34px;
+  max-height: calc(7 * 18px + 16px);
+  padding: 7px 11px;
+  line-height: 18px;
+  field-sizing: content;
+  resize: none;
+  font-family: inherit;
+}
+
+/* The judge's scorecard (0.759), in the record's table: its points and its reasons wrap where the table's cells do
+   not; met reads green and not met red, each with the judge's why under it; the totals sit under a firmer rule. */
+.lc-compare__scorecard {
+  margin: var(--lc-space-1) 0 var(--lc-space-3);
+}
+
+.lc-compare__scorecard .lc-compare__point,
+.lc-compare__scorecard .lc-compare__verdictcell {
+  white-space: normal;
+}
+
+.lc-compare__scorecard .lc-compare__point {
+  min-width: 180px;
+  max-width: 320px;
+}
+
+.lc-compare__scorecard .lc-compare__verdictcell {
+  min-width: 120px;
+  max-width: 260px;
+}
+
+.lc-compare__verdict {
+  display: block;
+  font-weight: 500;
+}
+
+.lc-compare__verdict.is-met {
+  color: var(--lc-green-text);
+}
+
+.lc-compare__verdict.is-missed {
+  color: var(--lc-red-text);
+}
+
+.lc-compare__verdict.is-unscored {
+  color: var(--lc-text-muted);
+  font-weight: 400;
+}
+
+.lc-compare__why {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--lc-text-secondary);
+}
+
+.lc-compare__scorecard tfoot th,
+.lc-compare__scorecard tfoot td {
+  border-bottom: 0;
+}
+
+.lc-compare__scorecard tfoot tr:first-child th,
+.lc-compare__scorecard tfoot tr:first-child td {
+  border-top: 1px solid var(--lc-border-control);
+}
+
+.lc-compare__score {
+  font-weight: 600;
+}
+
+.lc-compare__score.is-best {
+  color: var(--lc-green-text);
+}
+
 .lc-compare__head,
 .lc-compare__cell,
 .lc-compare__foot {

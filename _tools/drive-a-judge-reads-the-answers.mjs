@@ -83,7 +83,18 @@ const state = `JSON.stringify({
   label: document.querySelector('.lc-compare__judge .lc-compare__recordlabel')?.innerText ?? '',
   said: document.querySelector('.lc-compare__judgesaid')?.innerText.trim() ?? '',
   badges: [...document.querySelectorAll('.lc-compare__head')].map((h, i) => (h.querySelector('.lc-compare__judgebadge') ? 'abc'[i] : '')).join(''),
-  sidebar: [...document.querySelectorAll('.lc-convrow button.lc-conv')].map((b) => b.innerText.replace(/\\s+/g, ' ').trim())
+  sidebar: [...document.querySelectorAll('.lc-convrow button.lc-conv')].map((b) => b.innerText.replace(/\\s+/g, ' ').trim()),
+  // Its scorecard (0.759): the columns it scored, its points, each cell's verdict, and each column's score.
+  scorecard: (() => {
+    const card = document.querySelector('.lc-compare__scorecard')
+    if (!card) return null
+    return {
+      heads: [...card.querySelectorAll('thead th')].map((th) => th.innerText.trim()),
+      points: [...card.querySelectorAll('tbody th')].map((th) => th.innerText.trim()),
+      verdicts: [...card.querySelectorAll('tbody td')].map((td) => td.querySelector('.lc-compare__verdict')?.innerText.trim() ?? ''),
+      scores: [...card.querySelectorAll('tfoot tr:first-child td')].map((td) => td.innerText.trim())
+    }
+  })()
 })`
 
 try {
@@ -99,9 +110,18 @@ try {
   check('every model it can be is listed, under its agent (0.554)', before.groups.length >= 2 && before.choices.length > 16, `${before.choices.length} models; ${JSON.stringify(before.groups)}`)
   await drive.capture('the judge asked', () => drive.evaluate(`(async () => {
     const box = document.querySelector('.lc-compare__judgecriteria')
-    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set
-    setter.call(box, 'Names a price for five seats')
+    // A box of one point a line since 0.759 (a textarea): its own prototype's setter, whichever element it is.
+    const setter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(box), 'value').set
+    setter.call(box, 'Names a price for five seats\\nSays which CRM to buy')
     box.dispatchEvent(new Event('input', { bubbles: true }))
+    // The judge on Codex, as this drive was written for: the first offered is now a free model that answered here
+    // first, and a free model rate-limited for the day leaves no judge to read (2026-10-12).
+    const pick = document.querySelector('.lc-compare__judgepick')
+    const codex = [...(pick?.querySelectorAll('optgroup') ?? [])].find((group) => group.label === 'Codex CLI')?.querySelector('option')
+    if (pick && codex) {
+      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(pick, codex.value)
+      pick.dispatchEvent(new Event('change', { bubbles: true }))
+    }
     await new Promise((r) => setTimeout(r, 200))
     ;[...document.querySelectorAll('.lc-compare__judgeask button')].find((b) => b.innerText.trim() === 'Judge')?.click()
     await new Promise((r) => setTimeout(r, 1500))
@@ -117,12 +137,18 @@ try {
     if (after.label.length > 0 && !/reading/i.test(after.label) && (after.said.length > 0 || /did not answer/.test(after.view))) break
   }
   await drive.capture('the judge\'s view', () => drive.evaluate(`document.querySelector('.lc-compare__judge')?.scrollIntoView(); 1`))
-  check('the judge\'s view is shown under the answers, under the model that judged', after.view.startsWith(`THE JUDGE'S VIEW · ${before.choices[0]}`) && /Answer A/.test(after.view) && /Answer B/.test(after.view), after.view.slice(0, 400))
+  check('the judge\'s view is shown under the answers, under the model that judged', /^THE JUDGE'S VIEW · .*(Codex|GPT|Account default)/i.test(after.view) && /Answer A/.test(after.view) && /Answer B/.test(after.view), after.view.slice(0, 400))
   check('it says which it would keep, and says it is a view, not a decision', /keep/i.test(after.view) && /you keep the answer/.test(after.view), after.view.slice(-200))
   check('while it read, what it was doing showed as it came, not a bare "Reading the answers"', shownWhileReading.length > 0, shownWhileReading)
   const named = [...after.said.matchAll(/(\bnot\s+|n't\s+)?\bkeep:?[\s*_]*answer\s+([a-c])\b/gi)].at(-1)
   const pick = named === undefined || named[1] !== undefined ? '' : named[2].toLowerCase()
   check('the column it would keep wears "Judge\'s pick", and only that one', pick !== '' && after.badges === pick, `said ${pick || 'none'}, marked ${after.badges || 'none'}`)
+  // Its scorecard (0.759): A names a price and says which to buy; B does neither.
+  const card = after.scorecard
+  check('it scores both answers on both points, under their columns', card !== null && card.heads.length === 3 && card.heads[0] === 'What a good answer does' && JSON.stringify(card.points) === JSON.stringify(['Names a price for five seats', 'Says which CRM to buy']) && card.verdicts.length === 4 && card.verdicts.every((verdict) => verdict === 'met' || verdict === 'not met'), JSON.stringify(card))
+  check('the answer that names a price meets that point, and the one that does not, does not', card !== null && card.verdicts[0] === 'met' && card.verdicts[1] === 'not met', JSON.stringify(card?.verdicts))
+  check('each column has its score', card !== null && card.scores.length === 2 && card.scores.every((score) => /^\d of 2$/.test(score)), JSON.stringify(card?.scores))
+  check('and the judge\'s words carry no scorecard line of their own', !/^\s*\**\s*(SCORE|POINT)\b/m.test(after.said), after.said.slice(-300))
   check('it kept nothing itself', after.kept === '', after.kept)
   check('and its run is not listed as a conversation', after.sidebar.length === 1, JSON.stringify(after.sidebar))
   const note = String(await drive.evaluate("document.querySelector('.lc-continuation')?.innerText ?? ''"))

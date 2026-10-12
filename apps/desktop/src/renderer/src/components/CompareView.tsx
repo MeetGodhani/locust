@@ -15,6 +15,8 @@ import { RuntimeMark } from './RuntimeMark.js'
 import { ThreadItems } from './Thread.js'
 import { WorkingSpark } from './WorkingSpark.js'
 import type { CompareRecordRow } from '../compareRecord.js'
+import { scoreOf } from '../../../shared/compare-score.js'
+import type { Scorecard } from '../../../shared/compare-score.js'
 import { keptSentence } from '../status.js'
 
 /**
@@ -143,7 +145,7 @@ export function CompareView({
   /** Once one is kept: every model's record across your decided comparisons (0.519). */
   readonly record?: readonly CompareRecordRow[]
   /** The judge's view, when one was asked (0.520): its model, and what it said or is saying. */
-  readonly judge?: { readonly name: string; readonly running: boolean; readonly answer: string; readonly items: readonly ThreadItem[]; readonly pick?: CompareSlotId; readonly failed?: string }
+  readonly judge?: { readonly name: string; readonly running: boolean; readonly answer: string; readonly items: readonly ThreadItem[]; readonly pick?: CompareSlotId; readonly failed?: string; readonly scorecard?: Scorecard }
   /** The models a judge can be, the first the one offered (0.520). */
   readonly judgeChoices?: readonly ModelChoice[]
   /** A judge is being asked. */
@@ -399,6 +401,8 @@ export function CompareView({
              * it said "Reading the answers…" until the judge was done, and
              * hid its steps and words while they came.
              */}
+            {/* Its scorecard first, the summary before the words (0.759): every answer on every point, then score, time and cost. */}
+            {judge.scorecard !== undefined && <JudgeScorecard scorecard={judge.scorecard} columns={columns} veiled={veiled} />}
             {judge.failed !== undefined ? (
               <p className="lc-compare__quiet">{judge.failed}</p>
             ) : judge.items.length === 0 ? (
@@ -597,11 +601,13 @@ function JudgeAsk({ choices, again, busy, onJudge }: {
           </select>
           <ChevronGlyph />
         </span>
-        <input
+        {/* One point a line, each a row of the judge's scorecard (0.759); it grows with them. */}
+        <textarea
           className="lc-input lc-compare__judgecriteria"
-          aria-label="What a good answer does"
-          placeholder="What a good answer does (optional)"
+          aria-label="What a good answer does, one point a line"
+          placeholder="What a good answer does, one point a line (optional)"
           maxLength={1000}
+          rows={1}
           value={criteria}
           onChange={(event) => setCriteria(event.target.value)}
         />
@@ -609,7 +615,83 @@ function JudgeAsk({ choices, again, busy, onJudge }: {
           {busy ? 'Asking…' : 'Judge'}
         </button>
       </div>
-      <p className="lc-compare__judgenote">It reads the answers without the models&rsquo; names and says which it would keep. It keeps nothing itself.</p>
+      <p className="lc-compare__judgenote">It reads the answers without the models&rsquo; names, scores each on every point, and says which it would keep. With no points written, it sets three from your request. It keeps nothing itself.</p>
+    </div>
+  )
+}
+
+/**
+ * THE JUDGE'S SCORECARD (0.759, shared/compare-score.ts), after Artificial Analysis's Optima: every answer on every
+ * point of what a good answer does -- met or not, and the judge's why in a line -- under the columns' own names, then
+ * each one's score, time and what it spent. A blind comparison keeps that row out until one is kept, as its feet do. The
+ * best score is marked only when one answer has it alone: a tie names no winner.
+ */
+function JudgeScorecard({ scorecard, columns, veiled }: {
+  readonly scorecard: Scorecard
+  readonly columns: readonly CompareColumnView[]
+  readonly veiled: boolean
+}): ReactElement {
+  const shown = columns.filter((column) => scorecard.verdicts[column.slot] !== undefined)
+  const scores = shown.map((column) => scoreOf(scorecard.verdicts[column.slot]))
+  const best = Math.max(...scores.map((score) => score.met))
+  const alone = scores.filter((score) => score.met === best).length === 1
+  return (
+    <div className="lc-tablewrap lc-compare__scorecard">
+      <table className="lc-table">
+        <thead>
+          <tr>
+            <th scope="col">{scorecard.byJudge ? 'The judge’s points' : 'What a good answer does'}</th>
+            {shown.map((column) => <th key={column.slot} scope="col">{column.name}</th>)}
+          </tr>
+        </thead>
+        <tbody>
+          {scorecard.points.map((point, index) => (
+            <tr key={`point:${String(index)}`}>
+              <th scope="row" className="lc-compare__point">{point}</th>
+              {shown.map((column) => {
+                const verdict = scorecard.verdicts[column.slot]?.[index]
+                return (
+                  <td key={column.slot} className="lc-compare__verdictcell">
+                    {verdict === undefined ? (
+                      <span className="lc-compare__verdict is-unscored">not scored</span>
+                    ) : (
+                      <>
+                        <span className={`lc-compare__verdict ${verdict.met ? 'is-met' : 'is-missed'}`}>{verdict.met ? 'met' : 'not met'}</span>
+                        {verdict.why.length > 0 && <span className="lc-compare__why">{verdict.why}</span>}
+                      </>
+                    )}
+                  </td>
+                )
+              })}
+            </tr>
+          ))}
+        </tbody>
+        <tfoot>
+          <tr>
+            <th scope="row">Score</th>
+            {shown.map((column, index) => (
+              <td key={column.slot} className={`lc-compare__recordnum lc-compare__score${alone && scores[index]?.met === best ? ' is-best' : ''}`}>
+                {`${String(scores[index]?.met ?? 0)} of ${String(scores[index]?.of ?? 0)}`}
+              </td>
+            ))}
+          </tr>
+          {/* A row no column has a figure for says nothing: it is left out, not drawn as a line of dashes. */}
+          {shown.some((column) => column.span !== undefined) && (
+            <tr>
+              <th scope="row">Time</th>
+              {shown.map((column) => <td key={column.slot} className="lc-compare__recordnum">{column.span ?? '—'}</td>)}
+            </tr>
+          )}
+          {/* "Spent": dollars, premium requests, "in your plan" or tokens -- whatever each runtime reported (cost.ts). */}
+          {!veiled && shown.some((column) => column.cost !== undefined) && (
+            <tr>
+              <th scope="row">Spent</th>
+              {shown.map((column) => <td key={column.slot} className="lc-compare__recordnum">{column.cost ?? '—'}</td>)}
+            </tr>
+          )}
+        </tfoot>
+      </table>
+      {scorecard.byJudge && <p className="lc-compare__judgenote">No points were written, so the judge set these from your request.</p>}
     </div>
   )
 }

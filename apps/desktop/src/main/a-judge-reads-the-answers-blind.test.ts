@@ -33,6 +33,12 @@ describe('what a judge is asked', () => {
     expect(prompt).toContain('against what the person said a good answer does')
   })
 
+  it('ends with its scorecard: the person\'s points numbered, every answer on each, in a line the window reads (0.759)', () => {
+    expect(prompt).toContain('The points to score are what the person says a good answer does:\n\n1. Names a price for five seats')
+    expect(prompt).toContain('SCORE A 1: met. <why, in at most twelve words>')
+    expect(prompt.indexOf('which answer you would keep')).toBeLessThan(prompt.indexOf('a scorecard'))
+  })
+
   it('asks for a view, never an action, and never for the models\' names', () => {
     expect(prompt).toContain('Do not use any tools and do not change any files')
     expect(prompt).toContain('Do not guess which model wrote which.')
