@@ -1062,6 +1062,17 @@ textarea {
   border-color: var(--lc-border-strong);
 }
 
+/* A file a turn on the cloud computer made (0.762): named, not offered -- it is not in this folder to open or save. */
+.lc-handedfile.is-elsewhere:hover {
+  border-color: var(--lc-border-control);
+}
+
+.lc-handedfile.is-elsewhere .lc-handedfile__open,
+.lc-handedfile.is-elsewhere .lc-handedfile__open:hover {
+  cursor: default;
+  color: var(--lc-text-muted);
+}
+
 .lc-handedfile__open {
   display: flex;
   align-items: center;
@@ -20664,6 +20675,15 @@ textarea.lc-compare__judgecriteria {
 .lc-cloudchange.is-home > svg {
   color: var(--lc-green);
 }
+/* Sent to a pull request (0.762): GitHub's mark, in the line's own grey -- it went somewhere, it did not arrive here. */
+.lc-cloudchange.is-pr > svg {
+  color: var(--lc-text-secondary);
+}
+.lc-cloudchange__pr {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lc-space-3);
+}
 .lc-cloudchange__head {
   display: flex;
   flex-wrap: wrap;
@@ -21474,6 +21494,17 @@ textarea.lc-compare__judgecriteria {
   font-family: var(--lc-font-mono);
   font-size: var(--lc-text-mono-caption);
   line-height: 1.5;
+}
+
+/*
+ * A field is a field (0.762): the message box's soft focus -- its edge a step up, the faintest glow -- not the 2px
+ * ring a button takes. Seen on the cloud card's pull request message, which takes the keys as it opens, where the
+ * ring drew a hard white frame around the draft; Commit's box had the same.
+ */
+.lc-commit__message:focus-visible {
+  outline: none;
+  border-color: var(--lc-focus-edge-box);
+  box-shadow: 0 0 0 3px var(--lc-focus-glow);
 }
 
 .lc-commit__actions {

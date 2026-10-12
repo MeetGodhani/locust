@@ -1,7 +1,8 @@
 import { EditCheckCard } from './EditCheckCard.js'
 import { ThreadImagesContext } from '../threadImages.js'
+import { FilesElsewhere } from '../filesElsewhere.js'
 import type { EditCheckShown } from './EditCheckCard.js'
-import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { ReactElement } from 'react'
 
 import type { MissionRuntimeId, NormalizedRuntimeEvent } from '@teammate/runtime-adapters'
@@ -43,7 +44,8 @@ import { CancellationCard, stoppedBeforeAnyTool } from './CancellationCard.js'
 import { SignInButton } from './SignInButton.js'
 import { AgentAvatar, AgentText, DiagnosticLine, LiveStepCard, PlanSteps } from './ThreadItems.js'
 import { CloudChangeCard, CloudMarker } from './CloudTurn.js'
-import type { PublicCloudTurn } from '../../../shared/cloud-computer.js'
+import { cloudFilesHere, type PublicCloudTurn } from '../../../shared/cloud-computer.js'
+import { splitAttachments } from '../../../shared/attachments.js'
 import { DecisionCard } from './DecisionCard.js'
 import { ResumeCard } from './ResumeCard.js'
 import { resumeOffer } from '../resume.js'
@@ -95,6 +97,8 @@ function HandedFiles({
   readonly onOpenFile?: (path: string, folder?: string) => void
 }): ReactElement {
   const [refused, setRefused] = useState<string>()
+  // Not in this folder (0.762, filesElsewhere.ts): named, with nothing offered that would act on this folder's file.
+  const elsewhere = useContext(FilesElsewhere)
   const ask = (action: 'revealFile' | 'saveCopy', path: string): void => {
     const bridge = window.desktop
     setRefused(undefined)
@@ -106,7 +110,15 @@ function HandedFiles({
   }
   return (
     <div className="lc-handedfiles">
-      {files.map((file) => (
+      {files.map((file) => elsewhere !== undefined ? (
+        <span key={file.path} className="lc-handedfile is-elsewhere">
+          <span className="lc-handedfile__open" title={file.note === undefined ? `${file.path}\n\n${elsewhere}` : `${file.note}\n\n${elsewhere}`}>
+            <Icon name="file" size={12} />
+            <span className="lc-handedfile__path">{file.path}</span>
+            {file.note !== undefined && <span className="lc-handedfile__note">{file.note}</span>}
+          </span>
+        </span>
+      ) : (
         <span key={file.path} className="lc-handedfile">
           <button
             type="button"
@@ -798,6 +810,10 @@ export interface ThreadProps {
     readonly onPatch: (missionId: string) => Promise<string | undefined>
     readonly onApply: (missionId: string) => Promise<string | undefined>
     readonly onDiscard: (missionId: string) => Promise<string | undefined>
+    /** Sends the change waiting there to a pull request on GitHub (0.762). */
+    readonly onPullRequest?: (missionId: string, message: string) => Promise<string | undefined>
+    /** The conversation's teammate, named in a pull request's drafted message. */
+    readonly teammate?: string
   }
   /** The folder now open, so the receipt names one only for its own missions. */
   readonly workspaceId?: string | undefined
@@ -1096,9 +1112,46 @@ onResume,
     const turn = missionId === undefined ? undefined : cloud?.turns.get(missionId)
     return turn === undefined ? null : <CloudMarker turn={turn} />
   }
+  /**
+   * What the person asked for the turns a change there holds (0.762), oldest first: the turn's own words, and those
+   * of the earlier turns carried into it -- a pull request's message is drafted from them, as Commit's is.
+   */
+  const cloudAsksFor = (turn: PublicCloudTurn): readonly string[] => {
+    const all = [...earlierTurns.map((one) => ({ missionId: one.missionId, prompt: one.prompt })), ...(shownMissionId === undefined ? [] : [{ missionId: shownMissionId, prompt }])]
+    const upTo = all.findIndex((one) => one.missionId === turn.missionId)
+    return all
+      .slice(0, upTo + 1)
+      .filter((one) => {
+        const there = cloud?.turns.get(one.missionId)
+        return one.missionId === turn.missionId || (there?.taskId === turn.taskId && there.state === 'carried' && there.outcome === undefined)
+      })
+      .map((one) => splitAttachments(one.prompt).text)
+      .slice(-5)
+  }
   const cloudCardFor = (missionId: string | undefined): ReactElement | null => {
     const turn = missionId === undefined ? undefined : cloud?.turns.get(missionId)
-    return turn === undefined || cloud === undefined ? null : <CloudChangeCard key={`cloud-${turn.missionId}`} turn={turn} onPatch={cloud.onPatch} onApply={cloud.onApply} onDiscard={cloud.onDiscard} />
+    if (turn === undefined || cloud === undefined) return null
+    return (
+      <CloudChangeCard
+        key={`cloud-${turn.missionId}`}
+        turn={turn}
+        onPatch={cloud.onPatch}
+        onApply={cloud.onApply}
+        onDiscard={cloud.onDiscard}
+        {...(cloud.onPullRequest === undefined ? {} : { onPullRequest: cloud.onPullRequest })}
+        asks={turn.state === 'there' ? cloudAsksFor(turn) : []}
+        {...(cloud.teammate === undefined ? {} : { teammate: cloud.teammate })}
+      />
+    )
+  }
+  /** Where a turn's files are, when not in this folder (filesElsewhere.ts): said on its rows' titles. */
+  const elsewhereFor = (missionId: string | undefined): string | undefined => {
+    const turn = missionId === undefined ? undefined : cloud?.turns.get(missionId)
+    if (cloudFilesHere(turn)) return undefined
+    const went = turn?.state === 'carried' ? turn.outcome : turn?.state
+    return went === 'pr' ? 'In a pull request on GitHub, not in this folder'
+      : went === 'discarded' ? 'Put back on your cloud computer, not in this folder'
+        : 'On your cloud computer, not in this folder yet'
   }
   const error = recordedError === undefined ? undefined : providerErrorSentence(recordedError, events[0]?.sourceAdapter ?? restoredMission?.runtime)
   // What the run was allowed, hoisted so EVERY turn can be told -- not just
@@ -1562,7 +1615,7 @@ onResume,
               {!again && userTurn(turnPromptLine(turn), turnAttachments(turn), () => editedFiles(turn.events, workspacePath), turn.startedBy === undefined && turn.inTerminal === undefined ? turn.missionId : undefined)}
               {!again && cloudMarkerFor(turn.missionId)}
               {cardsFor(index, 'before-work').map(peerCard)}
-              {!again && earlierWork[index]}
+              {!again && <FilesElsewhere.Provider value={elsewhereFor(turn.missionId)}>{earlierWork[index]}</FilesElsewhere.Provider>}
               {/* An earlier turn stopped before it said anything had nothing under it, as if still waiting (0.496; Claude Code: "Interrupted"). */}
               {!again && stoppedBeforeSaying(turn.events) && <div className="lc-thread__note">Stopped before it replied</div>}
               {cloudCardFor(turn.missionId)}
@@ -1652,6 +1705,7 @@ onResume,
         */}
         {cardsFor(earlierTurns.length, 'before-work').map(peerCard)}
 
+        <FilesElsewhere.Provider value={elsewhereFor(shownMissionId)}>
         <ThreadItems
           /*
            * Keyed by the turn's mission (code review B4, renderer-thread (b)).
@@ -1676,6 +1730,7 @@ onResume,
           {...(busyModel === undefined || !running ? {} : { busyModel })}
           {...(onStopRun === undefined || !running ? {} : { onStop: onStopRun })}
         />
+        </FilesElsewhere.Provider>
 
         {!running && cloudCardFor(shownMissionId)}
         {cardsFor(earlierTurns.length, 'after-work').map(peerCard)}

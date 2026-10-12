@@ -114,7 +114,7 @@ export function agyRoute(model: string | undefined, effort: string | undefined):
   return { model: base, ...(chosen === undefined ? {} : { effort: chosen }) }
 }
 import { FREE_ONLY_REFUSAL, isFreeRoute } from './free-routes.js'
-import { attachmentsForRun } from './attachments-for-run.js'
+import { attachmentsPlacedForRun } from './attachments-for-run.js'
 import { longTaskFile, longTaskFilePath } from './long-task-file.js'
 import { withAttachments } from '../shared/attachments.js'
 import type { ReadablePdf } from '../shared/attachments.js'
@@ -432,7 +432,7 @@ interface CodexMissionServiceOptions {
    * YOUR CLOUD COMPUTER (0.761, cloud-turns.ts): readies the repository's codespace for a turn sent with Cloud, says
    * which conversations ran there, and reads what a turn changed once it ends.
    */
-  readonly cloud?: Pick<CloudTurns, 'of' | 'prepare' | 'settled'>
+  readonly cloud?: Pick<CloudTurns, 'of' | 'prepare' | 'settled' | 'carry'>
   readonly opencodeServeSpawn?: (
     executablePath: string,
     args: readonly string[],
@@ -2222,6 +2222,12 @@ export function createCodexMissionService(options: CodexMissionServiceOptions): 
          * on the live line as it begins. Nothing is recorded until it is ready: a refusal here hands the words back.
          */
         let cloudSpawn: ServeSpawn | undefined
+        /**
+         * Where the agent stands there (0.762): the brief names this, as a worktree's run is told its own copy. Told
+         * the folder's path here, a cloud agent went looking for `C:\Users\...` on Linux, failed a read, and said in
+         * its reply that "the Windows path you gave maps to the workspace root here" (drive-a-cloud-turn, 0.761).
+         */
+        let cloudDir: string | undefined
         if (cloud !== undefined && options.cloud !== undefined) {
           const prepared = await options.cloud.prepare({
             missionId,
@@ -2240,7 +2246,10 @@ export function createCodexMissionService(options: CodexMissionServiceOptions): 
             return error('RUNTIME_START_FAILED', 'The mission was stopped before your cloud computer was ready.') as CodexMissionStartResponse
           }
           cloudSpawn = prepared.spawn
+          cloudDir = prepared.dir
         }
+        // The run's own folder when it is not this one: a teammate's worktree, or the copy on the cloud computer.
+        const ownFolder = cloudDir ?? slot?.cwd
 
         // What the runtime is SENT is the person's words plus their teammates'
         // waiting messages and the share form. The ledger keeps the person's
@@ -2250,7 +2259,11 @@ export function createCodexMissionService(options: CodexMissionServiceOptions): 
         // anywhere but the project folder. Only what is sent changes.
         say('briefing')
         // 0.713: and an attached PDF opened for it, its text and pages beside it.
-        const attached = await attachmentsForRun(prompt, runFolder, runCwd, options.readablePdf).catch(() => prompt)
+        const placed = await attachmentsPlacedForRun(prompt, runFolder, runCwd, options.readablePdf).catch(() => ({ prompt, files: [] as readonly string[] }))
+        const attached = placed.prompt
+        // On the cloud computer (0.762), the message's own files go to the copy there, which git never gave them. One
+        // that does not arrive is left as named: the agent's own read says it is missing, as for a worktree (M16).
+        if (cloudSpawn !== undefined && placed.files.length > 0) await options.cloud?.carry(missionId, runCwd, placed.files).catch(() => undefined)
         // Cold, not a command and not a side question: told what was said before (0.495).
         const sentPrompt = coldEarlier === undefined || bare || side !== undefined ? attached : composeColdFollowUp(coldEarlier, attached, rewind === true)
         let runtimePrompt = sentPrompt
@@ -2295,7 +2308,7 @@ ${sentPrompt.trim()}`
           // a follow-up in `resumedMissionId`; a first turn has none.
           const prepared = await peerExchange.prepare(sentPrompt, peer, runtime, {
             folder: runFolder,
-            ...(slot?.cwd === undefined ? {} : { ownFolder: slot.cwd }),
+            ...(ownFolder === undefined ? {} : { ownFolder }),
             ...((continuation?.missionId ?? resumedMissionId ?? followUpOf) === undefined
               ? {}
               : { previousMissionId: continuation?.missionId ?? resumedMissionId ?? followUpOf }),
@@ -2322,7 +2335,7 @@ ${sentPrompt.trim()}`
            */
           const solo = await peerExchange.briefSolo(sentPrompt, runtime, {
             folder: runFolder,
-            ...(slot?.cwd === undefined ? {} : { ownFolder: slot.cwd }),
+            ...(ownFolder === undefined ? {} : { ownFolder }),
             ...((continuation?.missionId ?? resumedMissionId ?? followUpOf) === undefined
               ? {}
               : { previousMissionId: continuation?.missionId ?? resumedMissionId ?? followUpOf }),

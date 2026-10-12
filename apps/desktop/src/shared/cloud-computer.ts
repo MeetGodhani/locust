@@ -32,10 +32,16 @@ export interface CloudChangeFile {
 /** The machine, in the words the screen uses. */
 export const CLOUD_MACHINE_WORDS = '2 CPUs, 8 GB'
 
+/** A pull request on GitHub, as a card names and opens it. */
+export interface CloudPullRequest {
+  readonly number: number
+  readonly url: string
+}
+
 /**
  * A conversation's turn on the cloud computer, as the thread shows it: where it ran, and what became of its change.
- * `there` is a change waiting on the cloud computer; `home`, one applied to this folder; `carried`, one a later
- * turn's change now includes; `none`, a turn that changed nothing.
+ * `there` is a change waiting on the cloud computer; `home`, one applied to this folder; `pr`, one sent to a pull
+ * request on GitHub (0.762); `carried`, one a later turn's change now includes; `none`, a turn that changed nothing.
  */
 export interface PublicCloudTurn {
   readonly missionId: string
@@ -43,10 +49,25 @@ export interface PublicCloudTurn {
   readonly repo: string
   readonly branch?: string
   readonly taskId: string
-  readonly state: 'working' | 'there' | 'home' | 'none' | 'carried' | 'discarded' | 'failed'
+  readonly state: 'working' | 'there' | 'home' | 'pr' | 'none' | 'carried' | 'discarded' | 'failed'
   readonly files?: readonly CloudChangeFile[]
   readonly appliedAt?: string
   readonly problem?: string
+  /** The pull request this turn's change went to (`pr`). */
+  readonly pullRequest?: CloudPullRequest
+  /** The conversation's pull request, while a change is waiting (`there`): it can be added to it. */
+  readonly openPullRequest?: CloudPullRequest
+  /** A `carried` turn's change, once the later change that holds it went somewhere: here, to a pull request, or back. */
+  readonly outcome?: 'home' | 'pr' | 'discarded'
+}
+
+/**
+ * Whether a turn's files are in this folder now (0.762): a turn that ran here, a change that came home, or one carried
+ * into a change that did. Otherwise the files it names are on the cloud computer (or on GitHub, or put back), and a
+ * button that opens, copies or shows this folder's file of that name shows something else.
+ */
+export function cloudFilesHere(turn: PublicCloudTurn | undefined): boolean {
+  return turn === undefined || turn.state === 'home' || turn.state === 'none' || (turn.state === 'carried' && turn.outcome === 'home')
 }
 
 /** A cloud computer as Settings lists it. */

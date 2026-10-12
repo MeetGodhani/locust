@@ -10,14 +10,15 @@
 
 import { randomBytes } from 'node:crypto'
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
-import { basename, dirname } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 
 import type { AppServerRunProcess } from '@teammate/runtime-adapters'
 
 import type { StartPhase } from '../shared/ipc.js'
-import { cloudStateOf, cloudTaskDir, CLOUD_TASK_ID, type CloudChangeFile, type CloudFolderState, type CloudSetupStep, type PublicCloudComputer, type PublicCloudTurn } from '../shared/cloud-computer.js'
-import { applyHere, cloudServeSpawn, CloudComputerError, freePort, runGit, type CloudComputers, type GitRun } from './cloud-computer.js'
+import { cloudStateOf, cloudTaskDir, CLOUD_TASK_ID, type CloudChangeFile, type CloudFolderState, type CloudPullRequest, type CloudSetupStep, type PublicCloudComputer, type PublicCloudTurn } from '../shared/cloud-computer.js'
+import { applyHere, carriedPath, cloudServeSpawn, CloudComputerError, freePort, runGit, SAFE_BRANCH_NAME, type CloudComputers, type GitRun } from './cloud-computer.js'
 import { folderOnGitHub, type Runner } from './cloud-tasks.js'
+import { branchFromSubject } from './folder-commit.js'
 
 export type ServeSpawn = (executablePath: string, args: readonly string[], env?: Readonly<Record<string, string>>, cwd?: string) => AppServerRunProcess
 
@@ -30,7 +31,8 @@ export interface CloudSetup {
 }
 
 export type CloudPrepared =
-  | { readonly ok: true; readonly spawn: ServeSpawn }
+  /** `dir`: the conversation's copy there, where the agent stands -- never this folder, which the brief must not name. */
+  | { readonly ok: true; readonly spawn: ServeSpawn; readonly dir: string }
   | { readonly ok: false; readonly message: string; readonly setup?: CloudSetup }
 
 interface CloudTask {
@@ -41,6 +43,8 @@ interface CloudTask {
   readonly folder: string
   readonly base: string
   readonly createdAt: string
+  /** The pull request the conversation's changes go to (0.762): its branch, and the branch it is for. */
+  readonly pullRequest?: CloudPullRequest & { readonly branch: string; readonly into: string }
 }
 
 interface CloudTurn {
@@ -50,6 +54,8 @@ interface CloudTurn {
   readonly files?: readonly CloudChangeFile[]
   readonly appliedAt?: string
   readonly problem?: string
+  readonly pullRequest?: CloudPullRequest
+  readonly outcome?: PublicCloudTurn['outcome']
   readonly at: string
 }
 
@@ -96,6 +102,13 @@ export interface CloudTurns {
   patch(missionId: string): Promise<string | undefined>
   apply(missionId: string): Promise<{ readonly ok: true; readonly turn: PublicCloudTurn } | { readonly ok: false; readonly message: string }>
   discard(missionId: string): Promise<{ readonly ok: true; readonly turn: PublicCloudTurn } | { readonly ok: false; readonly message: string }>
+  /**
+   * The change waiting there, sent to a pull request on GitHub (0.762): a new one from a branch of its own, or added
+   * to the conversation's pull request while that is open. `message` is the commit's, its first line the title.
+   */
+  pullRequest(missionId: string, message: string): Promise<{ readonly ok: true; readonly turn: PublicCloudTurn; readonly added: boolean } | { readonly ok: false; readonly message: string }>
+  /** A message's own files (`.locust/attachments`), sent to the turn's copy there before its agent starts. */
+  carry(missionId: string, folder: string, files: readonly string[]): Promise<void>
   computers(): Promise<{ readonly ok: true; readonly computers: readonly PublicCloudComputer[] } | { readonly ok: false; readonly message: string; readonly permission?: true }>
   stop(name: string): Promise<{ readonly ok: true } | { readonly ok: false; readonly message: string }>
   remove(name: string): Promise<{ readonly ok: true } | { readonly ok: false; readonly message: string }>
@@ -157,8 +170,25 @@ export function createCloudTurns(options: {
       state: turn.state,
       ...(turn.files === undefined ? {} : { files: turn.files }),
       ...(turn.appliedAt === undefined ? {} : { appliedAt: turn.appliedAt }),
-      ...(turn.problem === undefined ? {} : { problem: turn.problem })
+      ...(turn.problem === undefined ? {} : { problem: turn.problem }),
+      ...(turn.pullRequest === undefined ? {} : { pullRequest: turn.pullRequest }),
+      ...(turn.state === 'there' && task.pullRequest !== undefined ? { openPullRequest: { number: task.pullRequest.number, url: task.pullRequest.url } } : {}),
+      ...(turn.outcome === undefined ? {} : { outcome: turn.outcome })
     }
+  }
+  /**
+   * The turns a resolved change held (0.762): carried into it, they went where it went. Their cards stay quiet; their
+   * files are here only if it came home (shared/cloud-computer.ts, `cloudFilesHere`).
+   */
+  const resolveCarried = (store: CloudStore, taskId: string, outcome: NonNullable<PublicCloudTurn['outcome']>): { readonly store: CloudStore; readonly told: readonly string[] } => {
+    let next = store
+    const told: string[] = []
+    for (const other of Object.values(store.turns)) {
+      if (other.taskId !== taskId || other.state !== 'carried' || other.outcome !== undefined) continue
+      next = putTurn(next, { ...other, outcome })
+      told.push(other.missionId)
+    }
+    return { store: next, told }
   }
   const tell = (store: CloudStore, missionId: string): void => {
     const turn = store.turns[missionId]
@@ -273,7 +303,7 @@ export function createCloudTurns(options: {
           return { store: next, value: undefined }
         })
         const port = await freePort()
-        return { ok: true, spawn: cloudServeSpawn({ codespace: space.name, dir: cloudTaskDir(made.taskId), port }) }
+        return { ok: true, spawn: cloudServeSpawn({ codespace: space.name, dir: cloudTaskDir(made.taskId), port }), dir: cloudTaskDir(made.taskId) }
       } catch (error) {
         ready.clear()
         if (error instanceof CloudComputerError && error.kind === 'permission') {
@@ -361,7 +391,9 @@ export function createCloudTurns(options: {
         if (!applied.ok) return applied
         const base = await computers.settle(task.codespace, task.taskId)
         return await change((current) => {
-          const next = putTurn({ ...current, tasks: { ...current.tasks, [task.taskId]: { ...task, base } } }, { ...turn, state: 'home', files: found.files, appliedAt: now().toISOString(), at: now().toISOString() })
+          const resolved = resolveCarried(current, task.taskId, 'home')
+          const next = putTurn({ ...resolved.store, tasks: { ...resolved.store.tasks, [task.taskId]: { ...(resolved.store.tasks[task.taskId] ?? task), base } } }, { ...turn, state: 'home', files: found.files, appliedAt: now().toISOString(), at: now().toISOString() })
+          for (const other of resolved.told) tell(next, other)
           tell(next, missionId)
           const shown = publicTurn(next, next.turns[missionId]!)!
           return { store: next, value: { ok: true as const, turn: shown } }
@@ -379,13 +411,78 @@ export function createCloudTurns(options: {
       try {
         await computers.discard(task.codespace, task.taskId, task.base)
         return await change((current) => {
-          const next = putTurn(current, { ...turn, state: 'discarded', at: now().toISOString() })
+          const resolved = resolveCarried(current, task.taskId, 'discarded')
+          const next = putTurn(resolved.store, { ...turn, state: 'discarded', at: now().toISOString() })
+          for (const other of resolved.told) tell(next, other)
           tell(next, missionId)
           return { store: next, value: { ok: true as const, turn: publicTurn(next, next.turns[missionId]!)! } }
         })
       } catch (error) {
         return { ok: false, message: sayWhy(error, 'The change could not be put back.') }
       }
+    },
+
+    pullRequest: async (missionId, message) => {
+      const store = await read()
+      const turn = store.turns[missionId]
+      const task = turn === undefined ? undefined : store.tasks[turn.taskId]
+      if (turn === undefined || task === undefined || turn.state !== 'there') return { ok: false, message: 'That change is not waiting on your cloud computer any more.' }
+      const text = message.trim()
+      const [subject = '', ...rest] = text.split('\n')
+      if (subject.trim().length === 0) return { ok: false, message: 'A pull request needs a title: the message\'s first line.' }
+      const body = rest.join('\n').trim()
+      try {
+        // Added to the conversation's pull request while it is open; a merged or closed one gets a new one after it.
+        const open = task.pullRequest !== undefined && (await computers.pullRequestOpen(task.repo, task.pullRequest.number)) ? task.pullRequest : undefined
+        const from = task.branch !== undefined && SAFE_BRANCH_NAME.test(task.branch) ? task.branch : undefined
+        const pushed = await computers.pushChange(
+          task.codespace, task.repo, task.taskId, task.base,
+          open === undefined ? { kind: 'new', from, wanted: branchFromSubject(subject) } : { kind: 'add', branch: open.branch },
+          text
+        )
+        let request: CloudPullRequest
+        if (open !== undefined) {
+          request = { number: open.number, url: open.url }
+        } else {
+          try {
+            request = await computers.openPullRequest(task.repo, { head: pushed.branch, base: pushed.into, title: subject.trim(), body: body.length > 0 ? body : subject.trim() })
+          } catch (error) {
+            // A branch with no pull request is not left on GitHub for the person to find and wonder about.
+            await computers.dropBranch(task.repo, pushed.branch)
+            throw error
+          }
+        }
+        // The copy there moves on, as after Apply: the next change is only what is new, and goes onto this branch.
+        const base = await computers.settle(task.codespace, task.taskId, 'pull-request')
+        return await change((current) => {
+          const resolved = resolveCarried(current, task.taskId, 'pr')
+          const kept = resolved.store.tasks[task.taskId] ?? task
+          const next = putTurn(
+            { ...resolved.store, tasks: { ...resolved.store.tasks, [task.taskId]: { ...kept, base, pullRequest: { ...request, branch: pushed.branch, into: pushed.into } } } },
+            { ...turn, state: 'pr', pullRequest: request, at: now().toISOString() }
+          )
+          for (const other of resolved.told) tell(next, other)
+          tell(next, missionId)
+          return { store: next, value: { ok: true as const, turn: publicTurn(next, next.turns[missionId]!)!, added: open !== undefined } }
+        })
+      } catch (error) {
+        return { ok: false, message: sayWhy(error, 'The pull request could not be opened.') }
+      }
+    },
+
+    carry: async (missionId, folder, files) => {
+      const wanted = files.filter(carriedPath)
+      if (wanted.length === 0) return
+      const store = await read()
+      const turn = store.turns[missionId]
+      const task = turn === undefined ? undefined : store.tasks[turn.taskId]
+      if (task === undefined) return
+      // A file that will not read is left as the message names it: the agent's own read then says it is missing.
+      const loaded = await Promise.all(wanted.map(async (path) => {
+        const bytes = await readFile(join(folder, ...path.split('/'))).catch(() => undefined)
+        return bytes === undefined ? [] : [{ path, bytes }]
+      }))
+      await computers.carry(task.codespace, task.taskId, loaded.flat())
     },
 
     computers: async () => {

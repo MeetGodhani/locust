@@ -1,11 +1,13 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 
-import type { PublicCloudTurn } from '../../shared/cloud-computer.js'
+import { cloudFilesHere, type PublicCloudTurn } from '../../shared/cloud-computer.js'
 import { startPhaseLabel } from '../../shared/start-phase.js'
+import { ActivityCard } from './components/ActivityCard.js'
 import { CloudChangeCard, CloudMarker } from './components/CloudTurn.js'
 import { CloudSetupDialog } from './components/CloudSetupDialog.js'
-import { relativePath } from './missionView.js'
+import { FilesElsewhere } from './filesElsewhere.js'
+import { relativePath, type ActivityDetail } from './missionView.js'
 
 /*
  * A TURN ON YOUR CLOUD COMPUTER, ON SCREEN (0.761). Its work streams in like any turn's; what is different is said
@@ -58,6 +60,26 @@ describe('a turn on the cloud computer, in the thread', () => {
     expect(card(turn('failed', { problem: 'GitHub did not answer.' }))).toContain('GitHub did not answer.')
   })
 
+  /*
+   * 0.762, the canvas's third button: the change waiting there can go to a pull request on GitHub instead of this
+   * folder -- or to the conversation's own pull request, by number, while that one is open.
+   */
+  it('offers a pull request beside Apply, and the open one by its number', () => {
+    const offered = (shown: PublicCloudTurn): string =>
+      renderToStaticMarkup(<CloudChangeCard turn={shown} onPatch={async () => undefined} onApply={async () => undefined} onDiscard={async () => undefined} onPullRequest={async () => undefined} asks={['Add a dates helper.']} teammate="Wren" />)
+    expect(offered(turn('there'))).toMatch(/Open a pull request<\/button>/)
+    expect(offered(turn('there', { openPullRequest: { number: 7, url: 'https://github.com/acme/hearth/pull/7' } }))).toMatch(/Add to pull request #7<\/button>/)
+    // Not offered where the host cannot open one.
+    expect(card(turn('there'))).not.toContain('pull request')
+  })
+
+  it('says a change went to a pull request, with a way to open it', () => {
+    const html = card(turn('pr', { pullRequest: { number: 7, url: 'https://github.com/acme/hearth/pull/7' } }))
+    expect(html).toContain('Sent to pull request #7')
+    expect(html).toContain('>Open on GitHub</button>')
+    expect(html).toContain('2 files · +18 −6')
+  })
+
   it("reads a path in the task's copy there as this folder's own", () => {
     expect(relativePath('/workspaces/.locust/t_ab12cd34ef56/src/dates.ts', 'C:\\work\\hearth')).toBe('src/dates.ts')
     expect(relativePath('/workspaces/.locust/t_ab12cd34ef56', 'C:\\work\\hearth')).toBe('.')
@@ -68,6 +90,50 @@ describe('a turn on the cloud computer, in the thread', () => {
     expect(startPhaseLabel('cloud-waking', 'OpenCode')).toBe('Waking your cloud computer, about a minute and a half')
     expect(startPhaseLabel('cloud-installing', 'OpenCode')).toBe('Setting up OpenCode on your cloud computer')
     expect(startPhaseLabel('cloud-bringing', 'OpenCode')).toBe('Bringing this folder to your cloud computer')
+  })
+})
+
+/*
+ * 0.762: a cloud turn's file rows offered Open, Copy and Show in the file manager -- each acting on this folder's
+ * file of that name, which was not the one the turn made (on 0.761, an ADDED file that was not here at all). While
+ * its change is not here, the rows open onto the change and offer nothing else.
+ */
+describe("a cloud turn's files, while they are not in this folder", () => {
+  ;(globalThis as { window?: unknown }).window = { desktop: { platform: 'win32' } }
+  const patch = ['--- /dev/null', '+++ b/greeting.txt', '@@ -0,0 +1 @@', '+hello from the cloud'].join('\n')
+  const detail = { kind: 'edit', name: '/workspaces/.locust/t_ab12cd34ef56/greeting.txt', tool: 'write', settled: true, patch: { text: patch } } as unknown as ActivityDetail
+  const rows = (where: string | undefined): string =>
+    renderToStaticMarkup(
+      <FilesElsewhere.Provider value={where}>
+        <ActivityCard summary="" variant="files" oneRowPerFile details={[detail]} runtimeName="OpenCode" workspacePath="C:/work/hearth" openByDefault onOpenFile={() => undefined} />
+      </FilesElsewhere.Provider>
+    )
+
+  it('offers Open, Copy and Show for a turn that ran here', () => {
+    const html = rows(undefined)
+    expect(html).toContain('lc-filerow__view')
+    expect(html).toContain('lc-filerow__copy')
+    expect(html).toContain('lc-filerow__reveal')
+  })
+
+  it('offers none of them while the change is on the cloud computer, and says where it is', () => {
+    const html = rows('On your cloud computer, not in this folder yet')
+    expect(html).toContain('greeting.txt')
+    expect(html).not.toContain('lc-filerow__view')
+    expect(html).not.toContain('lc-filerow__copy')
+    expect(html).not.toContain('lc-filerow__reveal')
+    expect(html).toContain('On your cloud computer, not in this folder yet')
+  })
+
+  it('knows when they are here: a turn that ran here, a change brought home, or one carried into a change that was', () => {
+    expect(cloudFilesHere(undefined)).toBe(true)
+    expect(cloudFilesHere(turn('home'))).toBe(true)
+    expect(cloudFilesHere(turn('there'))).toBe(false)
+    expect(cloudFilesHere(turn('working'))).toBe(false)
+    expect(cloudFilesHere(turn('pr'))).toBe(false)
+    expect(cloudFilesHere(turn('carried'))).toBe(false)
+    expect(cloudFilesHere(turn('carried', { outcome: 'home' }))).toBe(true)
+    expect(cloudFilesHere(turn('carried', { outcome: 'pr' }))).toBe(false)
   })
 })
 

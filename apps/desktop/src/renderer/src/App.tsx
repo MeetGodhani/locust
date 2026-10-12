@@ -7645,11 +7645,23 @@ export default function App(): ReactElement {
     setCloudTurns((current) => new Map(current).set(missionId, done.turn))
     return undefined
   }
+  /** The change waiting there, sent to a pull request (0.762): what went wrong, or undefined once it is there. */
+  const cloudTurnPullRequest = async (missionId: string, message: string): Promise<string | undefined> => {
+    const bridge = window.desktop
+    if (bridge === undefined) return 'Locust is not ready yet.'
+    const done = await bridge.pullRequestCloudTurn(missionId, message).catch(() => undefined)
+    if (done === undefined) return 'Locust could not reach your cloud computer. Try again in a moment.'
+    if (!done.ok) return done.message
+    setCloudTurns((current) => new Map(current).set(missionId, done.turn))
+    return undefined
+  }
   const threadCloud = {
     turns: cloudTurns,
     onPatch: async (missionId: string) => window.desktop?.cloudTurnPatch(missionId).catch(() => undefined),
     onApply: (missionId: string) => cloudTurnAct(missionId, 'apply'),
-    onDiscard: (missionId: string) => cloudTurnAct(missionId, 'discard')
+    onDiscard: (missionId: string) => cloudTurnAct(missionId, 'discard'),
+    onPullRequest: cloudTurnPullRequest,
+    ...(pickedTeammate === undefined ? {} : { teammate: pickedTeammate.name })
   }
   /** Cloud picked for an OpenCode teammate (0.761): the first time for a repository, the dialog asks. */
   const checkCloudComputer = async (): Promise<void> => {

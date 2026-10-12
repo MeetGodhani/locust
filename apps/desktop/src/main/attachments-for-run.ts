@@ -46,8 +46,22 @@ export async function attachmentsForRun(
    */
   readablePdf?: (folder: string, pdf: string, name: string) => Promise<ReadablePdf | undefined>
 ): Promise<string> {
+  return (await attachmentsPlacedForRun(prompt, workspacePath, runCwd, readablePdf)).prompt
+}
+
+/**
+ * The same, and the files of Locust's own the message now names: every one under `.locust/attachments` of the run's
+ * folder, a PDF's text and pictures included. A turn on the cloud computer (0.762) sends these there, as the bring
+ * never does -- `.locust/` stays out of git, and the copy there is made from git.
+ */
+export async function attachmentsPlacedForRun(
+  prompt: string,
+  workspacePath: string,
+  runCwd: string,
+  readablePdf?: (folder: string, pdf: string, name: string) => Promise<ReadablePdf | undefined>
+): Promise<{ readonly prompt: string; readonly files: readonly string[] }> {
   const split = splitAttachments(prompt)
-  if (split.attachments.length === 0) return prompt
+  if (split.attachments.length === 0) return { prompt, files: [] }
   const placed = samePath(workspacePath, runCwd) ? split.attachments : await placedForRun(split.attachments, workspacePath, runCwd)
   const readables: ReadablePdf[] = []
   if (readablePdf !== undefined) {
@@ -64,8 +78,12 @@ export async function attachmentsForRun(
   }
   const note = readablePdfNote(readables)
   const moved = placed.some((path, index) => path !== split.attachments[index])
-  if (!moved && note === undefined) return prompt
-  return withAttachments(split.text, placed, note)
+  const files = [...new Set([
+    ...placed.filter((path) => path.startsWith(`${ATTACHMENT_DIR}/`)),
+    ...readables.flatMap((readable) => [...(readable.text === undefined ? [] : [readable.text]), ...readable.pictures])
+  ])]
+  if (!moved && note === undefined) return { prompt, files }
+  return { prompt: withAttachments(split.text, placed, note), files }
 }
 
 /** The message's files, placed where a run outside the project folder reads them (M16, above). */

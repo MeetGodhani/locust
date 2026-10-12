@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -27,7 +27,7 @@ describe('a turn on the cloud computer', () => {
     await rm(folder, { recursive: true, force: true })
   })
 
-  const setUp = (options: { readonly onGitHub?: boolean; readonly existing?: Codespace } = {}) => {
+  const setUp = (options: { readonly onGitHub?: boolean; readonly existing?: Codespace; readonly stillOpen?: boolean; readonly refuseOpen?: boolean } = {}) => {
     const calls: string[] = []
     let space: Codespace | undefined = options.existing
     const computers: CloudComputers = {
@@ -57,15 +57,34 @@ describe('a turn on the cloud computer', () => {
         calls.push(`change:${base.slice(0, 1)}`)
         return { patch: 'diff --git a/greeting.txt b/greeting.txt\n', files: [{ path: 'greeting.txt', added: 1, removed: 0 }] }
       },
-      settle: async () => {
-        calls.push('settle')
+      settle: async (_name, _taskId, went) => {
+        calls.push(went === 'pull-request' ? 'settle:pull-request' : 'settle')
         return SETTLED
       },
       discard: async () => {
         calls.push('discard')
       },
       stop: async () => undefined,
-      remove: async () => undefined
+      remove: async () => undefined,
+      carry: async (_name, _taskId, files) => {
+        calls.push(`carry:${files.map((file) => file.path).join(',')}`)
+      },
+      pushChange: async (_name, _repo, _taskId, base, target) => {
+        calls.push(`push:${base.slice(0, 1)}:${target.kind === 'new' ? `new:${target.wanted}:${target.from ?? '-'}` : `add:${target.branch}`}`)
+        return { branch: target.kind === 'new' ? target.wanted : target.branch, into: 'main' }
+      },
+      openPullRequest: async (_repo, request) => {
+        calls.push(`open:${request.head}->${request.base}:${request.title}`)
+        if (options.refuseOpen === true) throw new Error('GitHub did not open the pull request: a pull request already exists')
+        return { number: 7, url: 'https://github.com/acme/hearth/pull/7' }
+      },
+      pullRequestOpen: async (_repo, number) => {
+        calls.push(`state:${String(number)}`)
+        return options.stillOpen ?? true
+      },
+      dropBranch: async (_repo, branch) => {
+        calls.push(`drop:${branch}`)
+      }
     }
     const git: Runner = async (args): Promise<Ran> => {
       if (args[0] === 'remote') return options.onGitHub === false ? { code: 2, stdout: '', stderr: 'no such remote' } : { code: 0, stdout: 'https://github.com/acme/hearth.git\n', stderr: '' }
@@ -169,6 +188,97 @@ describe('a turn on the cloud computer', () => {
     await turns.settled('mission_1')
     expect(await turns.discard('mission_1')).toMatchObject({ ok: true, turn: { state: 'discarded' } })
     expect(calls).toContain('discard')
+  })
+
+  /*
+   * A PULL REQUEST FROM THE CLOUD COMPUTER (0.762): the change waiting there goes to GitHub as a branch of its own,
+   * named from the message's first line, for the branch the folder is on; the copy then moves on, as after Apply.
+   */
+  it('sends the change to a new pull request, named from the message, and the copy moves on', async () => {
+    const { turns, calls, told } = setUp({ existing: { name: 'locust-hearth-x7q9', displayName: 'locust-hearth', state: 'Available', repository: 'acme/hearth' } })
+    await turns.prepare({ missionId: 'mission_1', folder, openCodeVersion: '1.18.27', say: () => undefined })
+    await turns.settled('mission_1')
+    const done = await turns.pullRequest('mission_1', 'Add a greeting file\n\nLocust-Teammate: Wren')
+    expect(done).toMatchObject({ ok: true, added: false, turn: { state: 'pr', pullRequest: { number: 7, url: 'https://github.com/acme/hearth/pull/7' } } })
+    expect(calls).toContain('push:a:new:locust/add-a-greeting-file:main')
+    expect(calls).toContain('open:locust/add-a-greeting-file->main:Add a greeting file')
+    expect(calls).toContain('settle:pull-request')
+    expect(told.at(-1)).toMatchObject({ missionId: 'mission_1', state: 'pr' })
+    // Sent once: a second send of the same turn is refused, and the next change is read from where this one left.
+    expect(await turns.pullRequest('mission_1', 'Again')).toMatchObject({ ok: false })
+    await turns.prepare({ missionId: 'mission_2', folder, follows: 'mission_1', openCodeVersion: '1.18.27', say: () => undefined })
+    await turns.settled('mission_2')
+    expect(calls.filter((call) => call.startsWith('change:')).at(-1)).toBe('change:b')
+  })
+
+  it("adds the next change to the conversation's pull request while it is open", async () => {
+    const { turns, calls } = setUp({ existing: { name: 'locust-hearth-x7q9', displayName: 'locust-hearth', state: 'Available', repository: 'acme/hearth' } })
+    await turns.prepare({ missionId: 'mission_1', folder, openCodeVersion: '1.18.27', say: () => undefined })
+    await turns.settled('mission_1')
+    await turns.pullRequest('mission_1', 'Add a greeting file')
+    await turns.prepare({ missionId: 'mission_2', folder, follows: 'mission_1', openCodeVersion: '1.18.27', say: () => undefined })
+    await turns.settled('mission_2')
+    // The waiting card offers the open one by number.
+    expect((await turns.turns(['mission_2']))[0]).toMatchObject({ state: 'there', openPullRequest: { number: 7 } })
+    const done = await turns.pullRequest('mission_2', 'Say goodbye too')
+    expect(done).toMatchObject({ ok: true, added: true, turn: { state: 'pr', pullRequest: { number: 7 } } })
+    expect(calls).toContain('state:7')
+    expect(calls).toContain('push:b:add:locust/add-a-greeting-file')
+    expect(calls.filter((call) => call.startsWith('open:'))).toHaveLength(1)
+  })
+
+  it('opens a new one when the last was merged or closed', async () => {
+    const { turns, calls } = setUp({ stillOpen: false, existing: { name: 'locust-hearth-x7q9', displayName: 'locust-hearth', state: 'Available', repository: 'acme/hearth' } })
+    await turns.prepare({ missionId: 'mission_1', folder, openCodeVersion: '1.18.27', say: () => undefined })
+    await turns.settled('mission_1')
+    await turns.pullRequest('mission_1', 'Add a greeting file')
+    await turns.prepare({ missionId: 'mission_2', folder, follows: 'mission_1', openCodeVersion: '1.18.27', say: () => undefined })
+    await turns.settled('mission_2')
+    const done = await turns.pullRequest('mission_2', 'Say goodbye too')
+    expect(done).toMatchObject({ ok: true, added: false })
+    expect(calls).toContain('push:b:new:locust/say-goodbye-too:main')
+  })
+
+  it('takes its branch away again when GitHub will not open the pull request, and keeps the change waiting', async () => {
+    const { turns, calls } = setUp({ refuseOpen: true, existing: { name: 'locust-hearth-x7q9', displayName: 'locust-hearth', state: 'Available', repository: 'acme/hearth' } })
+    await turns.prepare({ missionId: 'mission_1', folder, openCodeVersion: '1.18.27', say: () => undefined })
+    await turns.settled('mission_1')
+    const done = await turns.pullRequest('mission_1', 'Add a greeting file')
+    expect(done).toMatchObject({ ok: false })
+    expect(done.ok ? '' : done.message).toMatch(/already exists/)
+    expect(calls).toContain('drop:locust/add-a-greeting-file')
+    expect(calls).not.toContain('settle:pull-request')
+    expect((await turns.turns(['mission_1']))[0]?.state).toBe('there')
+  })
+
+  it('needs a title, the first line of its message', async () => {
+    const { turns, calls } = setUp({ existing: { name: 'locust-hearth-x7q9', displayName: 'locust-hearth', state: 'Available', repository: 'acme/hearth' } })
+    await turns.prepare({ missionId: 'mission_1', folder, openCodeVersion: '1.18.27', say: () => undefined })
+    await turns.settled('mission_1')
+    expect(await turns.pullRequest('mission_1', '   \n\n')).toMatchObject({ ok: false })
+    expect(calls.some((call) => call.startsWith('push:'))).toBe(false)
+  })
+
+  it('says where the earlier turns a change held went, once it goes somewhere', async () => {
+    const { turns } = setUp({ existing: { name: 'locust-hearth-x7q9', displayName: 'locust-hearth', state: 'Available', repository: 'acme/hearth' } })
+    await turns.prepare({ missionId: 'mission_1', folder, openCodeVersion: '1.18.27', say: () => undefined })
+    await turns.settled('mission_1')
+    await turns.prepare({ missionId: 'mission_2', folder, follows: 'mission_1', openCodeVersion: '1.18.27', say: () => undefined })
+    await turns.settled('mission_2')
+    expect((await turns.turns(['mission_1']))[0]).toMatchObject({ state: 'carried' })
+    expect((await turns.turns(['mission_1']))[0]?.outcome).toBeUndefined()
+    await turns.apply('mission_2')
+    expect((await turns.turns(['mission_1']))[0]).toMatchObject({ state: 'carried', outcome: 'home' })
+  })
+
+  it("sends a message's own files to the copy there, and nothing outside .locust/attachments", async () => {
+    const { turns, calls } = setUp({ existing: { name: 'locust-hearth-x7q9', displayName: 'locust-hearth', state: 'Available', repository: 'acme/hearth' } })
+    await turns.prepare({ missionId: 'mission_1', folder, openCodeVersion: '1.18.27', say: () => undefined })
+    await mkdir(join(folder, '.locust', 'attachments'), { recursive: true })
+    await writeFile(join(folder, '.locust', 'attachments', 'shot.png'), Buffer.from([137, 80, 78, 71]))
+    await turns.carry('mission_1', folder, ['.locust/attachments/shot.png', '.locust/attachments/missing.txt', 'src/app.ts', '.locust/attachments/../../secret.txt'])
+    // The one that read; one not there is left for the agent's own read to say so; the rest were never Locust's to send.
+    expect(calls.filter((call) => call.startsWith('carry:'))).toEqual(['carry:.locust/attachments/shot.png'])
   })
 
   it('cannot put a different OpenCode there than the one it reads here', async () => {

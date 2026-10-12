@@ -168,6 +168,111 @@ export function openCodeInstallLine(version: string): string {
   return `test "$(${CLOUD_OPENCODE} --version 2>/dev/null)" = ${version} || { mkdir -p ${CLOUD_TOOLS} && npm i -g --prefix ${CLOUD_TOOLS} opencode-ai@${version} > /tmp/locust-opencode-install.log 2>&1; }; ${CLOUD_OPENCODE} --version`
 }
 
+/** A path for a script there: single-quoted, a quote inside closed and reopened. Control characters are refused. */
+function scriptWord(text: string): string {
+  if (/[\u0000-\u001f\u007f]/.test(text)) throw new Error('That cannot be sent to the cloud computer as it is.')
+  return `'${text.replace(/'/g, `'\\''`)}'`
+}
+
+/** Under `.locust/attachments` and nowhere else -- what a message's files are copied to (shared/attachments.ts) -- with no step back out. */
+export function carriedPath(path: string): boolean {
+  const prefix = '.locust/attachments/'
+  if (!path.startsWith(prefix) || path.includes('\\')) return false
+  return path.slice(prefix.length).split('/').every((part) => part.length > 0 && part !== '.' && part !== '..')
+}
+
+/**
+ * THE FILES A MESSAGE ATTACHED, SENT TO THE COPY THERE (0.762). A picture pasted into the box, a file from outside
+ * the folder and a PDF Locust opened all sit in this folder's `.locust/attachments`, which git never sees -- so the
+ * copy made from git never had them, and the agent was told to read files that were not there. A script on stdin,
+ * each file as base64 between its own markers: no command line ever holds a name the person chose. `.locust/` goes
+ * into the repository's own exclude there too, so a file sent this way is never part of the change brought home.
+ */
+export function carryScript(files: readonly { readonly path: string; readonly bytes: Buffer }[]): string {
+  const lines = [
+    'set -e',
+    'common=$(git rev-parse --git-common-dir)',
+    'mkdir -p "$common/info"',
+    'grep -qxF .locust/ "$common/info/exclude" 2>/dev/null || echo .locust/ >> "$common/info/exclude"'
+  ]
+  for (const file of files) {
+    if (!carriedPath(file.path)) throw new Error('That is not a file Locust attached.')
+    const folder = file.path.slice(0, file.path.lastIndexOf('/'))
+    const base64 = file.bytes.toString('base64').replace(/.{1,76}/g, (line) => `${line}\n`)
+    lines.push(`mkdir -p ${scriptWord(folder)}`, `base64 -d > ${scriptWord(file.path)} <<'LOCUST_FILE'`, `${base64}LOCUST_FILE`)
+  }
+  lines.push('echo LOCUST_CARRIED')
+  return `${lines.join('\n')}\n`
+}
+
+/** The most a message's files may come to, sent over in one go. */
+export const MAX_CARRY_BYTES = 50 * 1024 * 1024
+
+/** A branch name Locust passes along: letters, digits and `._/-`, not starting with a dash. */
+export const SAFE_BRANCH_NAME = /^(?!-)[A-Za-z0-9._/-]{1,200}$/
+
+/** Where a change goes for a pull request: a new branch from GitHub's copy of `from`, or the branch of one already open. */
+export type PullRequestTarget =
+  | { readonly kind: 'new'; readonly from: string | undefined; readonly wanted: string }
+  | { readonly kind: 'add'; readonly branch: string }
+
+/**
+ * THE CHANGE, AS A BRANCH ON GITHUB (0.762). Only the change waiting there -- nothing else of this folder's -- put on
+ * GitHub's own copy of the branch in a scratch copy beside the task's, committed as the person (the codespace's git
+ * is set up with their GitHub name: MEASURED 2026-10-12) and pushed by Locust's login shell, the only one that holds
+ * the token. The agent never takes part. A change that will not go onto GitHub's copy -- it leans on edits only this
+ * folder has -- fails `git apply`, and nothing is pushed. The message comes on stdin; the branch pushed and the
+ * branch it is for are said on the last lines.
+ */
+export function pullRequestSteps(repoDir: string, taskId: string, base: string, target: PullRequestTarget): readonly string[] {
+  if (!/^[0-9a-f]{40}$/.test(base)) throw new Error('That is not a commit Locust made.')
+  if (!/^\/workspaces\/[A-Za-z0-9_.-]+$/.test(repoDir)) throw new Error('That is not a repository folder Locust can use there.')
+  const names = target.kind === 'new' ? [target.wanted, ...(target.from === undefined ? [] : [target.from])] : [target.branch]
+  for (const name of names) if (!SAFE_BRANCH_NAME.test(name)) throw new Error('That is not a branch name Locust will pass to git.')
+  const dir = cloudTaskDir(taskId)
+  const scratch = `${dir}-pr`
+  const patch = `/tmp/locust-${taskId}.patch`
+  const message = `/tmp/locust-${taskId}.message`
+  const pick = target.kind === 'new'
+    ? [
+        // The folder's own branch when GitHub has it, else the repository's default.
+        `into=${target.from ?? ''}`,
+        '{ { test -n "$into" && git ls-remote --exit-code -q --heads origin "$into" > /dev/null; } || into=$(git symbolic-ref --short refs/remotes/origin/HEAD | sed s@^origin/@@); }',
+        'git fetch -q origin "$into"',
+        `git worktree add -q --detach ${scratch} "origin/$into"`,
+        `b=${target.wanted}`,
+        'n=1',
+        `while git ls-remote --exit-code -q --heads origin "$b" > /dev/null; do n=$((n+1)); b=${target.wanted}-$n; done`
+      ]
+    : [
+        `into=${target.branch}`,
+        'git fetch -q origin "$into"',
+        `git worktree add -q --detach ${scratch} "origin/$into"`,
+        'b="$into"'
+      ]
+  return [
+    `cat > ${message}`,
+    `cd ${dir}`,
+    'git add -A -N .',
+    `git diff --binary ${base} > ${patch}`,
+    `test -s ${patch}`,
+    `cd ${repoDir}`,
+    `rm -rf ${scratch}`,
+    'git worktree prune',
+    ...pick,
+    `cd ${scratch}`,
+    `git apply --3way --binary ${patch}`,
+    'git add -A',
+    `git commit -q -F ${message}`,
+    'git push -q origin "HEAD:refs/heads/$b"',
+    `cd ${repoDir}`,
+    `git worktree remove --force ${scratch}`,
+    `rm -f ${patch} ${message}`,
+    'echo "LOCUST_BRANCH=$b"',
+    'echo "LOCUST_INTO=$into"'
+  ]
+}
+
 /** GitHub's answer when its sign-in on this computer may not make codespaces. */
 export function needsCodespacePermission(said: string): boolean {
   return /codespace.{0,40}scope|scope.{0,40}codespace|must have.{0,40}codespace|admin:org|HTTP 403/i.test(said)
@@ -306,10 +411,20 @@ export interface CloudComputers {
   counts(name: string, taskId: string, base: string): Promise<readonly CloudChangeFile[]>
   /** What the task changed since it began. */
   change(name: string, taskId: string, base: string): Promise<{ readonly patch: string; readonly files: readonly CloudChangeFile[] }>
-  /** The task's change, kept there as its new starting point once it is in this folder. */
-  settle(name: string, taskId: string): Promise<string>
+  /** The task's change, kept there as its new starting point once it is in this folder, or in a pull request. */
+  settle(name: string, taskId: string, went?: 'here' | 'pull-request'): Promise<string>
   /** The task's change, put back to where it began. */
   discard(name: string, taskId: string, base: string): Promise<void>
+  /** A message's own files, into the task's copy there (`carryScript`). */
+  carry(name: string, taskId: string, files: readonly { readonly path: string; readonly bytes: Buffer }[]): Promise<void>
+  /** The task's change pushed as a branch (`pullRequestSteps`): the branch, and the branch it is for. */
+  pushChange(name: string, repo: string, taskId: string, base: string, target: PullRequestTarget, message: string): Promise<{ readonly branch: string; readonly into: string }>
+  /** A pull request opened on GitHub, from this computer's own GitHub sign-in. */
+  openPullRequest(repo: string, request: { readonly head: string; readonly base: string; readonly title: string; readonly body: string }): Promise<{ readonly number: number; readonly url: string }>
+  /** Whether that pull request is still open, so a change can be added to it. */
+  pullRequestOpen(repo: string, number: number): Promise<boolean>
+  /** A branch Locust pushed for a pull request GitHub then refused: taken away again. */
+  dropBranch(repo: string, branch: string): Promise<void>
   stop(name: string): Promise<void>
   remove(name: string): Promise<void>
 }
@@ -405,10 +520,11 @@ export function createCloudComputers(options: { readonly gh?: GhRun; readonly gi
       if (patch.code !== 0) refuse(patch, 'The change could not be read')
       return { patch: patch.stdout, files: changeFilesOf(counts.stdout) }
     },
-    settle: async (name, taskId) => {
+    settle: async (name, taskId, went = 'here') => {
       // The message on stdin, in words: an agent reading the copy's history there reads what this commit is.
       const line = `cd ${shellWord(cloudTaskDir(taskId))} && git add -A && git -c user.name=Locust -c user.email=cloud@locust.invalid commit -q --allow-empty -F - && git rev-parse HEAD`
-      const answer = await there(name, line, 'The change so far, applied to the folder on your computer by Locust\n', 60_000)
+      const said = went === 'here' ? 'The change so far, applied to the folder on your computer by Locust\n' : 'The change so far, sent to a pull request on GitHub by Locust\n'
+      const answer = await there(name, line, said, 60_000)
       const head = answer.stdout.trim().split(/\r?\n/).pop()?.trim() ?? ''
       if (answer.code !== 0 || !/^[0-9a-f]{40}$/.test(head)) refuse(answer, 'Your cloud computer could not mark the change as brought home')
       return head
@@ -417,6 +533,46 @@ export function createCloudComputers(options: { readonly gh?: GhRun; readonly gi
       if (!/^[0-9a-f]{40}$/.test(base)) throw new CloudComputerError('That is not a commit Locust made.')
       const answer = await there(name, `cd ${shellWord(cloudTaskDir(taskId))} && git reset -q --hard ${base} && git clean -q -fd`, undefined, 60_000)
       if (answer.code !== 0) refuse(answer, 'The change could not be put back')
+    },
+    carry: async (name, taskId, files) => {
+      if (files.length === 0) return
+      const bytes = files.reduce((sum, file) => sum + file.bytes.length, 0)
+      if (bytes > MAX_CARRY_BYTES) throw new CloudComputerError('The files this message attached come to more than 50 MB, too much to send to your cloud computer.')
+      // A plain shell, not a login one: nothing here needs GitHub.
+      const answer = await there(name, `cd ${shellWord(cloudTaskDir(taskId))} && bash -s`, carryScript(files), 5 * 60_000)
+      if (answer.code !== 0 || !answer.stdout.includes('LOCUST_CARRIED')) refuse(answer, 'The files this message attached could not be sent to your cloud computer')
+    },
+    pushChange: async (name, repo, taskId, base, target, message) => {
+      const answer = await there(name, ownLine(pullRequestSteps(cloudRepoDir(repo), taskId, base, target)), message.endsWith('\n') ? message : `${message}\n`, 5 * 60_000)
+      const said = (key: string): string | undefined => new RegExp(`^${key}=(.+)$`, 'm').exec(answer.stdout)?.[1]?.trim()
+      const branch = said('LOCUST_BRANCH')
+      const into = said('LOCUST_INTO')
+      if (answer.code !== 0 || branch === undefined || into === undefined || !SAFE_BRANCH_NAME.test(branch) || !SAFE_BRANCH_NAME.test(into)) {
+        const why = `${answer.stdout}\n${answer.stderr}`
+        // `git apply` refusing is the change leaning on what only this folder has: said as that, not as git's words.
+        if (/patch does not apply|patch failed|with conflicts|does not exist in index|already exists in (?:index|working directory)/i.test(why)) {
+          throw new CloudComputerError('The change builds on edits in this folder that GitHub does not have, so it cannot go to GitHub on its own. Apply it here instead, then commit and push.')
+        }
+        refuse(answer, 'The change could not be pushed to GitHub')
+      }
+      return { branch: branch!, into: into! }
+    },
+    openPullRequest: async (repo, request) => {
+      if (!SAFE_BRANCH_NAME.test(request.head) || !SAFE_BRANCH_NAME.test(request.base)) throw new CloudComputerError('That is not a branch name Locust will pass to git.')
+      // Each value joined to its flag, so none of them can be read as a flag of its own (folder-commit.ts does the same).
+      const answer = await gh(['pr', 'create', '--repo', repo, `--head=${request.head}`, `--base=${request.base}`, `--title=${request.title}`, `--body=${request.body}`], { timeoutMs: 60_000 })
+      const url = /https:\/\/\S+\/pull\/(\d+)/.exec(answer.stdout)
+      if (answer.code !== 0 || url === null) refuse(answer, 'GitHub did not open the pull request')
+      return { number: Number(url![1]), url: url![0] }
+    },
+    pullRequestOpen: async (repo, number) => {
+      const answer = await gh(['pr', 'view', String(number), '--repo', repo, '--json', 'state'], { timeoutMs: 30_000 })
+      if (answer.code !== 0) refuse(answer, 'GitHub did not say whether the pull request is open')
+      return /"state"\s*:\s*"OPEN"/.test(answer.stdout)
+    },
+    dropBranch: async (repo, branch) => {
+      if (!SAFE_BRANCH_NAME.test(branch) || !branch.startsWith('locust/')) return
+      await gh(['api', '-X', 'DELETE', `repos/${repo}/git/refs/heads/${branch}`], { timeoutMs: 30_000 }).catch(() => undefined)
     },
     stop: async (name) => {
       const answer = await gh(['codespace', 'stop', '-c', name], { timeoutMs: 2 * 60_000 })

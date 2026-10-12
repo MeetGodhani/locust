@@ -843,6 +843,7 @@ export const CLOUD_TURNS_CHANNEL = 'cloud-turn:list'
 export const CLOUD_TURN_PATCH_CHANNEL = 'cloud-turn:patch'
 export const CLOUD_TURN_APPLY_CHANNEL = 'cloud-turn:apply'
 export const CLOUD_TURN_DISCARD_CHANNEL = 'cloud-turn:discard'
+export const CLOUD_TURN_PULL_REQUEST_CHANNEL = 'cloud-turn:pull-request'
 export const CLOUD_COMPUTERS_CHANNEL = 'cloud-computer:list'
 export const CLOUD_COMPUTER_STOP_CHANNEL = 'cloud-computer:stop'
 export const CLOUD_COMPUTER_REMOVE_CHANNEL = 'cloud-computer:remove'
@@ -931,6 +932,7 @@ export interface PublicCloudTask {
 }
 /** Where this folder stands for a cloud task: a GitHub repository, its branch, what GitHub lacks. */
 export type CloudTurnResponse = { readonly ok: true; readonly turn: PublicCloudTurn } | { readonly ok: false; readonly message: string }
+export type CloudPullRequestResponse = { readonly ok: true; readonly turn: PublicCloudTurn; readonly added: boolean } | { readonly ok: false; readonly message: string }
 export type CloudComputersResponse =
   | { readonly ok: true; readonly computers: readonly PublicCloudComputer[] }
   | { readonly ok: false; readonly message: string; readonly permission?: true }
@@ -3786,6 +3788,8 @@ export interface DesktopApi {
   cloudTurnPatch(missionId: string): Promise<string | undefined>
   applyCloudTurn(missionId: string): Promise<CloudTurnResponse>
   discardCloudTurn(missionId: string): Promise<CloudTurnResponse>
+  /** The change waiting there, sent to a pull request on GitHub (0.762); `added`: to the conversation's open one. */
+  pullRequestCloudTurn(missionId: string, message: string): Promise<CloudPullRequestResponse>
   cloudComputers(): Promise<CloudComputersResponse>
   stopCloudComputer(name: string): Promise<{ readonly ok: true } | { readonly ok: false; readonly message: string }>
   removeCloudComputer(name: string): Promise<{ readonly ok: true } | { readonly ok: false; readonly message: string }>

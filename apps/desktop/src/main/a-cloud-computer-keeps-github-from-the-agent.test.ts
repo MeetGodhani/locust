@@ -4,6 +4,8 @@ import {
   agentLine,
   AGENT_GUARD,
   bringSteps,
+  carriedPath,
+  carryScript,
   changeFilesOf,
   changeLine,
   cloudDisplayName,
@@ -12,6 +14,7 @@ import {
   envAssignment,
   openCodeInstallLine,
   ownLine,
+  pullRequestSteps,
   shellWord,
   type Answer,
   type BinaryAnswer
@@ -157,5 +160,99 @@ describe("the person's cloud computers on GitHub", () => {
     expect(gitCalls.some((call) => call.args[0] === 'update-ref' && call.args[1] === '-d')).toBe(true)
     expect(sentInput?.toString()).toBe('BUNDLE-BYTES')
     expect(sentLine.startsWith("bash -lc 'cd ")).toBe(true)
+  })
+})
+
+/*
+ * 0.762: the files a message attached, and a pull request from the change. Both are built like everything else
+ * sent there -- fixed words, paths Locust made, the person's words only on stdin -- and the pull request is pushed by
+ * Locust's login shell, never by the agent (MEASURED 2026-10-12: the codespace's git commits as the person's GitHub
+ * name, its token pushes a branch, and this computer's gh opens the pull request).
+ */
+describe("a message's files and a pull request, from the cloud computer", () => {
+  const answer = (stdout: string, code = 0, stderr = ''): Answer => ({ code, stdout, stderr })
+
+  it('sends only files under .locust/attachments, never a step back out of it', () => {
+    expect(carriedPath('.locust/attachments/shot.png')).toBe(true)
+    expect(carriedPath('.locust/attachments/spec/page-1.png')).toBe(true)
+    expect(carriedPath('src/app.ts')).toBe(false)
+    expect(carriedPath('.locust/attachments/../../.ssh/id_ed25519')).toBe(false)
+    expect(carriedPath('.locust/attachments/..')).toBe(false)
+    expect(carriedPath('.locust/attachments\\..\\x')).toBe(false)
+  })
+
+  it("writes each file from base64 between its own markers, its name quoted, and keeps .locust/ out of the change", () => {
+    const script = carryScript([
+      { path: ".locust/attachments/Colin's shot.png", bytes: Buffer.from([137, 80, 78, 71, 13, 10]) },
+      { path: '.locust/attachments/spec/page-1.png', bytes: Buffer.alloc(0) }
+    ])
+    expect(script).toContain('grep -qxF .locust/ "$common/info/exclude" 2>/dev/null || echo .locust/ >> "$common/info/exclude"')
+    expect(script).toContain(`base64 -d > '.locust/attachments/Colin'\\''s shot.png' <<'LOCUST_FILE'\n${Buffer.from([137, 80, 78, 71, 13, 10]).toString('base64')}\nLOCUST_FILE\n`)
+    expect(script).toContain("mkdir -p '.locust/attachments/spec'")
+    expect(script).toContain("base64 -d > '.locust/attachments/spec/page-1.png' <<'LOCUST_FILE'\nLOCUST_FILE\n")
+    expect(script.trimEnd().endsWith('echo LOCUST_CARRIED')).toBe(true)
+    expect(() => carryScript([{ path: 'src/app.ts', bytes: Buffer.from('x') }])).toThrow()
+    expect(() => carryScript([{ path: '.locust/attachments/a\nb', bytes: Buffer.from('x') }])).toThrow()
+  })
+
+  it('sends them over a plain shell, not a login one: nothing there needs GitHub', async () => {
+    let line = ''
+    let input: Buffer | string | undefined
+    const computers = createCloudComputers({
+      gh: async (args, options) => {
+        line = args[args.length - 1]!
+        input = options?.input
+        return answer('LOCUST_CARRIED\n')
+      }
+    })
+    await computers.carry('locust-hearth-abc', 't_ab12cd34', [{ path: '.locust/attachments/shot.png', bytes: Buffer.from('png') }])
+    expect(line).toBe("cd '/workspaces/.locust/t_ab12cd34' && bash -s")
+    expect(String(input)).toContain(".locust/attachments/shot.png")
+  })
+
+  it('pushes only the change, onto GitHub\'s copy of the branch, from a scratch copy beside the task', () => {
+    const steps = pullRequestSteps('/workspaces/hearth', 't_ab12cd34', 'c'.repeat(40), { kind: 'new', from: 'main', wanted: 'locust/add-a-greeting' })
+    const line = ownLine(steps)
+    expect(line.startsWith("bash -lc '")).toBe(true)
+    expect(steps[0]).toBe('cat > /tmp/locust-t_ab12cd34.message')
+    expect(steps).toContain(`git diff --binary ${'c'.repeat(40)} > /tmp/locust-t_ab12cd34.patch`)
+    expect(steps).toContain('git worktree add -q --detach /workspaces/.locust/t_ab12cd34-pr "origin/$into"')
+    expect(steps).toContain('git apply --3way --binary /tmp/locust-t_ab12cd34.patch')
+    expect(steps).toContain('git commit -q -F /tmp/locust-t_ab12cd34.message')
+    expect(steps).toContain('git push -q origin "HEAD:refs/heads/$b"')
+    // A name already on GitHub gets a number, rather than a push onto someone's branch.
+    expect(steps.some((step) => step.startsWith('while git ls-remote --exit-code -q --heads origin "$b"'))).toBe(true)
+    // Never the agent's line: no guard, so the login shell's token is what pushes.
+    expect(line).not.toContain('env -u GITHUB_TOKEN')
+  })
+
+  it('adds to an open one on its own branch', () => {
+    const steps = pullRequestSteps('/workspaces/hearth', 't_ab12cd34', 'c'.repeat(40), { kind: 'add', branch: 'locust/add-a-greeting' })
+    expect(steps).toContain('into=locust/add-a-greeting')
+    expect(steps).toContain('b="$into"')
+    expect(steps.some((step) => step.startsWith('while '))).toBe(false)
+  })
+
+  it('refuses a branch name a shell could read as more than a name', () => {
+    expect(() => pullRequestSteps('/workspaces/hearth', 't_ab12cd34', 'c'.repeat(40), { kind: 'add', branch: 'x; rm -rf ~' })).toThrow()
+    expect(() => pullRequestSteps('/workspaces/hearth', 't_ab12cd34', 'c'.repeat(40), { kind: 'new', from: '$(id)', wanted: 'locust/x' })).toThrow()
+    expect(() => pullRequestSteps('/workspaces/hearth', 't_ab12cd34', 'c'.repeat(40), { kind: 'add', branch: '-delete' })).toThrow()
+  })
+
+  it("says a change that leans on this folder's own edits in words, not git's", async () => {
+    const computers = createCloudComputers({ gh: async () => ({ code: 1, stdout: '', stderr: 'error: patch failed: greeting.txt:1\nerror: greeting.txt: patch does not apply\n' }) })
+    await expect(computers.pushChange('locust-hearth-abc', 'acme/hearth', 't_ab12cd34', 'c'.repeat(40), { kind: 'new', from: 'main', wanted: 'locust/x' }, 'Add it')).rejects.toThrow(/builds on edits in this folder that GitHub does not have/)
+  })
+
+  it('opens the pull request from this computer, each value joined to its flag', async () => {
+    let sent: readonly string[] = []
+    const computers = createCloudComputers({
+      gh: async (args) => {
+        sent = args
+        return answer('https://github.com/acme/hearth/pull/12\n')
+      }
+    })
+    expect(await computers.openPullRequest('acme/hearth', { head: 'locust/x', base: 'main', title: '--draft', body: 'Body' })).toEqual({ number: 12, url: 'https://github.com/acme/hearth/pull/12' })
+    expect(sent).toEqual(['pr', 'create', '--repo', 'acme/hearth', '--head=locust/x', '--base=main', '--title=--draft', '--body=Body'])
   })
 })

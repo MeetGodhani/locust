@@ -148,7 +148,13 @@ same connection. The agent there runs without the codespace's GitHub sign-in,
 so nothing it does reaches GitHub; its change comes into this folder only when
 you press Apply. GitHub counts the codespace's hours (60 free a month at this
 size) and charges for more only if your GitHub account has a way to pay.
-Locust holds no GitHub token: gh keeps it where gh keeps it.
+Locust holds no GitHub token: gh keeps it where gh keeps it. Since 0.762, files
+you attach to a message there (a picture, a file from outside the folder, a PDF
+Locust opened) go to the codespace over the same `gh codespace ssh`, and only
+those. And when you press Open a pull request on a change waiting there, Locust
+itself -- never the agent -- commits just that change on a new branch with the
+codespace's own GitHub sign-in, pushes it to the repository, and opens the pull
+request with your GitHub CLI here (`gh pr create`).
 
 **Hearing a voice (0.751).** Hear it, beside a voice picker, plays that voice
 saying hello. The first time for each voice it is a call like Talk's, a few

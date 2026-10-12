@@ -47,6 +47,7 @@ import { CopyButton } from './CopyButton.js'
 import { DiffView } from './DiffView.js'
 import { ThreadImage } from './ThreadImage.js'
 import { DocPreview, isNewDocument } from './DocPreview.js'
+import { FilesElsewhere } from '../filesElsewhere.js'
 import { InComparisonCell, PinnedPagesContext } from '../pinnedPages.js'
 import { Icon } from './Icon.js'
 import { AgentText, PlanSteps } from './ThreadItems.js'
@@ -403,6 +404,9 @@ export function ActivityCard({
   const [toggled, setToggled] = useState<ReadonlyMap<string, boolean>>(() => new Map())
   // A page shown running above, in a comparison's cell, stays folded here (0.450).
   const pinned = useContext(PinnedPagesContext)
+  // A turn whose files are not in this folder (0.762, filesElsewhere.ts): its rows act on nothing here.
+  const elsewhere = useContext(FilesElsewhere)
+  const openHere = elsewhere === undefined ? onOpenFile : undefined
   const inComparison = useContext(InComparisonCell)
   const steps = variant === 'steps'
   // The files card opens a new page only (0.580, `newPageEntry`) -- not in a
@@ -511,7 +515,7 @@ export function ActivityCard({
                   <div className="lc-filerow__line">
                     <button type="button" className="lc-filerow" onClick={() => toggle(entry)} aria-expanded={isOpen(entry)}>
                       <Icon name="file" size={14} />
-                      <span className="lc-filerow__path" title={entry.file.path}>{displayPath(entry.file.path, workspacePath)}</span>
+                      <span className="lc-filerow__path" title={elsewhere === undefined ? entry.file.path : `${entry.file.path}\n${elsewhere}`}>{displayPath(entry.file.path, workspacePath)}</span>
                       <span className="lc-filerow__status">{entry.file.status}</span>
                       {entry.large && <span className="lc-filerow__status is-large">LARGE</span>}
                       {(() => {
@@ -547,13 +551,13 @@ export function ActivityCard({
                       in this app it never hands the file to the operating
                       system to run.
                     */}
-                    {onOpenFile !== undefined && (
+                    {openHere !== undefined && (
                       <button
                         type="button"
                         className="lc-filerow__view"
                         title={`Open ${relativePath(entry.file.path, workspacePath)}`}
                         aria-label={`Open ${relativePath(entry.file.path, workspacePath)}`}
-                        onClick={() => onOpenFile(entry.file.path)}
+                        onClick={() => openHere(entry.file.path)}
                       >
                         {/* `maximize`, not `file`: the row's left edge already
                             carries a file glyph, and two of the same mark on
@@ -567,22 +571,24 @@ export function ActivityCard({
                       file". The whole file as it is now, read when asked; the
                       opened change's own Copy gives just the changed code.
                     */}
-                    {entry.file.status !== 'DELETED' && (
+                    {entry.file.status !== 'DELETED' && elsewhere === undefined && (
                       <CopyButton
                         className="lc-filerow__copy"
                         label={relativePath(entry.file.path, workspacePath)}
                         text={() => readWholeFile(entry.file.path, workspacePath)}
                       />
                     )}
-                    <button
-                      type="button"
-                      className="lc-filerow__reveal"
-                      title={`Show ${relativePath(entry.file.path, workspacePath)} in the file manager`}
-                      aria-label={`Show ${relativePath(entry.file.path, workspacePath)} in the file manager`}
-                      onClick={() => reveal(entry.file.path)}
-                    >
-                      <Icon name="folder" size={13} />
-                    </button>
+                    {elsewhere === undefined && (
+                      <button
+                        type="button"
+                        className="lc-filerow__reveal"
+                        title={`Show ${relativePath(entry.file.path, workspacePath)} in the file manager`}
+                        aria-label={`Show ${relativePath(entry.file.path, workspacePath)} in the file manager`}
+                        onClick={() => reveal(entry.file.path)}
+                      >
+                        <Icon name="folder" size={13} />
+                      </button>
+                    )}
                   </div>
                   {isOpen(entry) &&
                     (isNewDocument(entry.file) ? (
@@ -590,7 +596,7 @@ export function ActivityCard({
                         file={entry.file}
                         truncated={entry.truncated}
                         reported={entry.reported}
-                        {...(onOpenFile === undefined ? {} : { onOpen: () => onOpenFile(entry.file.path) })}
+                        {...(openHere === undefined ? {} : { onOpen: () => openHere(entry.file.path) })}
                       />
                     ) : (
                       <DiffView file={entry.file} truncated={entry.truncated} reported={entry.reported} workspacePath={workspacePath} />
@@ -858,26 +864,28 @@ export function ActivityCard({
                     {entry.tool !== undefined && fileToolWord(entry.tool) !== 'changed' && <span className="lc-filerow__status">{fileToolWord(entry.tool)}</span>}
                     <span className="lc-filerow__result is-muted">changed · seen on disk</span>
                   </div>
-                  {onOpenFile !== undefined && (
+                  {openHere !== undefined && (
                     <button
                       type="button"
                       className="lc-filerow__view"
                       title={`Open ${relativePath(entry.name, workspacePath)}`}
                       aria-label={`Open ${relativePath(entry.name, workspacePath)}`}
-                      onClick={() => onOpenFile(entry.name)}
+                      onClick={() => openHere(entry.name)}
                     >
                       <Icon name="maximize" size={13} />
                     </button>
                   )}
-                  <button
-                    type="button"
-                    className="lc-filerow__reveal"
-                    title={`Show ${relativePath(entry.name, workspacePath)} in the file manager`}
-                    aria-label={`Show ${relativePath(entry.name, workspacePath)} in the file manager`}
-                    onClick={() => reveal(entry.name)}
-                  >
-                    <Icon name="folder" size={13} />
-                  </button>
+                  {elsewhere === undefined && (
+                    <button
+                      type="button"
+                      className="lc-filerow__reveal"
+                      title={`Show ${relativePath(entry.name, workspacePath)} in the file manager`}
+                      aria-label={`Show ${relativePath(entry.name, workspacePath)} in the file manager`}
+                      onClick={() => reveal(entry.name)}
+                    >
+                      <Icon name="folder" size={13} />
+                    </button>
+                  )}
                 </div>
               ) : (
                 // An edit the runtime recorded without the change itself. The

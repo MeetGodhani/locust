@@ -354,6 +354,7 @@ import {
   CLOUD_TURN_PATCH_CHANNEL,
   CLOUD_TURN_APPLY_CHANNEL,
   CLOUD_TURN_DISCARD_CHANNEL,
+  CLOUD_TURN_PULL_REQUEST_CHANNEL,
   CLOUD_COMPUTERS_CHANNEL,
   CLOUD_COMPUTER_STOP_CHANNEL,
   CLOUD_COMPUTER_REMOVE_CHANNEL,
@@ -2343,7 +2344,8 @@ if (!ownsSingleInstanceLock) {
       cloud: {
         of: (missionId) => cloudTurns.of(missionId),
         prepare: (input) => cloudTurns.prepare(input),
-        settled: (missionId) => cloudTurns.settled(missionId)
+        settled: (missionId) => cloudTurns.settled(missionId),
+        carry: (missionId, folder, files) => cloudTurns.carry(missionId, folder, files)
       },
       // 0.377: an Agent Client Protocol agent (Copilot, for Approve-each), started IN its folder.
       acpSpawn: (executablePath, args, env, cwd) => spawnAppServer(executablePath, args, env, cwd),
@@ -4730,6 +4732,13 @@ if (!ownsSingleInstanceLock) {
       const missionId = missionIdOf(id)
       if (!fromOwnWindow(event) || missionId === undefined) return { ok: false, message: 'That change could not be put back.' }
       return cloudTurns.discard(missionId)
+    })
+    ipcMain.handle(CLOUD_TURN_PULL_REQUEST_CHANNEL, async (event, id: unknown, message: unknown) => {
+      const missionId = missionIdOf(id)
+      if (!fromOwnWindow(event) || missionId === undefined || typeof message !== 'string' || message.length > 20_000) {
+        return { ok: false, message: 'That change could not be sent to a pull request.' }
+      }
+      return cloudTurns.pullRequest(missionId, message)
     })
     ipcMain.handle(CLOUD_COMPUTERS_CHANNEL, async (event) => (fromOwnWindow(event) ? cloudTurns.computers() : { ok: false, message: 'That request was rejected.' }))
     ipcMain.handle(CLOUD_COMPUTER_STOP_CHANNEL, async (event, value: unknown) => {
