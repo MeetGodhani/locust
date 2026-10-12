@@ -9,9 +9,12 @@ import {
   branchRunsOf,
   cardOf,
   failedFacts,
+  issueFacts,
+  issuesOf,
   pullRequestFacts,
   reviewFacts,
   reviewsAskedOf,
+  type IssueOpened,
   scoutAnswers,
   scoutPrompt,
   scoutSettingsFrom,
@@ -49,6 +52,23 @@ describe('pull requests', () => {
     expect(pullRequestFacts(before, [pr()], 'look9')).toEqual([])
   })
 
+  it('ready and waiting -- passing, mergeable, nothing asked, untouched three days -- are said once, for later', () => {
+    // The person's hearth #2, read against their own repositories on 2026-10-12: passing, mergeable, no reviewer, since 2026-08-28.
+    const at = new Date('2026-10-12T15:00:00.000Z')
+    const waited = pr({ updatedAt: '2026-08-28T05:03:26Z' })
+    const [ready] = pullRequestFacts(new Map(), [waited], 'look1', at)
+    expect(ready).toMatchObject({ key: `pr:${URL}:ready`, urgency: 'later', said: 'Your pull request #212, Talk starts from any app, passes its checks and has waited 45 days. It can be merged, or closed.', open: { kind: 'url', url: URL } })
+    // One Scout has known since it was a day old says so too, once it has waited three.
+    expect(pullRequestFacts(new Map([[URL, waited]]), [waited], 'look2', at).map((fact) => fact.key)).toEqual([`pr:${URL}:ready`])
+    // Two days is not waiting; a draft, a conflict or changes asked are not ready.
+    expect(pullRequestFacts(new Map(), [pr({ updatedAt: '2026-10-10T16:00:00Z' })], 'look1', at)).toEqual([])
+    expect(pullRequestFacts(new Map(), [pr({ updatedAt: waited.updatedAt!, state: 'draft' })], 'look1', at)).toEqual([])
+    expect(pullRequestFacts(new Map([[URL, pr({ updatedAt: waited.updatedAt!, conflicts: true })]]), [pr({ updatedAt: waited.updatedAt!, conflicts: true })], 'look2', at)).toEqual([])
+    // Never beside other news of the same pull request: its checks passing again is the card.
+    const passedAgain = pullRequestFacts(new Map([[URL, pr({ checks: 'failing', notPassed: 1 })]]), [waited], 'look3', at)
+    expect(passedAgain.map((fact) => fact.key)).toEqual([`pr:${URL}:look3`])
+  })
+
   it('are read from gh pr list, and anything that is not one is left out', () => {
     const json = JSON.stringify([
       { number: 1, title: 'One', url: 'https://github.com/acme/app/pull/1', state: 'OPEN', isDraft: false, statusCheckRollup: [{ status: 'COMPLETED', conclusion: 'FAILURE' }], reviewDecision: '', mergeable: 'MERGEABLE' },
@@ -58,6 +78,28 @@ describe('pull requests', () => {
     expect(pullRequestsOf(json).map((one) => [one.number, one.checks])).toEqual([[1, 'failing']])
     expect(pullRequestsOf('not json')).toEqual([])
     expect(pullRequestsOf('{"number":1}')).toEqual([])
+  })
+})
+
+describe('issues on the folder’s repository', () => {
+  const at = new Date('2026-10-12T15:00:00.000Z')
+  const issue = (number: number, createdAt: string): IssueOpened => ({ number, title: `Issue ${String(number)}`, url: `https://github.com/acme/app/issues/${String(number)}`, createdAt, author: 'dana' })
+
+  it('opened this week are news, newest first, three a look, each said once by its address', () => {
+    const facts = issueFacts([issue(1, '2026-10-01T00:00:00Z'), issue(2, '2026-10-11T00:00:00Z'), issue(3, '2026-10-12T10:00:00Z'), issue(4, '2026-10-10T00:00:00Z'), issue(5, '2026-10-09T00:00:00Z')], at)
+    expect(facts.map((fact) => fact.key)).toEqual([3, 2, 4].map((number) => `issue:https://github.com/acme/app/issues/${String(number)}`))
+    expect(facts[0]).toMatchObject({ urgency: 'soon', said: 'dana opened issue #3: Issue 3.', open: { kind: 'url', url: 'https://github.com/acme/app/issues/3', label: 'Open the issue' } })
+  })
+
+  it('are read from gh issue list, and anything that is not one is left out', () => {
+    const json = JSON.stringify([
+      { number: 7, title: 'It  crashes\\non start', url: 'https://github.com/acme/app/issues/7', createdAt: '2026-10-12T00:00:00Z', author: { login: 'dana' } },
+      { number: 8, title: 'A pull request', url: 'https://github.com/acme/app/pull/8', createdAt: '2026-10-12T00:00:00Z' },
+      { number: 9, title: 'No date', url: 'https://github.com/acme/app/issues/9' },
+      'nothing'
+    ])
+    expect(issuesOf(json)).toEqual([{ number: 7, title: 'It crashes\\non start', url: 'https://github.com/acme/app/issues/7', createdAt: '2026-10-12T00:00:00Z', author: 'dana' }])
+    expect(issuesOf('not json')).toEqual([])
   })
 })
 

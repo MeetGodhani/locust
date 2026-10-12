@@ -33,6 +33,8 @@ export interface FolderPullRequest {
   readonly review?: 'approved' | 'changes-requested' | 'review-required'
   /** GitHub says it cannot merge into its base as it stands (`mergeable: CONFLICTING`, 0.731). */
   readonly conflicts?: true
+  /** When it last moved, when it was asked for (`updatedAt`): Scout's "ready and waiting" (0.758). */
+  readonly updatedAt?: string
 }
 
 const FAILED = new Set(['FAILURE', 'TIMED_OUT', 'CANCELLED', 'ACTION_REQUIRED', 'STARTUP_FAILURE', 'ERROR'])
@@ -96,7 +98,8 @@ function pullRequestFrom(parsed: unknown): FolderPullRequest | undefined {
     checkCount: read.length,
     notPassed: failed + pending,
     ...(review === undefined ? {} : { review }),
-    ...(pr.mergeable === 'CONFLICTING' ? { conflicts: true as const } : {})
+    ...(pr.mergeable === 'CONFLICTING' ? { conflicts: true as const } : {}),
+    ...(typeof pr.updatedAt === 'string' && Number.isFinite(Date.parse(pr.updatedAt)) ? { updatedAt: pr.updatedAt } : {})
   }
 }
 

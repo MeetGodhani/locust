@@ -116,15 +116,16 @@ nothing.
 
 **Scout (0.756).** Off until you press Turn on Scout. Then, every 10 minutes
 while Locust runs (or 30 or 60, as you set it), Locust looks for itself: your
-open pull requests, the reviews asked of you and the default branch's checks,
-with your own GitHub CLI in the folder (`gh pr list`, `gh run list`, `gh repo
-view` -- what that sign-in can read, as Commit and the pull request chip
-already do), and its own records of a teammate waiting on you or a turn that
+open pull requests, the reviews asked of you, the default branch's checks and
+the issues open on the folder's repository, with your own GitHub CLI in the
+folder (`gh pr list`, `gh run list`, `gh repo view`, `gh issue list` -- what
+that sign-in can read, as Commit and the pull request chip already do), and
+its own records of a teammate waiting on you or a turn that
 failed. That look sends nothing anywhere but GitHub. Only when it finds
 something new does Scout's model read it: one turn, in Ask mode, on the agent
 and model Scout is set to -- Space Bunny through OpenCode when Locust adds it,
 a free model whose provider may keep what it is sent -- carrying the new facts
-(pull request titles and numbers, check names, which teammate waits on you
+(pull request titles and numbers, a new issue's title and who opened it, check names, which teammate waits on you
 and for how long -- never what it waits to run -- a failed turn's error and
 what it was asked) and your teammates'
 names and roles. Change Scout's model like any teammate's, and its looks go

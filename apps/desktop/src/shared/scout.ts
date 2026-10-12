@@ -129,38 +129,60 @@ const clip = (text: string, max: number): string => {
  * that, whatever changed that a person would want to hear (pullRequestNews, the same words the folder's own watch
  * uses), keyed by the look that found it: the same state can come back, and coming back is news.
  */
-export function pullRequestFacts(before: ReadonlyMap<string, FolderPullRequest>, now: readonly FolderPullRequest[], look: string): readonly ScoutFact[] {
+/*
+ * READY AND WAITING (0.758): checks passing, nothing asked of it, mergeable, and untouched for this long. Scout spoke
+ * only of pull requests with work to do, so the person's hearth #2 -- passing, mergeable, no reviewer -- sat from
+ * 2026-08-28 to the day Scout was read against Colin's own repositories without a word from it.
+ */
+export const READY_WAITING_DAYS = 3
+
+export function pullRequestFacts(before: ReadonlyMap<string, FolderPullRequest>, now: readonly FolderPullRequest[], look: string, at: Date = new Date()): readonly ScoutFact[] {
   const facts: ScoutFact[] = []
   for (const pr of now) {
     // By its address, not its number: another folder's repository has a #12 too.
     const was = before.get(pr.url)
     const title = clip(pr.title, 120)
     const open: ScoutOpen = { kind: 'url', url: pr.url, label: 'Open the pull request' }
+    const told = facts.length
     if (was === undefined) {
       const needs: string[] = []
       if (pr.checks === 'failing') needs.push(`${String(pr.notPassed)} of ${String(pr.checkCount)} checks did not pass`)
       if (pr.review === 'changes-requested') needs.push('changes were asked for')
       if (pr.conflicts === true) needs.push('it conflicts with its base branch')
-      if (needs.length === 0) continue
-      const sentence = needs.join(', and ')
+      if (needs.length > 0) {
+        facts.push({
+          key: `pr:${pr.url}:${pr.checks}:${pr.review ?? ''}:${pr.conflicts === true ? 'c' : ''}`,
+          urgency: pr.checks === 'failing' ? 'now' : 'soon',
+          said: `Your pull request #${String(pr.number)}, ${title}: ${needs.join(', and ')}.`,
+          chips: [{ text: `#${String(pr.number)}`, tone: 'quiet' }, ...(pr.checks === 'failing' ? [{ text: `${String(pr.notPassed)} of ${String(pr.checkCount)} checks not passed`, tone: 'red' as const }] : [])],
+          open
+        })
+      }
+    } else {
+      const news = pullRequestNews(was, pr)
+      if (news !== undefined) {
+        facts.push({
+          key: `pr:${pr.url}:${look}`,
+          urgency: news.needsWork ? (pr.checks === 'failing' ? 'now' : 'soon') : 'later',
+          said: `Your pull request #${String(pr.number)}, ${title}: ${news.said.charAt(0).toLowerCase()}${news.said.slice(1)}.`,
+          chips: [{ text: `#${String(pr.number)}`, tone: 'quiet' }, { text: news.said, tone: news.needsWork ? 'red' : 'green' }],
+          open
+        })
+      }
+    }
+    // Ready and waiting, whether Scout has seen it before or not -- one it has known since it was a day old turns
+    // three too -- and said once (dismissed, it stays said), never beside other news of the same pull request.
+    if (facts.length > told) continue
+    const days = pr.updatedAt === undefined ? Number.NaN : Math.floor((at.getTime() - Date.parse(pr.updatedAt)) / 86_400_000)
+    if (pr.state === 'open' && pr.checks === 'passing' && pr.review !== 'changes-requested' && pr.conflicts !== true && Number.isFinite(days) && days >= READY_WAITING_DAYS) {
       facts.push({
-        key: `pr:${pr.url}:${pr.checks}:${pr.review ?? ''}:${pr.conflicts === true ? 'c' : ''}`,
-        urgency: pr.checks === 'failing' ? 'now' : 'soon',
-        said: `Your pull request #${String(pr.number)}, ${title}: ${sentence}.`,
-        chips: [{ text: `#${String(pr.number)}`, tone: 'quiet' }, ...(pr.checks === 'failing' ? [{ text: `${String(pr.notPassed)} of ${String(pr.checkCount)} checks not passed`, tone: 'red' as const }] : [])],
+        key: `pr:${pr.url}:ready`,
+        urgency: 'later',
+        said: `Your pull request #${String(pr.number)}, ${title}, passes its checks and has waited ${String(days)} days. It can be merged, or closed.`,
+        chips: [{ text: `#${String(pr.number)}`, tone: 'quiet' }, { text: 'ready', tone: 'green' }],
         open
       })
-      continue
     }
-    const news = pullRequestNews(was, pr)
-    if (news === undefined) continue
-    facts.push({
-      key: `pr:${pr.url}:${look}`,
-      urgency: news.needsWork ? (pr.checks === 'failing' ? 'now' : 'soon') : 'later',
-      said: `Your pull request #${String(pr.number)}, ${title}: ${news.said.charAt(0).toLowerCase()}${news.said.slice(1)}.`,
-      chips: [{ text: `#${String(pr.number)}`, tone: 'quiet' }, { text: news.said, tone: news.needsWork ? 'red' : 'green' }],
-      open
-    })
   }
   return facts
 }
@@ -201,6 +223,56 @@ export function reviewFacts(asked: readonly ReviewAsked[]): readonly ScoutFact[]
     chips: [{ text: `#${String(pr.number)}`, tone: 'quiet' }, { text: 'review asked', tone: 'amber' }],
     open: { kind: 'url', url: pr.url, label: 'Open the pull request' }
   }))
+}
+
+/** An open issue on the folder's repository, from `gh issue list --state open --json number,title,url,createdAt,author`. */
+export interface IssueOpened {
+  readonly number: number
+  readonly title: string
+  readonly url: string
+  readonly createdAt: string
+  readonly author?: string
+}
+
+export function issuesOf(json: string): readonly IssueOpened[] {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(json)
+  } catch {
+    return []
+  }
+  if (!Array.isArray(parsed)) return []
+  return parsed.flatMap((one): IssueOpened[] => {
+    if (typeof one !== 'object' || one === null) return []
+    const issue = one as Record<string, unknown>
+    if (typeof issue.number !== 'number' || !Number.isInteger(issue.number) || issue.number <= 0) return []
+    if (typeof issue.url !== 'string' || !/^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/issues\/\d+$/.test(issue.url)) return []
+    if (typeof issue.createdAt !== 'string' || !Number.isFinite(Date.parse(issue.createdAt))) return []
+    const author = typeof issue.author === 'object' && issue.author !== null && typeof (issue.author as Record<string, unknown>).login === 'string'
+      ? clip(String((issue.author as Record<string, unknown>).login), 60) : undefined
+    return [{ number: issue.number, title: typeof issue.title === 'string' ? clip(issue.title, 120) : '', url: issue.url, createdAt: issue.createdAt, ...(author === undefined ? {} : { author }) }]
+  })
+}
+
+/*
+ * NEW ISSUES (0.758): what people file on the folder's repository -- for a project with users, the first word of a
+ * bug. Only those opened in the last week, three a look at most, newest first, each said once.
+ */
+export const NEW_ISSUE_DAYS = 7
+const ISSUES_A_LOOK = 3
+
+export function issueFacts(issues: readonly IssueOpened[], at: Date = new Date()): readonly ScoutFact[] {
+  return [...issues]
+    .filter((issue) => at.getTime() - Date.parse(issue.createdAt) <= NEW_ISSUE_DAYS * 86_400_000)
+    .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))
+    .slice(0, ISSUES_A_LOOK)
+    .map((issue) => ({
+      key: `issue:${issue.url}`,
+      urgency: 'soon' as const,
+      said: `${issue.author ?? 'Someone'} opened issue #${String(issue.number)}: ${issue.title}.`,
+      chips: [{ text: `#${String(issue.number)}`, tone: 'quiet' as const }, { text: 'new issue', tone: 'amber' as const }],
+      open: { kind: 'url' as const, url: issue.url, label: 'Open the issue' }
+    }))
 }
 
 /** One run of the default branch's checks, from `gh run list --json databaseId,conclusion,status,workflowName,url`. */

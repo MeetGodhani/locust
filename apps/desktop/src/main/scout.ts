@@ -8,6 +8,7 @@ import {
   branchFacts,
   cardOf,
   failedFacts,
+  issueFacts,
   pullRequestFacts,
   reviewFacts,
   scoutAnswers,
@@ -17,6 +18,7 @@ import {
   withNewCards,
   type BranchRun,
   type FailedTurn,
+  type IssueOpened,
   type ReviewAsked,
   type ScoutCard,
   type ScoutFact,
@@ -42,6 +44,8 @@ export interface ScoutGithub {
   readonly prs: readonly FolderPullRequest[]
   readonly reviews: readonly ReviewAsked[]
   readonly branch?: { readonly name: string; readonly runs: readonly BranchRun[] }
+  /** The folder's repository's open issues (0.758): the ones opened this week are news. */
+  readonly issues?: readonly IssueOpened[]
 }
 
 export interface ScoutDeps {
@@ -193,9 +197,10 @@ export function createScout(deps: ScoutDeps) {
     if (from.settings.watches.github) {
       const github = await deps.github().catch(() => undefined)
       if (github !== undefined) {
-        facts.push(...pullRequestFacts(new Map(from.prs.map((pr) => [pr.url, pr] as const)), github.prs, lookStamp))
+        facts.push(...pullRequestFacts(new Map(from.prs.map((pr) => [pr.url, pr] as const)), github.prs, lookStamp, now()))
         facts.push(...reviewFacts(github.reviews))
         if (github.branch !== undefined) facts.push(...branchFacts(github.branch.name, github.branch.runs))
+        facts.push(...issueFacts(github.issues ?? [], now()))
         prs = github.prs
       }
     }
