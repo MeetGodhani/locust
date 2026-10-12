@@ -143,6 +143,13 @@ in the background after the window is closed.
 you, Working, Ready to look at, Done -- across every runtime at once. It opens
 from the bottom bar, beside Settings.
 
+**Scout.** A teammate that keeps watch, off until you turn it on: every few
+minutes it looks at your pull requests and their checks, the reviews asked of
+you, your main branch's checks, a teammate waiting on you and a turn that
+failed, and tells you on Home what needs you -- in Locust's own words, with its
+take and the next step drafted for the right teammate. It never acts by
+itself. It reads with a free model unless you give it another.
+
 **Talk.** A voice call with ChatGPT's own voice, beside the chat box's
 microphone, placed by the Codex CLI with your ChatGPT sign-in (Windows, for
 now). The voice reads your folder with read-only tools, uses your connectors

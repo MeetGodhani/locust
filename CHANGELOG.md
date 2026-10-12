@@ -11,6 +11,18 @@ Settings shows this file as What's new. An entry may group its changes under
 about when they arrive on it carries `<!-- big -->` on the line under its
 heading: the home screen then shows it once, as a splash.
 
+## 0.756.0 - 2026-10-12
+<!-- big -->
+
+### New
+
+- **Scout, a teammate that keeps watch.** Turn it on from Home and Scout joins your team. Every 10 minutes it looks at your pull requests and their checks, the reviews asked of you, your main branch's checks, a teammate waiting on you and a turn that failed, then tells you on Home what needs you. Each card says what happened in Locust's own words. Scout adds its take and drafts the next step for the right teammate: Send to them, change it first, or dismiss it. It never sends, merges or changes anything on its own. It reads with the steadiest free model listed (Space Bunny through OpenCode), and only when something is new. Change its model, what it watches, how often it looks and whether it tells you in Windows in Settings > General > Scout keeps watch.
+- **Polish overnight, as a routine.** A new starter routine for your team: one teammate runs the project's tests, another fixes what fails, and a third checks the fixes and writes a report for the morning. The fixes are made in a copy of the folder that waits for you to keep or discard. Set it to run each night from Routines.
+
+### Fixed
+
+- **Your saves go through when Windows holds a file for a moment.** Teammates, routines, memories, rooms, approval rules and every other setting Locust keeps now try again for about two seconds when another program, usually the antivirus, holds the file, instead of losing the save.
+
 ## 0.755.0 - 2026-10-12
 <!-- big -->
 
