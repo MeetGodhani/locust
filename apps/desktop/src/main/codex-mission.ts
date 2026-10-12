@@ -1843,6 +1843,8 @@ export function createCodexMissionService(options: CodexMissionServiceOptions): 
           requestedRouteId: routeId,
           resolvedRouteId,
           ...(chosen.version?.version === undefined ? {} : { cliVersion: chosen.version.version }),
+          // A free model's refusal is OpenCode's side, never a sign-in to renew (opencode-error.ts, 2026-10-12).
+          ...(runtime === 'opencode' && chosenModel !== undefined ? { model: chosenModel } : {}),
           now,
           // What Antigravity's mode refuses, so only a call it could have refused waits for the result (0.551).
           ...(runtime === 'antigravity' ? { sandbox: effectiveSandbox } : {}),

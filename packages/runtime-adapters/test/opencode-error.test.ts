@@ -93,6 +93,17 @@ describe("what the person is told", () => {
     }
   });
 
+  it("on a free model says the refusal is OpenCode's side: there is no sign-in to renew", () => {
+    // 2026-10-12: every free model, for everyone, a bare Mac with nothing signed in among them.
+    for (const statusCode of [401, 403]) {
+      const said = openCodeErrorSentence({ message: "Upstream request failed: Invalid credential", statusCode, kind: undefined, retryable: false }, true);
+      expect(said).toBe("OpenCode's service refused the free model, so OpenCode stopped: Upstream request failed: Invalid credential. Free models need no sign-in, so this is on OpenCode's side: pick another model, or try this one again later.");
+      expect(said).not.toMatch(/auth login|sign-in may have expired/i);
+    }
+    // A paid route's refusal is still a sign-in to look at.
+    expect(openCodeErrorSentence({ message: "Unauthorized.", statusCode: 401, kind: undefined, retryable: false }, false)).toMatch(/auth login/);
+  });
+
   it("quotes the runtime rather than paraphrasing it, for anything else", () => {
     // A paraphrase of an error is a claim about a system this app cannot see.
     const said = openCodeErrorSentence({

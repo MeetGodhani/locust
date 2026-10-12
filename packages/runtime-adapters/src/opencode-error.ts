@@ -125,7 +125,7 @@ export function sessionCannotContinue(facts: OpenCodeErrorFacts): boolean {
   return facts.message !== undefined && /encrypted_content/i.test(facts.message);
 }
 
-export function openCodeErrorSentence(facts: OpenCodeErrorFacts): string {
+export function openCodeErrorSentence(facts: OpenCodeErrorFacts, onFreeModel = false): string {
   const quoted = facts.message === undefined ? undefined : facts.message.trim();
   // The one worth naming precisely, because it is the one a person meets on
   // their first free run and the wording decides whether they think the app is
@@ -158,6 +158,17 @@ export function openCodeErrorSentence(facts: OpenCodeErrorFacts): string {
     return `OpenCode was rate limited by the provider and stopped${quoted === undefined ? "" : `: ${quoted}`}`;
   }
   if (facts.statusCode === 401 || facts.statusCode === 403) {
+    /*
+     * ON A FREE MODEL THERE IS NO SIGN-IN TO EXPIRE (2026-10-12). Every one of
+     * OpenCode's free models answered "Upstream request failed: Invalid
+     * credential" that morning, for everyone -- a bare Mac with nothing signed
+     * in among them (0.756's first-hour smoke; anomalyco/opencode#54833) --
+     * and this sentence sent a new person to `opencode auth login` for an
+     * account the free models never needed. Their refusal is OpenCode's side.
+     */
+    if (onFreeModel) {
+      return `OpenCode's service refused the free model, so OpenCode stopped${quoted === undefined ? "" : `: ${quoted.replace(/\.$/, "")}`}. Free models need no sign-in, so this is on OpenCode's side: pick another model, or try this one again later.`;
+    }
     return `OpenCode was refused by the provider and stopped${quoted === undefined ? "" : `: ${quoted}`}. Its sign-in may have expired -- \`opencode auth login\` in a terminal.`;
   }
   if (quoted !== undefined && quoted.length > 0) {

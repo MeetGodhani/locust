@@ -78,6 +78,8 @@ export interface OpenCodeInvocationContext {
   readonly requestedRouteId?: string;
   readonly resolvedRouteId?: string;
   readonly cliVersion?: string;
+  /** The model the run was asked for (`opencode/space-bunny-free`): a free one's refusal is never a sign-in. */
+  readonly model?: string;
   /** Test seam and host clock. */
   readonly now?: () => Date;
 }
@@ -249,6 +251,8 @@ export function createOpenCodeEventNormalizer(
     ? undefined
     : requireContextText(context.cliVersion, "cliVersion");
   const now = context.now ?? (() => new Date());
+  // The same test as the app's free routes (main/free-routes.ts isFreeRoute): an id that ends in "free".
+  const onFreeModel = context.model !== undefined && /(^|[-/])free$/i.test(context.model);
 
   let runtimeThreadId: string | undefined;
   let normalizedSequence = 0;
@@ -594,7 +598,7 @@ export function createOpenCodeEventNormalizer(
           return [diagnostic("info", "opencode.context_overflow", OPENCODE_OVERFLOW_RECOVERING, evidence)];
         }
         overflow = "none";
-        return [diagnostic("error", "opencode.provider_error", openCodeErrorSentence(facts), evidence)];
+        return [diagnostic("error", "opencode.provider_error", openCodeErrorSentence(facts, onFreeModel), evidence)];
       }
     }
 
@@ -733,7 +737,7 @@ export function createOpenCodeEventNormalizer(
                 // the HOST did, which the runtime could not know about, and
                 // above the exit code because a number is not a reason.
                 : providerError !== undefined
-                  ? openCodeErrorSentence(providerError)
+                  ? openCodeErrorSentence(providerError, onFreeModel)
                   : sawStop
                     ? `OpenCode exited with code ${String(completion.exitCode)}.`
                     : "OpenCode ended without a step that reported it had stopped.",

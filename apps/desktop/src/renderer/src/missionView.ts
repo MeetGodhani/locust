@@ -5395,9 +5395,12 @@ export function modelRetired(payload: { readonly message?: string }): boolean {
  * hours at a time: Ling 3.0 answered "Endpoint is unavailable" all of
  * 2026-09-30, and "Upstream request failed: Model is unavailable" on
  * 2026-10-09 while Ling 3.1 answered. Going on with the same model fails
- * again; the card offers the next free model instead.
+ * again; the card offers the next free model instead. And refused outright
+ * (2026-10-12, "Upstream request failed: Invalid credential" on every free
+ * model, for everyone): the adapter's sentence for that says the free model
+ * was refused by OpenCode's service (opencode-error.ts), never a sign-in.
  */
-const UNAVAILABLE_PATTERN = /\b(?:model|endpoint) is unavailable\b/i
+const UNAVAILABLE_PATTERN = /\b(?:model|endpoint) is unavailable\b|\brefused the free model\b/i
 
 export function modelUnavailable(payload: { readonly message?: string }): boolean {
   return UNAVAILABLE_PATTERN.test(payload.message ?? '')
