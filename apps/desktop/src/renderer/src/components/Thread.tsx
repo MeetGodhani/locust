@@ -1,9 +1,9 @@
 import { EditCheckCard } from './EditCheckCard.js'
 import { ThreadImagesContext } from '../threadImages.js'
-import { FilesElsewhere } from '../filesElsewhere.js'
+import { FilesElsewhere, RanOnTheCloud } from '../filesElsewhere.js'
 import type { EditCheckShown } from './EditCheckCard.js'
 import { Fragment, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import type { ReactElement } from 'react'
+import type { ReactElement, ReactNode } from 'react'
 
 import type { MissionRuntimeId, NormalizedRuntimeEvent } from '@teammate/runtime-adapters'
 import { providerErrorSentence } from '@teammate/runtime-adapters/provider-error'
@@ -1153,6 +1153,12 @@ onResume,
       : went === 'discarded' ? 'Put back on your cloud computer, not in this folder'
         : 'On your cloud computer, not in this folder yet'
   }
+  /** A turn's work, told whether it ran on the cloud computer and where its files are now (filesElsewhere.ts). */
+  const inItsPlace = (missionId: string | undefined, work: ReactNode): ReactElement => (
+    <RanOnTheCloud.Provider value={missionId !== undefined && cloud?.turns.has(missionId) === true}>
+      <FilesElsewhere.Provider value={elsewhereFor(missionId)}>{work}</FilesElsewhere.Provider>
+    </RanOnTheCloud.Provider>
+  )
   const error = recordedError === undefined ? undefined : providerErrorSentence(recordedError, events[0]?.sourceAdapter ?? restoredMission?.runtime)
   // What the run was allowed, hoisted so EVERY turn can be told -- not just
   // the newest. `no files changed` existed only on the last turn, so scrolling
@@ -1615,7 +1621,7 @@ onResume,
               {!again && userTurn(turnPromptLine(turn), turnAttachments(turn), () => editedFiles(turn.events, workspacePath), turn.startedBy === undefined && turn.inTerminal === undefined ? turn.missionId : undefined)}
               {!again && cloudMarkerFor(turn.missionId)}
               {cardsFor(index, 'before-work').map(peerCard)}
-              {!again && <FilesElsewhere.Provider value={elsewhereFor(turn.missionId)}>{earlierWork[index]}</FilesElsewhere.Provider>}
+              {!again && inItsPlace(turn.missionId, earlierWork[index])}
               {/* An earlier turn stopped before it said anything had nothing under it, as if still waiting (0.496; Claude Code: "Interrupted"). */}
               {!again && stoppedBeforeSaying(turn.events) && <div className="lc-thread__note">Stopped before it replied</div>}
               {cloudCardFor(turn.missionId)}
@@ -1705,7 +1711,7 @@ onResume,
         */}
         {cardsFor(earlierTurns.length, 'before-work').map(peerCard)}
 
-        <FilesElsewhere.Provider value={elsewhereFor(shownMissionId)}>
+        {inItsPlace(shownMissionId, (
         <ThreadItems
           /*
            * Keyed by the turn's mission (code review B4, renderer-thread (b)).
@@ -1730,7 +1736,7 @@ onResume,
           {...(busyModel === undefined || !running ? {} : { busyModel })}
           {...(onStopRun === undefined || !running ? {} : { onStop: onStopRun })}
         />
-        </FilesElsewhere.Provider>
+        ))}
 
         {!running && cloudCardFor(shownMissionId)}
         {cardsFor(earlierTurns.length, 'after-work').map(peerCard)}

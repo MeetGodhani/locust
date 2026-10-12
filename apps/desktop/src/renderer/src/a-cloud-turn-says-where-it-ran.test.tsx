@@ -6,7 +6,7 @@ import { startPhaseLabel } from '../../shared/start-phase.js'
 import { ActivityCard } from './components/ActivityCard.js'
 import { CloudChangeCard, CloudMarker } from './components/CloudTurn.js'
 import { CloudSetupDialog } from './components/CloudSetupDialog.js'
-import { FilesElsewhere } from './filesElsewhere.js'
+import { FilesElsewhere, RanOnTheCloud } from './filesElsewhere.js'
 import { relativePath, type ActivityDetail } from './missionView.js'
 
 /*
@@ -124,6 +124,23 @@ describe("a cloud turn's files, while they are not in this folder", () => {
     expect(html).not.toContain('lc-filerow__copy')
     expect(html).not.toContain('lc-filerow__reveal')
     expect(html).toContain('On your cloud computer, not in this folder yet')
+  })
+
+  /*
+   * 0.763: OpenCode's `write` over a file reports no diff, and here the folder fills it in -- a cloud turn's never
+   * was, so its row read "OpenCode did not report the change" right above the card that holds it (packaged 0.762).
+   */
+  it('says an edit reported without its diff changed on the cloud computer, not that the runtime failed to say', () => {
+    const written = { kind: 'edit', name: '/workspaces/.locust/t_ab12cd34ef56/greeting.txt', tool: 'write', settled: true } as unknown as ActivityDetail
+    const row = (ranThere: boolean): string =>
+      renderToStaticMarkup(
+        <RanOnTheCloud.Provider value={ranThere}>
+          <ActivityCard summary="" variant="files" oneRowPerFile details={[written]} runtimeName="OpenCode" workspacePath="C:/work/hearth" openByDefault />
+        </RanOnTheCloud.Provider>
+      )
+    expect(row(true)).toContain('changed on your cloud computer')
+    expect(row(true)).not.toContain('did not report the change')
+    expect(row(false)).toContain('OpenCode did not report the change')
   })
 
   it('knows when they are here: a turn that ran here, a change brought home, or one carried into a change that was', () => {

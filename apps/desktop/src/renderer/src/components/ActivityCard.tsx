@@ -47,7 +47,7 @@ import { CopyButton } from './CopyButton.js'
 import { DiffView } from './DiffView.js'
 import { ThreadImage } from './ThreadImage.js'
 import { DocPreview, isNewDocument } from './DocPreview.js'
-import { FilesElsewhere } from '../filesElsewhere.js'
+import { FilesElsewhere, RanOnTheCloud } from '../filesElsewhere.js'
 import { InComparisonCell, PinnedPagesContext } from '../pinnedPages.js'
 import { Icon } from './Icon.js'
 import { AgentText, PlanSteps } from './ThreadItems.js'
@@ -407,6 +407,7 @@ export function ActivityCard({
   // A turn whose files are not in this folder (0.762, filesElsewhere.ts): its rows act on nothing here.
   const elsewhere = useContext(FilesElsewhere)
   const openHere = elsewhere === undefined ? onOpenFile : undefined
+  const onTheCloud = useContext(RanOnTheCloud)
   const inComparison = useContext(InComparisonCell)
   const steps = variant === 'steps'
   // The files card opens a new page only (0.580, `newPageEntry`) -- not in a
@@ -950,7 +951,9 @@ export function ActivityCard({
                           ? 'result too large to keep'
                           : entry.kind === 'tool'
                             ? 'done'
-                            : `${runtimeName ?? 'the runtime'} did not report the change`}
+                            : onTheCloud
+                              ? 'changed on your cloud computer'
+                              : `${runtimeName ?? 'the runtime'} did not report the change`}
                   </span>
                 </div>
               )}
