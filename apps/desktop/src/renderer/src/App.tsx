@@ -234,11 +234,11 @@ import { pressTalk } from './talkPress.js'
 import { useScoutState } from './scoutState.js'
 import { ScoutCards, ScoutInvite } from './components/ScoutCards.js'
 import type { ScoutDraft, ScoutOpen } from '../../shared/scout.js'
+import type { TalkShortcutPress } from '../../shared/talk-shortcut.js'
+import type { SavedCall } from '../../shared/calls.js'
 
 /** Home's Not now on Meet Scout (0.756): this window's, and Settings can still turn Scout on. */
 const SCOUT_NOT_NOW = 'locust.scout.not-now'
-import type { TalkShortcutPress } from '../../shared/talk-shortcut.js'
-import type { SavedCall } from '../../shared/calls.js'
 
 /** The board's trash set (0.585): the sidebar's rows already leave deleted conversations out. */
 const NO_TRASH: ReadonlySet<string> = new Set()
