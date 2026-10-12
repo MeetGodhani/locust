@@ -121,8 +121,10 @@ const fileControls = () => drive.evaluate(`(() => {
   const after = (node) => marker !== undefined && Boolean(marker.compareDocumentPosition(node) & Node.DOCUMENT_POSITION_FOLLOWING)
   const foot = [...document.querySelectorAll('.lc-thread .lc-turnfoot')].filter(after).at(-1)
   const handed = [...document.querySelectorAll('.lc-thread .lc-handedfiles')].filter(after)
+  // A file the turn names is a row in its foot when it wrote it with its own tool, or a chip under its reply when it
+  // wrote it with a command (the packaged 0.762 run's turn 1: printf, so no row -- and a check of rows alone had nothing).
   return {
-    rows: foot?.querySelectorAll('.lc-filerow').length ?? 0,
+    rows: (foot?.querySelectorAll('.lc-filerow').length ?? 0) + handed.reduce((sum, one) => sum + one.querySelectorAll('.lc-handedfile').length, 0),
     local: (foot?.querySelectorAll('.lc-filerow__view, .lc-filerow__copy, .lc-filerow__reveal').length ?? 0) + handed.reduce((sum, one) => sum + one.querySelectorAll('.lc-handedfile__save').length, 0)
   }
 })()`)
