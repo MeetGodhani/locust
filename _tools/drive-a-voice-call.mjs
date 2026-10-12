@@ -77,6 +77,7 @@ const STRIP = `(() => {
   })
 })()`
 const strip = async () => JSON.parse(String(await drive.evaluate(STRIP)))
+// A line reads "ChatGPTFour.": the name and the words with nothing between, so an answer is matched after the name.
 
 try {
   await drive.ready()
@@ -164,7 +165,7 @@ try {
   for (let second = 0; second < 45; second += 1) {
     await sleep(1000)
     state = await strip()
-    if (state.lines.some((line) => /^ChatGPT/.test(line) && /\bfour\b|\b4\b/i.test(line))) break
+    if (state.lines.some((line) => /^ChatGPT/.test(line) && /\bfour\b|\b4\b/i.test(line.slice(7)))) break
     if (state.message) break
   }
   await drive.capture('the call, answered', () => JSON.stringify(state))
@@ -175,7 +176,7 @@ try {
   await drive.resize(1215, 800)
   await sleep(400)
   check('the question is heard, as a line of yours', state.lines.some((line) => /^You/.test(line) && /two plus two|2\s*\+\s*2/i.test(line)), state.lines.join(' | '))
-  check('ChatGPT answers out loud, and the strip says it: four', state.lines.some((line) => /^ChatGPT/.test(line) && /\bfour\b|\b4\b/i.test(line)), state.lines.join(' | '))
+  check('ChatGPT answers out loud, and the strip says it: four', state.lines.some((line) => /^ChatGPT/.test(line) && /\bfour\b|\b4\b/i.test(line.slice(7))), state.lines.join(' | '))
   check('no error on the way', state.message === '', state.message)
 
   await drive.evaluate(`[...document.querySelectorAll('[role=region][aria-label="Voice call"] button')].find((b) => b.innerText.trim() === 'End')?.click()`)
