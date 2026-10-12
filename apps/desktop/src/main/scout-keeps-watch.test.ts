@@ -15,7 +15,9 @@ import { createScout, type ScoutDeps, type ScoutGithub } from './scout.js'
  * that does not answer leaves the cards as they were and says why, and nothing on a card happens on its own.
  */
 const roots: string[] = []
-afterEach(async () => { await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))) })
+// With retries: a look's last save can still be landing as a test ends, and Windows will not remove a folder while a
+// file in it is being replaced (ENOTEMPTY on the 0.757 CI's windows runner, 2026-10-12).
+afterEach(async () => { await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }))) })
 
 const URL = 'https://github.com/acme/app/pull/212'
 const pr = (change: Partial<FolderPullRequest> = {}): FolderPullRequest => ({ number: 212, title: 'Talk starts from any app', url: URL, state: 'open', checks: 'passing', checkCount: 9, notPassed: 0, ...change })
