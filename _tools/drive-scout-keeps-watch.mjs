@@ -105,7 +105,16 @@ try {
     line = String(await drive.evaluate(`document.querySelector('[data-setting="scout"]')?.innerText.replace(/\\s+/g, ' ') ?? ''`))
   }
   await drive.capture('Scout in Settings', () => line)
-  check('Settings says Scout is on, what it reads with, and what it watches', /Scout keeps watch/.test(line) && /^.*On\. Scout looks every 10 minutes/.test(line) && /Pull requests and their checks/.test(line) && /Tell me in Windows/.test(line), line)
+  check('Settings says Scout is on, what it reads with, and what it watches', /Scout keeps watch/.test(line) && /^.*On\. Scout looks every 10 minutes/.test(line) && /It reads with Space Bunny Free through OpenCode/.test(line) && /Pull requests and their checks/.test(line) && /Tell me in Windows/.test(line), line)
+  // Its model is changed where any teammate's is (Colin: "allow the user to change the model of proactive teammate").
+  await drive.evaluate(`[...document.querySelectorAll('[data-setting="scout"] button')].find((b) => b.innerText.trim() === 'Change its model')?.click()`)
+  let dialog = ''
+  for (let i = 0; i < 20 && dialog === ''; i += 1) {
+    await sleep(250)
+    dialog = String(await drive.evaluate(`document.querySelector('[role="dialog"][aria-label="Edit teammate"]')?.innerText.replace(/\\s+/g, ' ') ?? ''`))
+  }
+  await drive.capture('Change its model', () => dialog.slice(0, 300))
+  check('Change its model opens Scout’s own Edit teammate, with its Model row', /Scout/.test(dialog) && /Model/.test(dialog) && /Space Bunny/.test(dialog), dialog.slice(0, 300))
 } catch (error) {
   failures += 1
   say(`drive failed: ${error instanceof Error ? error.message : String(error)}`)

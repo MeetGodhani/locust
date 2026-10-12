@@ -7980,6 +7980,7 @@ export default function App(): ReactElement {
               {...(scout === undefined ? {} : { scout })}
               {...((mate) => (mate?.route === undefined ? {} : { scoutModel: scoutModelWords(mate.route) }))(teammates.find((one) => one.teammateId === scout?.settings.teammateId))}
               {...(scoutModel === undefined ? {} : { scoutRoute: { runtime: 'opencode', model: scoutModel } })}
+              {...((mate) => (mate === undefined ? {} : { onChangeScoutModel: () => { setEditingTeammate(mate) } }))(teammates.find((one) => one.teammateId === scout?.settings.teammateId))}
               workspacePath={workspacePath}
               workspaceMade={workspaceMade}
               onChooseFolder={chooseWorkspace}

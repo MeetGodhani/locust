@@ -1525,6 +1525,7 @@ export function SettingsScreen({
   scout,
   scoutModel,
   scoutRoute,
+  onChangeScoutModel,
   runtimes,
   limitedRuntimes,
   usageWindows,
@@ -1608,6 +1609,7 @@ export function SettingsScreen({
   readonly scout?: ScoutState
   readonly scoutModel?: string
   readonly scoutRoute?: { readonly runtime: string; readonly model: string }
+  readonly onChangeScoutModel?: () => void
   readonly runtimes: readonly PublicRuntimeStatus[]
   /** Runtimes whose last run ended on the account's usage limit, with its own words. */
   readonly limitedRuntimes: ReadonlyMap<string, string>
@@ -3055,7 +3057,8 @@ export function SettingsScreen({
         {shownPage === 'app' && <TalkVoice />}
         {shownPage === 'app' && <TalkShortcutSetting heading={<h2 className="lc-settings__heading">Talk from any app</h2>} />}
         {shownPage === 'app' && <ScoutSetting heading={<h2 className="lc-settings__heading">Scout keeps watch</h2>} state={scout}
-          {...(scoutModel === undefined ? {} : { model: scoutModel })} {...(scoutRoute === undefined ? {} : { route: scoutRoute })} />}
+          {...(scoutModel === undefined ? {} : { model: scoutModel })} {...(scoutRoute === undefined ? {} : { route: scoutRoute })}
+          {...(onChangeScoutModel === undefined ? {} : { onChangeModel: onChangeScoutModel })} />}
         {shownPage === 'app' && (
         <section className="lc-settings__section">
           <h2 className="lc-settings__heading">Startup</h2>

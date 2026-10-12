@@ -8,7 +8,7 @@ import { SCOUT_EVERY_MINUTES, type ScoutApi, type ScoutEvery, type ScoutState, t
  * needs the person now comes as a Windows notification. Its model is its teammate's, changed like any teammate's;
  * this line says which one it reads with and what that costs.
  */
-export function ScoutSetting({ heading, state, model, route, api = typeof window === 'undefined' ? undefined : window.desktop?.scout }: {
+export function ScoutSetting({ heading, state, model, route, onChangeModel, api = typeof window === 'undefined' ? undefined : window.desktop?.scout }: {
   /** Settings' own heading, so its search finds this line (settings-pages-are-real). */
   readonly heading: ReactNode
   readonly state: ScoutState | undefined
@@ -16,6 +16,8 @@ export function ScoutSetting({ heading, state, model, route, api = typeof window
   readonly model?: string
   /** The free model a new Scout would read with; undefined when none is listed here. */
   readonly route?: { readonly runtime: string; readonly model: string }
+  /** Opens Scout's own Edit teammate, where its Model row is: absent before Scout is on the team. */
+  readonly onChangeModel?: () => void
   readonly api?: ScoutApi
 }) {
   const [busy, setBusy] = useState(false)
@@ -47,12 +49,16 @@ export function ScoutSetting({ heading, state, model, route, api = typeof window
       <div className="lc-settingline__text">
         {heading}
         <p className="lc-settings__lede">{on
-          ? `On. Scout looks every ${String(state?.settings.everyMinutes ?? 10)} minutes while Locust runs, and tells you on Home what needs you, with the next step drafted. It never sends, merges or changes anything by itself.${model === undefined ? '' : ` It reads with ${model}; change that on its card on the Team screen.`}`
+          ? `On. Scout looks every ${String(state?.settings.everyMinutes ?? 10)} minutes while Locust runs, and tells you on Home what needs you, with the next step drafted. It never sends, merges or changes anything by itself.${model === undefined ? '' : ` It reads with ${model}.`}`
           : 'Off. Turn it on and Scout joins your team: it looks at your pull requests and their checks, the reviews asked of you and your teammates’ turns, and tells you on Home what needs you.'}</p>
         {state?.modelSaid !== undefined && on && <p className="lc-settings__note" role="status">{`Last look: ${state.modelSaid}`}</p>}
         {message && <p className="lc-settings__note" role="status">{message}</p>}
       </div>
-      {switchOf('Scout keeps watch', on, toggle)}
+      <span className="lc-talkkeys">
+        {/* Its model is its teammate's (Colin, 2026-10-12: "allow the user to change the model of proactive teammate"). */}
+        {on && onChangeModel !== undefined && <button type="button" className="lc-control lc-control--boxed" onClick={onChangeModel}>Change its model</button>}
+        {switchOf('Scout keeps watch', on, toggle)}
+      </span>
     </div>
     {on && state !== undefined && <>
       <div className="lc-settingline lc-settingline--sub">
