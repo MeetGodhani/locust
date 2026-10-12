@@ -53,6 +53,7 @@ const drive = await startDrive({
   port: 9451,
   workspace,
   outPath: OUT,
+  spends: HAIKU,
   ...(packaged === undefined ? {} : { packaged }),
   seed: {
     schemaVersion: 1,

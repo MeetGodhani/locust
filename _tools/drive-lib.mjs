@@ -189,6 +189,24 @@ export function assertMaySpend(name) {
   process.exit(1)
 }
 
+/*
+ * The app's environment, held to free routes unless THIS drive said it spends and its runner said LOCUST_SPEND=1.
+ *
+ * It was lifted by LOCUST_SPEND=1 alone, so a free drive run under a LOCUST_SPEND=1 meant for another -- a sweep
+ * started with it, the commands of a teammate in a window opened to spend (the overnight polish, 2026-10-12) --
+ * opened a window that could start any paid route. A free drive's app now gets LOCUST_FREE_ONLY=1 and no
+ * LOCUST_SPEND to read (main/free-routes.ts reads that first).
+ */
+export function spendGuarded(appEnv, spends, environment = process.env) {
+  const guarded = { ...appEnv }
+  if (spends && environment.LOCUST_SPEND === '1') delete guarded.LOCUST_FREE_ONLY
+  else {
+    guarded.LOCUST_FREE_ONLY = '1'
+    delete guarded.LOCUST_SPEND
+  }
+  return guarded
+}
+
 export async function startDrive({ name, port, workspace, seed, files = {}, env = {}, keep = false, profilePath, outPath, stepFrom = 0, spends = false, sendsNothing = false, packaged, launchElsewhere = false, focused = false, extraArgs = [] }) {
   if (spends) assertMaySpend(name)
   try {
@@ -256,15 +274,14 @@ export async function startDrive({ name, port, workspace, seed, files = {}, env 
    * sent a turn on Cursor's Grok in its body. The app now refuses to start
    * any run that is not on a free route when this is set, so a drive that
    * picks a paid route by accident gets a refusal on screen instead of a
-   * bill. Lifted only by `LOCUST_SPEND=1`, the same word `assertMaySpend`
-   * already asks for -- see apps/desktop/src/main/free-routes.ts.
+   * bill. Lifted only for a drive that says it spends, run with `LOCUST_SPEND=1`,
+   * the same word `assertMaySpend` already asks for (spendGuarded, above) -- see
+   * apps/desktop/src/main/free-routes.ts.
    */
   // LOCUST_DRIVE_PATH_FIRST: a folder found before npm's own -- the runtime canary's
   // isolated install of a new CLI release (_tools/runtime-canary.mjs).
   const first = process.env.LOCUST_DRIVE_PATH_FIRST === undefined ? '' : `${process.env.LOCUST_DRIVE_PATH_FIRST};`
-  const appEnv = { ...process.env, PATH: `${first}${NPM_DIR};${process.env.PATH ?? ''}`, ...env }
-  if (process.env.LOCUST_SPEND === '1') delete appEnv.LOCUST_FREE_ONLY
-  else appEnv.LOCUST_FREE_ONLY = '1'
+  const appEnv = spendGuarded({ ...process.env, PATH: `${first}${NPM_DIR};${process.env.PATH ?? ''}`, ...env }, spends)
   /*
    * Comparison copies under THIS drive's profile, not the person's ~/.locust/compare.
    *

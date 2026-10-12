@@ -29,6 +29,8 @@ const drive = await startDrive({
   name: 'handoff-refused',
   port: 9573,
   workspace,
+  // The window offers Cursor only when the person running this said LOCUST_SPEND=1 (above): said here too.
+  spends: process.env.LOCUST_SPEND === '1',
   ...(packaged === undefined ? {} : { packaged }),
   ...(outPath === undefined ? {} : { outPath }),
   seed: {
