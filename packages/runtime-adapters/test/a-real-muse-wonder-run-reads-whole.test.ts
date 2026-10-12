@@ -74,6 +74,12 @@ describe("a real Muse Wonder run", () => {
     ]);
   });
 
+  it("lets the session's bookkeeping go quietly, the branch it saw in a git folder among it", () => {
+    // In Locust, on the same day: the one record the first capture lacked, drawn as "Unhandled Muse record".
+    const branch = JSON.stringify({ schema_version: 1, record_type: "event", payload_type: "session.workspace_branch.observed", payload: { kind: "session_workspace_branch_observed", branch: "main" } });
+    expect(run([branch]).filter((event) => event.type === "adapter.diagnostic")).toEqual([]);
+  });
+
   it("fails a tool it would not run on that tool's row, and lets its own reminder go quietly", () => {
     const events = run([
       task("tool_1", { kind: "proposed", task_kind: "tool.edit" }),

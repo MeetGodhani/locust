@@ -338,8 +338,11 @@ export function createMuseEventNormalizer(
     // anything happened that a transcript should show.
     if (
       payloadType === "runtime.command.accepted"
-      || payloadType === "session.run.linked"
       || payloadType === "task.stream.linked"
+      // The session's own bookkeeping: `session.run.linked`, and in a git folder
+      // `session.workspace_branch.observed` (MEASURED 2026-10-12, muse 1.4.6,
+      // an "Unhandled Muse record" line under a real Muse Wonder turn's answer).
+      || payloadType.startsWith("session.")
     ) {
       return [];
     }
