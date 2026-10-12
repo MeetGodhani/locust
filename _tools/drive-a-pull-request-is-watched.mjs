@@ -20,8 +20,22 @@ const root = await mkdtemp(join('C:/work/scratch', 'locust-pr-watch-'))
 const run = (program, args, cwd) => execFileSync(program, args, { cwd, encoding: 'utf8', windowsHide: true, timeout: 120_000 })
 run('gh', ['repo', 'clone', 'octocat/Hello-World', 'Hello-World', '--', '-q'], root)
 const workspace = join(root, 'Hello-World')
-const number = run('gh', ['pr', 'list', '--state', 'open', '--limit', '1', '--json', 'number', '--jq', '.[0].number'], workspace).trim()
-run('gh', ['pr', 'checkout', number], workspace)
+// The first open pull request `gh pr view` can find once it is checked out: one from a fork whose branch is also
+// called `master` checks out under a name gh cannot map back (MEASURED 2026-10-12, #11544), and the header then
+// rightly shows nothing. That is gh's limit on someone else's repository, not what this drive is about.
+const open = run('gh', ['pr', 'list', '--state', 'open', '--limit', '10', '--json', 'number', '--jq', '.[].number'], workspace).split(/\s+/).filter((line) => line.length > 0)
+let number
+for (const candidate of open) {
+  try {
+    run('gh', ['pr', 'checkout', candidate], workspace)
+    run('gh', ['pr', 'view', '--json', 'number'], workspace)
+    number = candidate
+    break
+  } catch {
+    // Try the next one.
+  }
+}
+if (number === undefined) throw new Error('none of the open pull requests on octocat/Hello-World can be checked out and read by gh')
 say(`pull request #${number}, branch ${run('git', ['branch', '--show-current'], workspace).trim()}`)
 
 let failures = 0
