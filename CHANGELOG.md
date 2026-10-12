@@ -11,6 +11,16 @@ Settings shows this file as What's new. An entry may group its changes under
 about when they arrive on it carries `<!-- big -->` on the line under its
 heading: the home screen then shows it once, as a splash.
 
+## 0.759.0 - 2026-10-12
+
+### New
+
+- **Muse Wonder for a Muse Code teammate.** Meta's newest model came out today. Pick Muse Wonder 1.0, or Muse Spark 1.3, for any teammate on Muse Code, with Muse Code's own effort levels. Muse Code also runs Muse Wonder when no model is picked.
+
+### Fixed
+
+- **A Muse Code turn reads cleanly.** Its searches and reads show as steps by name, a model call Muse Code tries again says so once, and its own bookkeeping no longer shows as "Unhandled Muse record" lines in the conversation.
+
 ## 0.758.0 - 2026-10-12
 
 ### Improved
