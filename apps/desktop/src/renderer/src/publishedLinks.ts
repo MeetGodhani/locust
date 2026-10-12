@@ -31,9 +31,18 @@ const KINDS: readonly { readonly host: RegExp; readonly path: RegExp; readonly k
   { host: /^gist\.github\.com$/, path: /^\/[^/]+\/[0-9a-f]+/, kind: 'Gist' }
 ]
 
+/**
+ * A path segment as a person reads it (0.753). One holding a % that is not an escape -- a Notion page called
+ * "Launch plan 100% done" -- made decodeURIComponent throw while a finished reply was drawn, and the window fell to its
+ * fallback, every time the conversation opened (bug hunt 2026-10-12, LK1). It stays as written instead.
+ */
+function decoded(segment: string): string {
+  try { return decodeURIComponent(segment) } catch { return segment }
+}
+
 /** A Claude artifact's address carries its title before its id: `/artifact/q3-launch-plan-<id>`. */
 function titleFromAddress(url: URL, kind: string): string {
-  const last = decodeURIComponent(url.pathname.split('/').filter(Boolean).pop() ?? '')
+  const last = decoded(url.pathname.split('/').filter(Boolean).pop() ?? '')
   if (kind === 'Claude artifact') {
     const words = last.replace(/-?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i, '').replace(/-?[A-Za-z0-9]{22}$/, '')
     if (words.length > 0 && words !== last) return words.replace(/-/g, ' ').replace(/^./, (first) => first.toUpperCase())
@@ -44,7 +53,7 @@ function titleFromAddress(url: URL, kind: string): string {
   }
   if (kind === 'Figma file') {
     const name = url.pathname.split('/').filter(Boolean)[2]
-    if (name !== undefined) return decodeURIComponent(name).replace(/-/g, ' ')
+    if (name !== undefined) return decoded(name).replace(/-/g, ' ')
   }
   return kind
 }

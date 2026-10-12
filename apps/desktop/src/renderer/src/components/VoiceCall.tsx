@@ -69,6 +69,8 @@ export function VoiceCallButton({ platform, onText, api = typeof window === 'und
   const stripBox = useRef<HTMLDivElement>(null)
   /** When each one began the line they are saying (0.748): a line goes in the thread where it began, not where it ended. */
   const lineFrom = useRef<Partial<Record<VoiceCallRole, number>>>({})
+  /** The call's words could not be saved with the conversation (0.753): said, and left on screen, never claimed as kept. */
+  const [notKept, setNotKept] = useState(false)
   const [lift, setLift] = useState(0)
   const current = useRef<Phase>('idle')
   /*
@@ -83,8 +85,11 @@ export function VoiceCallButton({ platform, onText, api = typeof window === 'und
     setLiveCallAnswer(undefined)
     setLiveCall({ ...call, ...done, phase: 'ended', partial: { you: '', voice: '' }, asks: [] })
     if (done.lines.length === 0 && done.turns.length === 0) { setLiveCall(undefined); return }
-    void (window.desktop?.calls?.save(done) ?? Promise.resolve(false)).catch(() => false).then(() => {
-      if (liveCall()?.callId === done.callId) setLiveCall(undefined)
+    void (window.desktop?.calls?.save(done) ?? Promise.resolve(false)).catch(() => false).then((saved) => {
+      // Saved: the thread reads it back from the log. Not saved: its words stay on screen from the live call, and the
+      // bar says it was not kept -- it said "kept in this conversation" either way (bug hunt 2026-10-12, with TK1).
+      if (saved && liveCall()?.callId === done.callId) setLiveCall(undefined)
+      if (!saved) setNotKept(true)
       markCallSaved()
     })
   }
@@ -210,7 +215,7 @@ export function VoiceCallButton({ platform, onText, api = typeof window === 'und
 
   const start = async (): Promise<void> => {
     if (api === undefined || current.current === 'calling' || current.current === 'live') return
-    setLines([]); setHanded([]); setPartial({ you: '', voice: '' }); setMessage(''); setMuted(false); setWorking(false); setSeconds(0)
+    setLines([]); setHanded([]); setPartial({ you: '', voice: '' }); setMessage(''); setMuted(false); setWorking(false); setSeconds(0); setNotKept(false)
     lineFrom.current = {}
     if (talkTo !== undefined) {
       setLiveCall({
@@ -293,7 +298,7 @@ export function VoiceCallButton({ platform, onText, api = typeof window === 'und
     {phase !== 'idle' && <div ref={stripBox} className="lc-call__strip" role="region" aria-label="Voice call" style={{ bottom: `calc(100% + ${String(lift + 10)}px)` }}>
       <div className="lc-call__head">
         {phase === 'ended'
-          ? <span className="lc-call__status">{talkTo === undefined ? 'Call ended' : `Call with ${talkTo.name} ended`}{seconds > 0 ? ` · ${clock}` : ''}{talkTo !== undefined && lines.length > 0 ? ' · kept in this conversation' : ''}</span>
+          ? <span className="lc-call__status">{talkTo === undefined ? 'Call ended' : `Call with ${talkTo.name} ended`}{seconds > 0 ? ` · ${clock}` : ''}{talkTo !== undefined && lines.length > 0 ? (notKept ? ' · not kept: it could not be saved' : ' · kept in this conversation') : ''}</span>
           : <>
             {talkTo !== undefined && <TeammateBot hue={talkTo.hue} avatar={talkTo.avatar} size={28} teammateId={talkTo.teammateId} motion="full" hopsWhenDone={false}
               activity={faceActivity} presence={asks.length > 0 ? 'approval' : working ? 'working' : 'none'} />}

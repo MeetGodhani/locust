@@ -917,9 +917,15 @@ export function createTeammateStore(options: { readonly rootDirectory: string })
       return serialize(async () => {
         if (!safeId(missionId)) throw new Error('Mission id is invalid')
         const file = await read()
-        if (!(missionId in file.missionOwners)) return
-        const { [missionId]: _gone, ...missionOwners } = file.missionOwners
-        await write({ ...file, missionOwners })
+        // A conversation gone for good frees its pin and its put-away mark too (0.753, bug hunt 2026-10-12, PN1): they
+        // stayed in the file, where nothing shows them, and still counted toward the caps of 50 pins and 1,000 marks.
+        const owned = missionId in file.missionOwners
+        const pinned = file.missionPins.includes(missionId)
+        const settled = missionId in file.missionSettled
+        if (!owned && !pinned && !settled) return
+        const { [missionId]: _owner, ...missionOwners } = file.missionOwners
+        const { [missionId]: _settled, ...missionSettled } = file.missionSettled
+        await write({ ...file, missionOwners, missionPins: file.missionPins.filter((id) => id !== missionId), missionSettled })
       })
     },
 

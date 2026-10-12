@@ -42,4 +42,20 @@ describe('pinning a conversation', () => {
     await teammates.pinMission('m_one_more', true)
     expect((await teammates.missionPins())[0]).toBe('m_one_more')
   })
+
+  /*
+   * A CONVERSATION GONE FOR GOOD FREES ITS PIN (0.753, bug hunt 2026-10-12, PN1). Deleting it and emptying the trash
+   * removed only its owner: its pin and its put-away mark stayed, where nothing shows them, and still counted toward
+   * the caps -- after 50 such pins, Pin refused with fewer than 50 in view and nothing in the app to clear them.
+   */
+  it('lets a deleted conversation go: its pin, its put-away mark, owned or not', async () => {
+    const teammates = createTeammateStore({ rootDirectory: await folder() })
+    for (let at = 0; at < MAX_MISSION_PINS; at += 1) await teammates.pinMission(`m_${String(at)}`, true)
+    await teammates.settleMission('m_3', {})
+    for (let at = 0; at < MAX_MISSION_PINS; at += 1) await teammates.unassignMission(`m_${String(at)}`)
+    expect(await teammates.missionPins()).toEqual([])
+    expect(await teammates.missionSettled()).toEqual({})
+    await teammates.pinMission('m_new', true)
+    expect(await teammates.missionPins()).toEqual(['m_new'])
+  })
 })

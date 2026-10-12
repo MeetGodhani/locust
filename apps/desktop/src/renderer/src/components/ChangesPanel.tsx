@@ -31,7 +31,10 @@ export function ChangesPanel({ workspacePath, running, onClose }: { readonly wor
     void window.desktop
       ?.folderDiff(showing === 'all' ? undefined : showing)
       .then((read) => {
-        if (current) setDiff(read)
+        if (!current) return
+        setDiff(read)
+        // The commit picked has left the branch (an amend, a rebase): all the changes came back, so All is picked (0.753, CH4).
+        if (read.kind === 'diff' && read.showing === 'all' && showing !== 'all') setShowing('all')
       })
       .catch(() => {
         if (current) setDiff({ kind: 'none', why: 'not-a-repository' })

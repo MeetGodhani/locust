@@ -87,4 +87,23 @@ describe('the calls file', () => {
     expect(kept.at(-1)?.callId).toBe('call_new')
     expect(kept.some((one) => one.callId === 'call_0')).toBe(false)
   })
+
+  /*
+   * A FILE THAT DOES NOT READ IS NOT "NO CALLS" (0.753, bug hunt 2026-10-12, TK2). One cut short by a sync tool was read
+   * as empty, and the next call's save wrote that one call over it: every call kept before it gone.
+   */
+  it('writes nothing over a calls.json that does not read, and lists none from it', async () => {
+    const file = await fileIn()
+    const log = createCallLog(file)
+    expect(await log.save(call({ callId: 'call_old1' }))).toBe(true)
+    const cutShort = (await readFile(file, 'utf8')).slice(0, 40)
+    await writeFile(file, cutShort, 'utf8')
+    expect(await log.save(call({ callId: 'call_new1' }))).toBe(false)
+    expect(await readFile(file, 'utf8')).toBe(cutShort)
+    expect(await log.list(['m_asked'])).toEqual([])
+    // A file that holds no list of calls is unreadable too; a missing one is simply none yet.
+    await writeFile(file, 'null', 'utf8')
+    expect(await log.save(call({ callId: 'call_new2' }))).toBe(false)
+    expect(await createCallLog(join(file, '..', 'nothing-yet.json')).save(call({ callId: 'call_first' }))).toBe(true)
+  })
 })

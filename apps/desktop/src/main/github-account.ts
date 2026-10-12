@@ -205,7 +205,9 @@ export function createGithubAccount(options: GithubAccountOptions = {}) {
       if (how === undefined) return { ok: false, message: `This computer has no package manager Locust can ${update ? 'update' : 'install'} it with.`, getItYourself: true }
       const ran = await runInstaller(how.command, how.args)
       if (ran.code === 'missing') return { ok: false, message: `${platform === 'win32' ? 'winget' : 'Homebrew'} is not on this computer, so Locust cannot ${update ? 'update' : 'install'} it for you.`, getItYourself: true }
-      if (ran.code !== 0 && !(platform === 'win32' && WINGET_ALREADY.has(ran.code))) {
+      // Node reports a Windows exit code unsigned (0x8A15002B as 2316632107), and the codes above are winget's signed
+      // ones: read as 32 bits, or "already installed" never matched (0.753, bug hunt 2026-10-12, WG1).
+      if (ran.code !== 0 && !(platform === 'win32' && WINGET_ALREADY.has(ran.code | 0))) {
         const said = `${ran.stdout}\n${ran.stderr}`.split('\n').map((line) => line.trim()).filter((line) => line.length > 0).pop()
         return { ok: false, message: `The GitHub CLI was not ${doing}${said === undefined ? '.' : `: ${said.slice(0, 200)}`}`, getItYourself: true }
       }

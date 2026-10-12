@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 
 import type { SavedCall } from '../../shared/calls.js'
-import { callPlacements } from '../../shared/calls.js'
+import { MAX_CALL_TURNS, callPlacements, isSavedCall } from '../../shared/calls.js'
 import { seedAvatar } from '../../shared/avatar.js'
 import { CallWords } from './components/CallWords.js'
 import { keptCall, type LiveCall } from './liveCall.js'
@@ -76,3 +76,21 @@ describe('the call in the thread', () => {
     expect(opened).toContain('Hide')
   })
 })
+
+/*
+ * A LONG CALL IS STILL KEPT (0.753, bug hunt 2026-10-12, TK1): a saved call holds at most 40 turns, and a call that asked
+ * the teammate a 41st time was refused whole -- every word said on it lost, with nothing said. The first 40 are kept;
+ * what was said after the 40th sits under it.
+ */
+describe('a call that asked more than 40 times', () => {
+  it('is kept, with its first 40 turns and every line', () => {
+    const turns = Array.from({ length: 41 }, (_, index) => ({ missionId: `m_${String(index)}`, at: 2_000 + index * 1_000 }))
+    const live: LiveCall = { callId: 'call_long', teammateId: 'tm_ada', name: 'Ada', startedAt: 1_000, phase: 'live', partial: { you: '', voice: '' },
+      lines: [{ role: 'you', text: 'And one more.', at: 60_000 }], turns }
+    const kept = keptCall(live, {}, 70_000)
+    expect(kept.turns).toHaveLength(MAX_CALL_TURNS)
+    expect(isSavedCall(kept)).toBe(true)
+    expect(callPlacements([kept], turns.map((turn) => turn.missionId)).get('after:m_39')?.[0]?.lines.map((line) => line.text)).toEqual(['And one more.'])
+  })
+})
+

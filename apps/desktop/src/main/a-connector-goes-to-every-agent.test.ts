@@ -129,6 +129,23 @@ describe('whether an agent already has one', () => {
     await agentHas('codex', 'rea', { executablePath: 'C:/node.exe', prefixArgs: ['C:/codex.js'] }, asked)
     expect(asked.calls[0]!.args).toEqual(['C:/codex.js', 'mcp', 'get', 'rea'])
   })
+
+  /*
+   * A LISTING THAT FAILED IS NOT "NONE" (0.753, bug hunt 2026-10-12, CN1). Gemini CLI, OpenCode and Antigravity are
+   * read by their `mcp list`; one that exited non-zero named nothing, which read as "has none", and their own
+   * `mcp add` then replaced the person's entry, which may hold a key Locust never saw.
+   */
+  it('a listing that failed cannot tell, and nothing is added over it', async () => {
+    for (const agent of ['gemini', 'opencode', 'antigravity'] as const) {
+      const failed = fakeRunner((command) => command.args.includes('list')
+        ? { exitCode: 1, stdout: '', stderr: 'Error: could not read settings.json' }
+        : { exitCode: 0, stdout: 'Added', stderr: '' })
+      expect(await agentHas(agent, 'rea', LAUNCHES[agent], failed)).toBeUndefined()
+      const answer = await addConnector({ name: 'rea', kind: 'url', value: 'https://example.com/mcp', agents: [agent] }, (one) => LAUNCHES[one], failed)
+      expect(answer.ok && answer.results[0]!.outcome).toBe('failed')
+      expect(failed.calls.some((command) => command.args.includes('add'))).toBe(false)
+    }
+  })
 })
 
 interface FakeRunner {

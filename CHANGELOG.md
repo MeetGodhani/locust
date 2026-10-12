@@ -11,6 +11,22 @@ Settings shows this file as What's new. An entry may group its changes under
 about when they arrive on it carries `<!-- big -->` on the line under its
 heading: the home screen then shows it once, as a splash.
 
+## 0.753.0 - 2026-10-12
+
+### Fixed
+
+Twelve bugs from the second bug hunt, each with a test.
+
+- **The Changes panel lists every changed file.** Images and other binary files, renamed files, files made executable, new empty files and new files too big to show were missing from its list, tree and totals. When more new files exist than it shows, it now says so.
+- **The Changes panel reads more repositories right.** A file with an accented name is named as it is, not as git's escapes and not as a rename. A repository with no remote whose main branch is master shows the branch's changes. A picked commit that left the branch (after an amend or rebase) shows all the changes instead of "Nothing has changed here".
+- **Add a connector no longer replaces one you already have** in Gemini CLI, OpenCode or Antigravity when the agent can't list its connectors. It leaves that agent alone and says why.
+- **A long call with a teammate is kept.** A call where you asked more than 40 times was lost whole. A calls file that can't be read is no longer replaced by the next call, and a call that can't be saved says so instead of claiming it was kept.
+- **A link with a stray % in a reply no longer breaks the window,** for example a Notion page called "Launch plan 100% done".
+- **Every conversation waiting on a teammate's reply hears when it can't start,** not only the first.
+- **Deleting a conversation frees its pin.** Pins of deleted conversations still counted toward the 50.
+- **Update for the GitHub CLI on Windows carries on when winget has nothing newer,** instead of saying it failed.
+- **A call's own connection for teammates always closes when the call ends,** even when the call ends while it is opening.
+
 ## 0.752.0 - 2026-10-12
 
 ### Improved

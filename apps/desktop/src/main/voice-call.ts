@@ -307,7 +307,12 @@ export function createVoiceCalls(deps: VoiceCallDeps): VoiceCalls {
         if (!going()) return refuse(ENDED)
         // Locust's own add-on for the hand-offs; a call without it still talks. A preview has nothing to hand over.
         const addOn = deps.addOn === undefined || preview !== undefined ? undefined : await deps.addOn.open().catch(() => undefined)
-        if (addOn !== undefined) call.addOn = true
+        if (addOn !== undefined) {
+          // A call that ended while its add-on was opening had nothing to close then, and the add-on stayed up until
+          // the next call ended or Locust quit (0.753, bug hunt 2026-10-12, TK3): closed here instead.
+          if (call.ended) { void deps.addOn?.close().catch(() => undefined); return refuse(ENDED) }
+          call.addOn = true
+        }
         if (!going()) return refuse(ENDED)
         // A preview is the voice alone: no connectors, no add-on of the person's, nothing to run (0.751).
         const threadConfig = voiceThreadConfig(isRecord(read) ? read.config : undefined, addOn, preview !== undefined ? {} : { connectors: deps.connectors === true, ...(deps.testServer === undefined ? {} : { testServer: deps.testServer }) })

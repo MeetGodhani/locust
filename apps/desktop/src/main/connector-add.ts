@@ -79,7 +79,9 @@ export async function agentHas(agent: ConnectorAgent, name: string, launch: Agen
     return answer.exitCode === 0 ? true : answer.exitCode === 1 ? false : undefined
   }
   const answer = await run(['mcp', 'list'])
-  if (answer.timedOut === true) return undefined
+  // A listing that failed names nothing, which read as "has none", and the agent's own `mcp add` then replaced the
+  // person's entry (0.753, bug hunt 2026-10-12, CN1). A failed listing cannot tell.
+  if (answer.timedOut === true || answer.exitCode !== 0) return undefined
   return listedNames(agent, `${answer.stdout}\n${answer.stderr}`).has(name)
 }
 

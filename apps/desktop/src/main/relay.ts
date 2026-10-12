@@ -1121,6 +1121,13 @@ export function createRelay(options: RelayOptions): Relay {
       const others = heldAlso.get(teammateId)
       if (others !== undefined) alsoWaiting.set(outcome.missionId, others)
     }
+    // Could not start: every thread waiting on it hears so, not only the first, whose notice startFor gave (0.753, bug
+    // hunt 2026-10-12, RL2 -- the second thread had been told only that the reply starts when the run ends).
+    if (outcome.kind === 'refused') {
+      for (const other of heldAlso.get(teammateId) ?? []) {
+        notifyAndKeep(other.askerRunId, other.askerMissionId, `${entry.recipient.self.name} could not reply on their own. The message waits for their next run.`)
+      }
+    }
     heldAlso.delete(teammateId)
   }
 

@@ -493,3 +493,26 @@ describe('a voice heard before it is chosen', () => {
     await voice.stop()
   })
 })
+
+/*
+ * THE CALL'S OWN SERVER CLOSES WITH IT (0.753, bug hunt 2026-10-12, TK3). A call ended while Locust's add-on for it
+ * was still opening had nothing to close at that moment; the open then finished, and the server stayed up -- its
+ * token in its own file -- until the next call ended or Locust quit.
+ */
+describe('a call ended while its add-on opens', () => {
+  it('closes the add-on once it has opened', async () => {
+    let opened: (value: VoiceAddOn) => void = () => undefined
+    const open = vi.fn(() => new Promise<VoiceAddOn>((resolve) => { opened = resolve }))
+    const close = vi.fn(async () => undefined)
+    const { voice } = calls(() => fakeCodex(), { addOn: { open, close } })
+    const starting = voice.start('v=0\r\noffer')
+    await settle(60)
+    expect(open).toHaveBeenCalledTimes(1)
+    await voice.stop()
+    expect(close).not.toHaveBeenCalled()
+    opened({ command: 'locust.exe', args: ['bridge.mjs'], env: {} })
+    expect((await starting).ok).toBe(false)
+    await settle()
+    expect(close).toHaveBeenCalledTimes(1)
+  })
+})

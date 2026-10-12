@@ -43,6 +43,18 @@ describe('installing the GitHub CLI from the card', () => {
     expect(await run.account.install()).toEqual({ ok: true, account: { kind: 'signed-out' } })
   })
 
+  /*
+   * AS NODE REPORTS IT (0.753, bug hunt 2026-10-12, WG1): on Windows a process's exit code arrives unsigned -- winget's
+   * 0x8A150061 as 2316632161, not -1978335135 -- so "already installed" and "no newer version" never matched.
+   */
+  it('takes winget’s “already installed” and “no newer version” as Node reports them on Windows', async () => {
+    for (const code of [0x8a150061, 0x8a15002b]) {
+      const run = after(() => answer(code), 'win32')
+      run.installedAnyway()
+      expect(await run.account.install()).toEqual({ ok: true, account: { kind: 'signed-out' } })
+    }
+  })
+
   it('uses Homebrew on a Mac that has it, and offers GitHub’s page on one that does not', async () => {
     const brewed = after(() => answer(0), 'darwin', (path) => path === '/opt/homebrew/bin/brew')
     expect((await brewed.account.install()).ok).toBe(true)

@@ -48,16 +48,47 @@ function stripPrefix(path: string): string {
   return trimmed.replace(/^[ab]\//, '')
 }
 
+/** The two names on a `diff --git a/<old> b/<new>` line; when they are the same, split where both halves match. */
+function gitNames(line: string): { old: string; new: string } | undefined {
+  const rest = line.slice('diff --git '.length)
+  if (!rest.startsWith('a/')) return undefined
+  const half = (rest.length - 5) / 2
+  if (Number.isInteger(half) && half > 0 && rest.slice(2 + half, 5 + half) === ' b/' && rest.slice(2, 2 + half) === rest.slice(5 + half)) {
+    const name = rest.slice(2, 2 + half)
+    return { old: name, new: name }
+  }
+  const split = rest.lastIndexOf(' b/')
+  return split < 0 ? undefined : { old: rest.slice(2, split), new: rest.slice(split + 3) }
+}
+
 /**
  * Parse unified diff text into files. Tolerant of what runtimes actually
  * emit: Cursor's diffs carry absolute paths, Codex's carry `a/` `b/`
  * prefixes, and some carry no `diff --git` line at all.
+ *
+ * A FILE GIT DESCRIBES WITHOUT TEXT LINES IS STILL A FILE (0.753, bug hunt
+ * 2026-10-12, CH1). An image added or changed ("Binary files ... differ"), a
+ * file renamed and left as it was, one made executable, a new empty file:
+ * git writes each as a `diff --git` header and the lines under it, with no
+ * `---`/`+++`, and a file was only ever kept once those had named it -- so
+ * the Changes panel's list, tree and totals left them out and said nothing.
+ * The header's names and its `new file`, `deleted file` and `rename` lines
+ * now list such a file, with no lines.
  */
 export function parseUnifiedDiff(text: string): readonly DiffFile[] {
   const files: DiffFile[] = []
   let oldPath: string | undefined
   let newPath: string | undefined
   let hunks: DiffHunk[] = []
+  // What the last `diff --git` line and the lines under it said.
+  let git: { old: string; new: string; status?: DiffFileStatus } | undefined
+  const closeGitOnly = (): void => {
+    if (git !== undefined) {
+      const status: DiffFileStatus = git.status ?? (git.old !== git.new ? 'RENAMED' : 'MODIFIED')
+      files.push({ path: status === 'DELETED' ? git.old : git.new, status, hunks: [] })
+    }
+    git = undefined
+  }
   // `oldLeft` / `newLeft`: the lines the hunk's header says are still to come.
   let current: { header: DiffHunk; rows: DiffRow[]; oldNo: number; newNo: number; oldLeft: number; newLeft: number } | undefined
 
@@ -124,6 +155,12 @@ export function parseUnifiedDiff(text: string): readonly DiffFile[] {
         continue
       }
     }
+    if (git !== undefined && current === undefined) {
+      if (line.startsWith('new file mode ')) { git.status = 'ADDED'; continue }
+      if (line.startsWith('deleted file mode ')) { git.status = 'DELETED'; continue }
+      if (line.startsWith('rename from ')) { git.old = line.slice('rename from '.length); git.status = 'RENAMED'; continue }
+      if (line.startsWith('rename to ')) { git.new = line.slice('rename to '.length); git.status = 'RENAMED'; continue }
+    }
     if (line.startsWith('--- ')) {
       // A new file starts at its `---` header, unless this is the first.
       if (oldPath !== undefined || hunks.length > 0) closeFile()
@@ -135,7 +172,12 @@ export function parseUnifiedDiff(text: string): readonly DiffFile[] {
       continue
     }
     if (line.startsWith('diff --git') || line.startsWith('index ') || line.startsWith('\\ No newline')) {
-      if (line.startsWith('diff --git') && (oldPath !== undefined || hunks.length > 0)) closeFile()
+      if (line.startsWith('diff --git')) {
+        // The file before: one with text lines closes as it always did; one with none is listed from its header.
+        if (oldPath !== undefined || hunks.length > 0) closeFile()
+        else closeGitOnly()
+        git = gitNames(line)
+      }
       continue
     }
     const match = HUNK.exec(line)
@@ -176,7 +218,8 @@ export function parseUnifiedDiff(text: string): readonly DiffFile[] {
       current.newNo += 1
     }
   }
-  closeFile()
+  if (oldPath !== undefined || newPath !== undefined || hunks.length > 0 || current !== undefined) closeFile()
+  else closeGitOnly()
   return files
 }
 

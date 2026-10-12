@@ -300,7 +300,13 @@ export function createFolderCommits(options: FolderCommitOptions = {}) {
     if (top.length === 0 || norm(top) !== norm(folder)) return { kind: 'none', why: 'not-a-repository' }
     const branch = (await runGit(['symbolic-ref', '--short', '-q', 'HEAD'], folder).catch(() => '')).trim() || 'HEAD'
     const remote = branch === 'HEAD' ? undefined : await remoteOf(folder, branch)
-    const defaultBranch = remote?.defaultBranch ?? 'main'
+    // With no remote, the local main, else the local master: a plain `git init` makes master, and the base was taken to
+    // be main, which was not there -- "Nothing has changed here" on a branch with commits (0.753, bug hunt 2026-10-12, CH3).
+    const localDefault = async (): Promise<string> => {
+      const known = await runGit(['branch', '--format=%(refname:short)'], folder).catch(() => '')
+      return /^main$/m.test(known) ? 'main' : /^master$/m.test(known) ? 'master' : 'main'
+    }
+    const defaultBranch = remote?.defaultBranch ?? await localDefault()
     // The base the branch came from: origin's default branch, else the local one; on it, the last commit.
     let base = 'HEAD'
     let since = 'HEAD'
@@ -324,33 +330,41 @@ export function createFolderCommits(options: FolderCommitOptions = {}) {
     const printed = (args: readonly string[]): Promise<string> =>
       runGit(args, folder).catch((error: unknown) => String((error as { stdout?: unknown }).stdout ?? ''))
     let text: string
-    if (sha !== undefined) {
-      if (!commits.some((row) => row.sha === sha)) return { kind: 'none', why: 'clean' }
-      text = await printed(['show', '--format=', '--no-color', '--no-ext-diff', '-M', sha, ...NOT_LOCUST])
+    // A commit no longer on the branch (an amend, a rebase, 100 newer commits) is shown as all the changes, which the
+    // panel then picks, rather than "Nothing has changed here" with no way back (0.753, bug hunt 2026-10-12, CH4).
+    const one = sha !== undefined && commits.some((row) => row.sha === sha) ? sha : undefined
+    // Paths as they are, not git's quoted octal: `"b/caf\303\251.txt"` was the name, and a rename (CH2).
+    const plainPaths = ['-c', 'core.quotePath=false'] as const
+    let cut = false
+    if (one !== undefined) {
+      text = await printed([...plainPaths, 'show', '--format=', '--no-color', '--no-ext-diff', '-M', one, ...NOT_LOCUST])
     } else {
-      text = await printed(['diff', '--no-color', '--no-ext-diff', '-M', since, ...NOT_LOCUST])
+      text = await printed([...plainPaths, 'diff', '--no-color', '--no-ext-diff', '-M', since, ...NOT_LOCUST])
       // New files are not in `git diff`; each is shown whole, as an addition, the index untouched.
-      const untracked = (await runGit(['ls-files', '--others', '--exclude-standard', '-z', ...NOT_LOCUST], folder).catch(() => ''))
+      const others = (await runGit(['ls-files', '--others', '--exclude-standard', '-z', ...NOT_LOCUST], folder).catch(() => ''))
         .split('\0')
         .filter((path) => path.length > 0)
-        .slice(0, FOLDER_DIFF_MAX_NEW_FILES)
+      const untracked = others.slice(0, FOLDER_DIFF_MAX_NEW_FILES)
+      // More new files than are shown is said, as a diff cut short is (CH1).
+      cut = others.length > untracked.length
       // Read here and written as git writes a new file's diff, all at once: a git per file was 7.7 s for 200
       // (measured 2026-10-10 on Locust's own checkout, whose records are untracked).
       const added = await Promise.all(
         untracked.map(async (path) => {
           const size = await stat(join(folder, path)).then((info) => info.size, () => Infinity)
-          if (size > FOLDER_DIFF_MAX_NEW_FILE_BYTES) return ''
+          // Too big to show whole, it is still a new file: listed by its header, with no lines (CH1).
+          if (size > FOLDER_DIFF_MAX_NEW_FILE_BYTES) return size === Infinity ? '' : `diff --git a/${path} b/${path}\nnew file mode 100644\n`
           return readFile(join(folder, path)).then((bytes) => newFileDiff(path, bytes), () => '')
         })
       )
-      for (const one of added) {
+      for (const piece of added) {
         if (text.length >= FOLDER_DIFF_MAX_BYTES) break
-        text += one
+        text += piece
       }
     }
     if (text.trim().length === 0 && commits.length === 0) return { kind: 'none', why: 'clean' }
-    const truncated = text.length > FOLDER_DIFF_MAX_BYTES
-    return { kind: 'diff', base, branch, text: truncated ? text.slice(0, text.lastIndexOf('\ndiff --git ', FOLDER_DIFF_MAX_BYTES) + 1 || FOLDER_DIFF_MAX_BYTES) : text, truncated, commits, showing: sha ?? 'all' }
+    const over = text.length > FOLDER_DIFF_MAX_BYTES
+    return { kind: 'diff', base, branch, text: over ? text.slice(0, text.lastIndexOf('\ndiff --git ', FOLDER_DIFF_MAX_BYTES) + 1 || FOLDER_DIFF_MAX_BYTES) : text, truncated: over || cut, commits, showing: one ?? 'all' }
   }
 
   return { changes, commit, diff, forgetSignIn, pullRequest }

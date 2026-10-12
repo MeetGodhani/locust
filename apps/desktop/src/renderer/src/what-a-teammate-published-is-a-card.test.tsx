@@ -57,3 +57,18 @@ describe('what a reply says a teammate published', () => {
     expect(renderToStaticMarkup(<PublishedCards text="Nothing to see at https://example.com" />)).toBe('')
   })
 })
+
+/*
+ * A STRAY % IN A LINK (0.753, bug hunt 2026-10-12, LK1): a page called "Launch plan 100% done" made the title's decode
+ * throw while the reply was drawn, and the whole window fell to its fallback. The words stay as they are written.
+ */
+describe('a published link whose address holds a % that is not an escape', () => {
+  it('is still a card, named as written, and drawing it throws nothing', () => {
+    expect(publishedOf('https://www.notion.so/Launch-plan-100%-done')).toMatchObject({ kind: 'Notion page', title: 'Launch plan 100% done' })
+    expect(publishedOf('https://www.figma.com/design/AbC123/Cart-%C3')).toMatchObject({ kind: 'Figma file', title: 'Cart %C3' })
+    const reply = 'Done: https://www.notion.so/Launch-plan-100%-done'
+    expect(() => publishedIn(reply)).not.toThrow()
+    expect(renderToStaticMarkup(<PublishedCards text={reply} />)).toContain('Launch plan 100% done')
+  })
+})
+

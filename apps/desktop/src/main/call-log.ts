@@ -15,19 +15,31 @@ export function createCallLog(file: string) {
     queue = next.catch(() => undefined)
     return next
   }
+  /*
+   * The kept calls, or none when there is no file yet. A file that is there and does not read THROWS (0.753, bug hunt
+   * 2026-10-12, TK2): it was read as "no calls", and the next call's save wrote that one call over it -- every call
+   * kept before it gone. A file cut short by a sync tool, or held for a moment, is unreadable, not empty.
+   */
   const read = async (): Promise<SavedCall[]> => {
+    let text: string
     try {
-      const parsed = JSON.parse(await readFile(file, 'utf8')) as { calls?: unknown }
-      return Array.isArray(parsed.calls) ? parsed.calls.filter(isSavedCall) : []
-    } catch {
-      return []
+      text = await readFile(file, 'utf8')
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return []
+      throw error
     }
+    const parsed = JSON.parse(text) as { calls?: unknown } | null
+    if (parsed === null || typeof parsed !== 'object' || !Array.isArray(parsed.calls)) throw new Error('calls.json holds no list of calls')
+    return parsed.calls.filter(isSavedCall)
   }
   return {
     save(call: unknown): Promise<boolean> {
       if (!isSavedCall(call)) return Promise.resolve(false)
       return serial(async () => {
-        const kept = (await read()).filter((one) => one.callId !== call.callId)
+        // Nothing is written over a file that does not read.
+        const before = await read().catch(() => undefined)
+        if (before === undefined) return false
+        const kept = before.filter((one) => one.callId !== call.callId)
         const calls = [...kept, call].sort((a, b) => a.startedAt - b.startedAt).slice(-MAX_KEPT_CALLS)
         // Written whole beside the file, then moved over it: a crash leaves the old file or the new one, never half.
         const temporary = `${file}.${randomBytes(6).toString('hex')}.tmp`
@@ -43,7 +55,7 @@ export function createCallLog(file: string) {
     },
     async list(missionIds: unknown): Promise<readonly SavedCall[]> {
       if (!Array.isArray(missionIds) || missionIds.length > 1_000 || !missionIds.every((id) => typeof id === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(id))) return []
-      return callsOf(await read(), missionIds as string[])
+      return callsOf(await read().catch(() => []), missionIds as string[])
     }
   }
 }

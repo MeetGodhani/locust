@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react'
 
 import type { VoiceCallAskField, VoiceCallRole } from '../../shared/voice-call.js'
-import { MAX_CALL_LINE, MAX_CALL_LINES, type SavedCall } from '../../shared/calls.js'
+import { MAX_CALL_LINE, MAX_CALL_LINES, MAX_CALL_TURNS, type SavedCall } from '../../shared/calls.js'
 
 /*
  * THE CALL, WHERE THE THREAD CAN READ IT (0.747). The canvas Colin passed on 2026-10-11 ("im down ... just try it
@@ -69,7 +69,9 @@ export function keptCall(call: LiveCall, began: Partial<Record<VoiceCallRole, nu
     callId: call.callId, teammateId: call.teammateId, name: call.name,
     ...(call.afterMissionId === undefined ? {} : { afterMissionId: call.afterMissionId }),
     startedAt: call.startedAt, endedAt: call.endedAt ?? now,
-    lines: [...call.lines, ...cutOff].slice(-MAX_CALL_LINES), turns: call.turns
+    // At most the turns a saved call may hold: a call that asked more than 40 times was refused whole, and every word
+    // on it was lost (0.753, bug hunt 2026-10-12, TK1). Lines said after the 40th are kept under it.
+    lines: [...call.lines, ...cutOff].slice(-MAX_CALL_LINES), turns: call.turns.slice(0, MAX_CALL_TURNS)
   }
 }
 
