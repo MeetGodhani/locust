@@ -50,7 +50,16 @@ try {
     await sleep(160)
   }
   say('\nFRAMES TAKEN')
-  await drive.waitFor(`!document.querySelector('.lc-stopbeam')`, { timeoutMs: 150_000, everyMs: 1000, what: 'the run to finish' })
+  // The frames are the drive's whole point and are taken. What follows only leaves the
+  // window quiet: a free model can take minutes, so past two and a half minutes the run is
+  // stopped with its own button (as a person would) instead of failing the drive on a slow model.
+  try {
+    await drive.waitFor(`!document.querySelector('.lc-stopbeam')`, { timeoutMs: 150_000, everyMs: 1000, what: 'the run to finish' })
+  } catch {
+    say('the free model was still running after 150s; stopping it with the stop button')
+    await drive.evaluate(`document.querySelector('.lc-stopbeam button[aria-label="Stop the running reply"]')?.click()`)
+    await drive.waitFor(`!document.querySelector('.lc-stopbeam')`, { timeoutMs: 30_000, everyMs: 500, what: 'the stopped run to settle' })
+  }
 } catch (error) {
   say(`drive failed: ${error instanceof Error ? error.message : String(error)}`)
 } finally {
