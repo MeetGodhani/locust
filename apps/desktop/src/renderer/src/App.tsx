@@ -189,7 +189,7 @@ import {
   stitchedHandoff,
   runAgainOffer, shownPrompt, typedPrompt, buildThread, durationText, runSpanMs, lastActivityAt, relativePath, fileTurns, shellCommandText, turnText, groupBoundary, groupJoins, groupLeavings, latestSetupNotes } from './missionView.js'
 import type { FilePutBack, LiveStarter, ThreadItem, TurnSwitch, TurnVersions } from './missionView.js'
-import { finishedToast } from './finishedToast.js'
+import { finishedToast, lastSaid } from './finishedToast.js'
 import { folderName, ranOnLine } from './ranOn.js'
 import { reviewBrief } from './reviewBrief.js'
 import type { ReviewMaterial } from './reviewBrief.js'
@@ -7106,6 +7106,20 @@ export default function App(): ReactElement {
   const needsYouMissionIds = useMemo(() => new Set(needsYouItems.flatMap((item) => (item.kind === 'memory' ? [] : [item.missionId]))), [needsYouItems])
   const waitingFor = useMemo(() => new Map(needsYouItems.flatMap((item) => (item.kind === 'memory' ? [] : [[item.missionId, item.what] as const]))), [needsYouItems])
   // What ended while the person was away (0.590), from the rows already here; the tray gets the counts.
+  /*
+   * What a run that ended while the person was away came to, for its row on Home (0.758): why it failed, or its
+   * answer's first line -- a night's polish says what it fixed before anyone opens it.
+   */
+  const awaySaid = (missionId: string): string | undefined => {
+    const events = [...runs.values()].find((run) => run.data?.missionId === missionId)?.events ?? historyById.get(missionId)?.events
+    if (events === undefined) return undefined
+    const failed = [...events].reverse().find((event) => event.type === 'run.failed')
+    if (failed !== undefined && failed.type === 'run.failed' && typeof failed.payload.message === 'string') {
+      const why = failed.payload.message.split('\n').map((part) => part.trim()).find((part) => part.length > 0)
+      if (why !== undefined) return why.length > 140 ? `${why.slice(0, 139).trimEnd()}…` : why
+    }
+    return lastSaid(events)
+  }
   const awaySummary = useMemo(
     () => (awaySince === undefined ? undefined : sinceYouWereAway({ since: awaySince, rows: sidebarMissions, routines, needsYou: needsYouMissionIds })),
     [awaySince, sidebarMissions, routines, needsYouMissionIds]
@@ -8252,7 +8266,7 @@ export default function App(): ReactElement {
                */
 
               <FirstLaunch
-                {...(awaySummary === undefined ? {} : { away: awaySummary, awayTeammates: teammates, onOpenAway: openMission, onOpenRoutines: () => setScreen('automations'), onAwaySeen: awaySeen })}
+                {...(awaySummary === undefined ? {} : { away: awaySummary, awayTeammates: teammates, onOpenAway: openMission, awaySaid, onOpenRoutines: () => setScreen('automations'), onAwaySeen: awaySeen })}
                 {...((scoutShown) => (scoutShown === undefined ? {} : { scout: scoutShown }))((() => {
                   // Scout on Home (0.756): its cards when it is on; when it is not, one invitation for a person with a
                   // team, a folder and a free model to read with -- until they say Not now.

@@ -165,6 +165,7 @@ export function FirstLaunch({
   away,
   awayTeammates = [],
   onOpenAway,
+  awaySaid,
   onOpenRoutines,
   onAwaySeen
 }: {
@@ -209,6 +210,8 @@ export function FirstLaunch({
   readonly away?: AwaySummary
   readonly awayTeammates?: readonly PublicTeammate[]
   readonly onOpenAway?: (missionId: string) => void
+  /** What each of those runs came to, in a line (0.758, AwayList). */
+  readonly awaySaid?: (missionId: string) => string | undefined
   readonly onOpenRoutines?: () => void
   readonly onAwaySeen?: () => void
   readonly onChooseFolder: () => void
@@ -529,7 +532,7 @@ export function FirstLaunch({
 
         {/* The morning-after view (0.590): first, because it is what a person back at the window came to see. */}
         {away !== undefined && onOpenAway !== undefined && onAwaySeen !== undefined && (
-          <AwayList summary={away} teammates={awayTeammates} onOpen={onOpenAway} onSeen={onAwaySeen} {...(onOpenRoutines === undefined ? {} : { onOpenRoutines })} />
+          <AwayList summary={away} teammates={awayTeammates} onOpen={onOpenAway} onSeen={onAwaySeen} {...(onOpenRoutines === undefined ? {} : { onOpenRoutines })} {...(awaySaid === undefined ? {} : { saidOf: awaySaid })} />
         )}
 
         {discoveryPhase === 'ready' && team.length > 0 && onMessageTeammate !== undefined && (

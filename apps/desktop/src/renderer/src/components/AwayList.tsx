@@ -37,10 +37,17 @@ export function AwayList({
   onOpen,
   onOpenRoutines,
   onSeen,
+  saidOf,
   now = new Date()
 }: {
   readonly summary: AwaySummary
   readonly teammates: readonly PublicTeammate[]
+  /**
+   * What a run came to, in a line (0.758): its answer's first line, or why it failed. A row said only that a routine
+   * had run -- "Polish overnight · finished 6:12" -- and what it did was a press away (Colin, 2026-10-12, of a night's
+   * polish: "how does the user see this, i had no idea this even happened").
+   */
+  readonly saidOf?: (missionId: string) => string | undefined
   readonly onOpen: (missionId: string) => void
   /** The Routines screen, where a miss is explained and the routine can be run. */
   readonly onOpenRoutines?: () => void
@@ -48,18 +55,24 @@ export function AwayList({
   readonly now?: Date
 }): ReactElement {
   const nameOf = (item: AwayItem): string | undefined => teammates.find((teammate) => teammate.teammateId === item.ownerId)?.name
-  const run = (item: AwayItem, kind: 'ran' | 'failed'): ReactElement => (
+  const run = (item: AwayItem, kind: 'ran' | 'failed'): ReactElement => {
+    const said = saidOf?.(item.missionId)
+    return (
     <li key={`${kind}-${item.missionId}`}>
-      <button type="button" className="lc-away__row" data-kind={kind} onClick={() => onOpen(item.missionId)} title={item.title}>
+      <button type="button" className="lc-away__row" data-kind={kind} onClick={() => onOpen(item.missionId)} title={said === undefined ? item.title : `${item.title}\n${said}`}>
         <span className={`lc-away__mark lc-away__mark--${kind}`} aria-hidden="true" />
-        <span className="lc-away__title">{item.title}</span>
+        <span className="lc-away__text">
+          <span className="lc-away__title">{item.title}</span>
+          {said !== undefined && <span className="lc-away__said">{said}</span>}
+        </span>
         <span className="lc-away__meta lc-mono">
           {nameOf(item) !== undefined && <span className="lc-away__who">{nameOf(item)}</span>}
           <span className="lc-away__when">{kind === 'failed' ? 'failed' : 'finished'} {when(item.at, now)}</span>
         </span>
       </button>
     </li>
-  )
+    )
+  }
   const miss = (item: AwayMissed): ReactElement => (
     <li key={`missed-${item.routineId}-${item.dueAt}`}>
       <button type="button" className="lc-away__row" data-kind="missed" onClick={onOpenRoutines} disabled={onOpenRoutines === undefined} title={`${item.name}: due ${when(item.dueAt, now)}, Locust was closed`}>
