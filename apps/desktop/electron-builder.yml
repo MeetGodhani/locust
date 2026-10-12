@@ -103,6 +103,7 @@ extraResources:
       - fix-a-bug.locust-routine.json
       - build-a-feature.locust-routine.json
       - make-it-faster.locust-routine.json
+      - polish-overnight.locust-routine.json
       - plan-a-change.locust-routine.json
       - challenge-an-idea.locust-routine.json
       - write-a-status-update.locust-routine.json

@@ -38,6 +38,7 @@ export const TEMPLATE_ORDER = [
   'fix-a-bug',
   'build-a-feature',
   'make-it-faster',
+  'polish-overnight',
   'plan-a-change',
   'challenge-an-idea',
   'write-a-status-update',
@@ -56,6 +57,8 @@ const WHAT_IT_DOES: Readonly<Record<string, string>> = {
   'fix-a-bug': 'Find the cause, fix it with the smallest change, and have the fix checked where it broke.',
   'build-a-feature': 'A plan, the build, and a review of the build against the plan.',
   'make-it-faster': 'Measure where the time goes, change the slowest part, then measure again.',
+  // The overnight polish teammate (2026-10-12), from Grok Bot's nightly team bot: set it to run each night.
+  'polish-overnight': 'Set it to run each night: it runs the tests, fixes what fails in a copy for you to keep or discard, and leaves a report for the morning.',
   'plan-a-change': 'A step-by-step plan for a change, then the same plan read back sceptically.',
   'challenge-an-idea': 'An architect lists what the idea is missing, plans it, and a checker judges the plan.',
   'write-a-status-update': 'A short update on this project for your team, manager or client.',
@@ -67,7 +70,7 @@ const WHAT_IT_DOES: Readonly<Record<string, string>> = {
 }
 
 /** The chains that work on the folder's files rather than only reading it: they open set to change files, in a copy. */
-const CHANGES_FILES: ReadonlySet<string> = new Set(['fix-a-bug', 'build-a-feature', 'make-it-faster'])
+const CHANGES_FILES: ReadonlySet<string> = new Set(['fix-a-bug', 'build-a-feature', 'make-it-faster', 'polish-overnight'])
 
 export const templateChangesFiles = (id: string): boolean => CHANGES_FILES.has(id)
 

@@ -25,6 +25,8 @@ import { listRoutineTemplates, TEMPLATE_SUFFIX, templateChangesFiles } from './r
  */
 const SHIPPED = fileURLToPath(new URL('../../resources/routines/', import.meta.url))
 const CHAINS = ['fix-a-bug', 'build-a-feature', 'make-it-faster'] as const
+/** The overnight polish (2026-10-12): a chain too, that asks nothing -- the project's own tests are its question. */
+const NIGHTLY = ['polish-overnight'] as const
 const read = (id: string) => {
   const parsed = parseRoutineFile(readFileSync(join(SHIPPED, `${id}${TEMPLATE_SUFFIX}`), 'utf8'))
   if (!parsed.ok) throw new Error(`${id}: ${parsed.message}`)
@@ -79,15 +81,29 @@ describe('the chain templates are files', () => {
 
   it('are listed as chains, with what they do; the others are not', async () => {
     const listed = await listRoutineTemplates(SHIPPED)
-    for (const template of listed.templates) expect(template.chain === true, template.id).toBe((CHAINS as readonly string[]).includes(template.id))
+    for (const template of listed.templates) expect(template.chain === true, template.id).toBe(([...CHAINS, ...NIGHTLY] as readonly string[]).includes(template.id))
     expect(listed.templates.find((template) => template.id === 'fix-a-bug')).toMatchObject({ steps: 3, asks: ['What is going wrong?'] })
     expect(listed.templates.every((template) => template.summary.length > 10)).toBe(true)
   })
 
   it('are the ones that change files; the rest are read-only as ever', () => {
-    for (const id of CHAINS) expect(templateChangesFiles(id), id).toBe(true)
+    for (const id of [...CHAINS, ...NIGHTLY]) expect(templateChangesFiles(id), id).toBe(true)
     expect(templateChangesFiles('review-a-file')).toBe(false)
     expect(templateChangesFiles('challenge-an-idea')).toBe(false)
+  })
+})
+
+describe('the overnight polish', () => {
+  it('runs the tests, fixes what fails, and has its fixes checked and reported -- asking nothing, naming no route', () => {
+    const file = read('polish-overnight')
+    expect(file.steps).toHaveLength(3)
+    expect(file.inputs).toEqual([])
+    expect(file.route).toEqual({})
+    expect(file.connectors).toEqual([])
+    expect(file.steps[0]).toMatch(/Do not change any file/)
+    expect(file.steps[1]).toMatch(/smallest change/)
+    expect(file.steps[2]).toMatch(/morning report/)
+    expect(file.handOffs.map((entry) => entry.check === true)).toEqual([false, false, true])
   })
 })
 
