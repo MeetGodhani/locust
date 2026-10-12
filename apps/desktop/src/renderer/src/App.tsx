@@ -208,7 +208,7 @@ import { installCommand } from '../../shared/runtime-install.js'
 import { splitAttachments, withAttachments } from '../../shared/attachments.js'
 // Only `heldFor`: this file has its own `ownerOf` for live runs, which is a
 // different question from who owns a recorded mission.
-import { conversationKeys, heldFor, routineOf } from './conversationList.js'
+import { conversationKeys, heldFor, liveRunLastAt, routineOf } from './conversationList.js'
 import { snoozeChoices } from './settled.js'
 import { PullRequestNewsBanner } from './components/PullRequestNewsBanner.js'
 import { ChangesPanel } from './components/ChangesPanel.js'
@@ -6956,9 +6956,8 @@ export default function App(): ReactElement {
          * no age beside it, which is the one row the ordering exists to put
          * at the top. Seen on the first drive of the flat list, 2026-09-15.
          */
-        ...(run.startedAtIso ?? run.restoredMission?.lastUpdatedAt) === undefined
-          ? {}
-          : { lastAt: (run.startedAtIso ?? run.restoredMission?.lastUpdatedAt)! },
+        // And once it has moved, when it last did (liveRunLastAt): a finished run is dated by its end, as the ledger dates it.
+        ...(liveRunLastAt(run) === undefined ? {} : { lastAt: liveRunLastAt(run)! }),
         // A run's thread already shows the root's words for a continuation.
         // A relayed run's prompt is the host's briefing to a runtime, never a
         // sentence to name a conversation with.

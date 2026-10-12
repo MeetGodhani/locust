@@ -31,6 +31,22 @@ import type { PublicRoom } from '../../shared/ipc.js'
 import type { SidebarMission } from './components/Sidebar.js'
 
 /**
+ * When a run in this window last moved: its newest event, else when it was sent, else when the mission it restored
+ * last moved -- the time the ledger's own row gives it (`lastUpdatedAt`) once the window reads it back.
+ *
+ * It was when it was sent alone, so a teammate who had just finished a two-minute run was "last worked 1 minute
+ * ago" on her card, and her finished conversation was dated by its start (the 0.755 sweep's
+ * drive-the-team-cards-say-their-state, read by the overnight polish, 2026-10-12).
+ */
+export function liveRunLastAt(run: {
+  readonly startedAtIso?: string
+  readonly events: readonly { readonly occurredAt: string }[]
+  readonly restoredMission?: { readonly lastUpdatedAt: string }
+}): string | undefined {
+  return run.events.at(-1)?.occurredAt ?? run.startedAtIso ?? run.restoredMission?.lastUpdatedAt
+}
+
+/**
  * Live first, then newest first.
  *
  * The live conversation outranks a more recent timestamp because it is the
