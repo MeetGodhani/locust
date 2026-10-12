@@ -93,6 +93,7 @@ export function CloudChangeCard({
       <div className="lc-cloudchange is-home is-pr" role="status">
         <GitHubMark size={13} />
         <span>{request === undefined ? 'Sent to a pull request on GitHub' : `Sent to pull request #${String(request.number)}`}</span>
+        {request?.into !== undefined && <span className="lc-cloudchange__counts lc-mono">{`into ${request.into}`}</span>}
         {files.length > 0 && <span className="lc-cloudchange__counts lc-mono">{cloudChangeWords(files)}</span>}
         {request !== undefined && (
           // A button that asks the host, which may refuse an address and says why -- never an anchor (no-dead-links).
@@ -154,7 +155,6 @@ export function CloudChangeCard({
   const removed = files.reduce((sum, file) => sum + file.removed, 0)
   const parsed = shown?.patch === undefined ? [] : parseUnifiedDiff(shown.patch)
   const open = turn.openPullRequest
-  const into = turn.branch ?? "the repository's default branch"
 
   return (
     <section className="lc-cloudchange" aria-label="The change on your cloud computer">
@@ -253,7 +253,7 @@ export function CloudChangeCard({
       <p className="lc-cloudchange__note">
         {writing
           ? open === undefined
-            ? `The first line is its title. It goes to GitHub as a branch of its own for ${into}, holding only this change and committed as you: nothing else in this folder goes with it.`
+            ? 'The first line is its title. It goes to GitHub on a branch of its own, holding only this change and committed as you: nothing else in this folder goes with it.'
             : `It goes to pull request #${String(open.number)} as one more commit, made as you: nothing else in this folder goes with it.`
           : 'Apply brings it into this folder, not committed, so you can look before you keep it. Or reply below: the next turn carries on from it there.'}
       </p>

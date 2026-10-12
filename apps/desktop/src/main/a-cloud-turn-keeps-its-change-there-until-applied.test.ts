@@ -71,7 +71,8 @@ describe('a turn on the cloud computer', () => {
       },
       pushChange: async (_name, _repo, _taskId, base, target) => {
         calls.push(`push:${base.slice(0, 1)}:${target.kind === 'new' ? `new:${target.wanted}:${target.from ?? '-'}` : `add:${target.branch}`}`)
-        return { branch: target.kind === 'new' ? target.wanted : target.branch, into: 'main' }
+        // As the script there says it: for an add, the branch pushed onto is the pull request's own.
+        return target.kind === 'new' ? { branch: target.wanted, into: 'main' } : { branch: target.branch, into: target.branch }
       },
       openPullRequest: async (_repo, request) => {
         calls.push(`open:${request.head}->${request.base}:${request.title}`)
@@ -199,7 +200,7 @@ describe('a turn on the cloud computer', () => {
     await turns.prepare({ missionId: 'mission_1', folder, openCodeVersion: '1.18.27', say: () => undefined })
     await turns.settled('mission_1')
     const done = await turns.pullRequest('mission_1', 'Add a greeting file\n\nLocust-Teammate: Wren')
-    expect(done).toMatchObject({ ok: true, added: false, turn: { state: 'pr', pullRequest: { number: 7, url: 'https://github.com/acme/hearth/pull/7' } } })
+    expect(done).toMatchObject({ ok: true, added: false, turn: { state: 'pr', pullRequest: { number: 7, url: 'https://github.com/acme/hearth/pull/7', into: 'main' } } })
     expect(calls).toContain('push:a:new:locust/add-a-greeting-file:main')
     expect(calls).toContain('open:locust/add-a-greeting-file->main:Add a greeting file')
     expect(calls).toContain('settle:pull-request')
@@ -221,7 +222,8 @@ describe('a turn on the cloud computer', () => {
     // The waiting card offers the open one by number.
     expect((await turns.turns(['mission_2']))[0]).toMatchObject({ state: 'there', openPullRequest: { number: 7 } })
     const done = await turns.pullRequest('mission_2', 'Say goodbye too')
-    expect(done).toMatchObject({ ok: true, added: true, turn: { state: 'pr', pullRequest: { number: 7 } } })
+    // Still the branch it merges into, never the branch the push went onto.
+    expect(done).toMatchObject({ ok: true, added: true, turn: { state: 'pr', pullRequest: { number: 7, into: 'main' } } })
     expect(calls).toContain('state:7')
     expect(calls).toContain('push:b:add:locust/add-a-greeting-file')
     expect(calls.filter((call) => call.startsWith('open:'))).toHaveLength(1)

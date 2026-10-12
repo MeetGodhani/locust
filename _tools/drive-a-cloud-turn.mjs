@@ -264,7 +264,7 @@ try {
   const sent = await until(`/Sent to pull request #\\d+/.test(([...document.querySelectorAll('.lc-cloudchange')].at(-1)?.innerText ?? ''))`, 180)
   const sentCard = String(await drive.capture('sent to a pull request on GitHub', () => lastCard()))
   pullRequestNumber = /Sent to pull request #(\d+)/.exec(sentCard)?.[1]
-  check('the change went to a pull request, named on its card with a way to open it', sent && pullRequestNumber !== undefined && /Open on GitHub/.test(sentCard), `${sentCard} ${String(await text('.lc-cloudchange__problem'))}`)
+  check('the change went to a pull request, named on its card with the branch it goes into and a way to open it', sent && pullRequestNumber !== undefined && /into main/.test(sentCard) && /Open on GitHub/.test(sentCard), `${sentCard} ${String(await text('.lc-cloudchange__problem'))}`)
   if (pullRequestNumber !== undefined) {
     const viewed = await gh(['pr', 'view', pullRequestNumber, '--repo', REPO, '--json', 'state,baseRefName,headRefName,files'])
     const pr = viewed.code === 0 ? JSON.parse(viewed.stdout) : undefined

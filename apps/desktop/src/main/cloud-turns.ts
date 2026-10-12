@@ -440,12 +440,14 @@ export function createCloudTurns(options: {
           open === undefined ? { kind: 'new', from, wanted: branchFromSubject(subject) } : { kind: 'add', branch: open.branch },
           text
         )
-        let request: CloudPullRequest
+        // Added to an open one, the push went onto its branch; the branch it merges into is the one it was opened for.
+        let request: CloudPullRequest & { readonly branch: string; readonly into: string }
         if (open !== undefined) {
-          request = { number: open.number, url: open.url }
+          request = open
         } else {
           try {
-            request = await computers.openPullRequest(task.repo, { head: pushed.branch, base: pushed.into, title: subject.trim(), body: body.length > 0 ? body : subject.trim() })
+            const opened = await computers.openPullRequest(task.repo, { head: pushed.branch, base: pushed.into, title: subject.trim(), body: body.length > 0 ? body : subject.trim() })
+            request = { ...opened, branch: pushed.branch, into: pushed.into }
           } catch (error) {
             // A branch with no pull request is not left on GitHub for the person to find and wonder about.
             await computers.dropBranch(task.repo, pushed.branch)
@@ -458,8 +460,8 @@ export function createCloudTurns(options: {
           const resolved = resolveCarried(current, task.taskId, 'pr')
           const kept = resolved.store.tasks[task.taskId] ?? task
           const next = putTurn(
-            { ...resolved.store, tasks: { ...resolved.store.tasks, [task.taskId]: { ...kept, base, pullRequest: { ...request, branch: pushed.branch, into: pushed.into } } } },
-            { ...turn, state: 'pr', pullRequest: request, at: now().toISOString() }
+            { ...resolved.store, tasks: { ...resolved.store.tasks, [task.taskId]: { ...kept, base, pullRequest: request } } },
+            { ...turn, state: 'pr', pullRequest: { number: request.number, url: request.url, into: request.into }, at: now().toISOString() }
           )
           for (const other of resolved.told) tell(next, other)
           tell(next, missionId)

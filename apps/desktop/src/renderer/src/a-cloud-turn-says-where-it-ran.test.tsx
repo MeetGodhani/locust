@@ -74,8 +74,9 @@ describe('a turn on the cloud computer, in the thread', () => {
   })
 
   it('says a change went to a pull request, with a way to open it', () => {
-    const html = card(turn('pr', { pullRequest: { number: 7, url: 'https://github.com/acme/hearth/pull/7' } }))
+    const html = card(turn('pr', { pullRequest: { number: 7, url: 'https://github.com/acme/hearth/pull/7', into: 'main' } }))
     expect(html).toContain('Sent to pull request #7')
+    expect(html).toContain('into main')
     expect(html).toContain('>Open on GitHub</button>')
     expect(html).toContain('2 files · +18 −6')
   })

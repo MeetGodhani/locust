@@ -36,6 +36,11 @@ export const CLOUD_MACHINE_WORDS = '2 CPUs, 8 GB'
 export interface CloudPullRequest {
   readonly number: number
   readonly url: string
+  /**
+   * The branch it would merge into, as GitHub says it ("into main"): the folder's own branch when GitHub has it, else
+   * the repository's default -- known only once it is pushed, so said after, never promised before.
+   */
+  readonly into?: string
 }
 
 /**
