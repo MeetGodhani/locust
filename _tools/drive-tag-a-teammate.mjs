@@ -83,7 +83,13 @@ try {
   await sleep(800)
 
   const first = String(await drive.capture('Wren answers with the word', () => drive.evaluate(sendAndWaitScript(`Reply with exactly the word ${WORD} and nothing else.`))))
-  check(`Wren answers ${WORD} first`, first.includes(WORD), first.slice(-160))
+  // The thread's text also holds the person's own message, which names the word; only what
+  // the teammate said counts.
+  const said = String(await drive.evaluate(`[...document.querySelectorAll('.lc-agentline__body')].map((el) => el.innerText.trim()).join(' | ')`))
+  check(`Wren answers ${WORD} first`, said.includes(WORD), said.length > 0 ? said.slice(-160) : first.slice(-160))
+  // Without that answer there is nothing for Atlas to be given; stop here rather than wait out
+  // the rest on a model that never replied.
+  if (!said.includes(WORD)) throw new Error(`Wren never answered ${WORD}: ${first.slice(-160)}`)
 
   const offered = JSON.parse(String(await drive.capture('Typing @At', () => drive.evaluate(type('@At')))))
   say(`  @At: ${JSON.stringify(offered)}`)
