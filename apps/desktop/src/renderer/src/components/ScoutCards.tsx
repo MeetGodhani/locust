@@ -1,0 +1,111 @@
+import { useState } from 'react'
+import type { ReactElement } from 'react'
+
+import type { PublicTeammate } from '../../../shared/ipc.js'
+import type { ScoutCard, ScoutDraft, ScoutOpen, ScoutState } from '../../../shared/scout.js'
+import { Icon } from './Icon.js'
+import { TeammateBot } from './TeammateBot.js'
+
+/*
+ * WHAT SCOUT NOTICED, ON HOME (0.756, shared/scout.ts; the design: https://claude.ai/artifact/2BMzn1KUaZNnNvJzBHgEfG).
+ * Each card leads with Locust's own sentence; what Scout's model adds -- its take, and the next step drafted for a
+ * teammate -- sits under it as Scout's. A card that needs the person now is raised, in amber; the rest wait. Nothing
+ * happens until a press: Send starts the drafted turn as that teammate's own, Change it first puts it in the box.
+ */
+const SHOWN = 3
+
+function ago(iso: string, now: Date): string {
+  const minutes = Math.max(0, Math.round((now.getTime() - Date.parse(iso)) / 60_000))
+  if (!Number.isFinite(minutes)) return ''
+  if (minutes < 1) return 'just now'
+  if (minutes < 60) return `${String(minutes)} min ago`
+  const hours = Math.round(minutes / 60)
+  return hours < 24 ? `${String(hours)} h ago` : `${String(Math.round(hours / 24))} d ago`
+}
+
+function Card({ card, scout, now, onOpen, onSend, onDraftIntoBox, onDismiss }: {
+  readonly card: ScoutCard
+  readonly scout: PublicTeammate | undefined
+  readonly now: Date
+  readonly onOpen: (open: ScoutOpen) => void
+  readonly onSend: (draft: ScoutDraft, cardId: string) => void
+  readonly onDraftIntoBox: (draft: ScoutDraft, cardId: string) => void
+  readonly onDismiss: (cardId: string) => void
+}): ReactElement {
+  const needsYou = card.urgency === 'now'
+  return <article className={`lc-card lc-scoutcard${needsYou ? ' is-pending is-amber' : card.urgency === 'later' ? ' is-terminal' : ''}`} data-scout-card={card.cardId}>
+    <div className="lc-scoutcard__head">
+      {scout !== undefined && <TeammateBot hue={scout.hue} avatar={scout.avatar} size={20} teammateId={scout.teammateId} hopsWhenDone={false} />}
+      <span className={`lc-scoutcard__kind${needsYou ? ' lc-tone-amber' : ''}`}>{needsYou ? 'Needs you' : card.draft !== undefined ? 'Noticed, and drafted' : 'Noticed'}</span>
+      <span className="lc-scoutcard__when lc-mono">{`${scout?.name ?? 'Scout'} · ${ago(card.at, now)}`}</span>
+    </div>
+    <p className="lc-scoutcard__said">{card.said}</p>
+    {card.chips !== undefined && card.chips.length > 0 && <div className="lc-scoutcard__chips">
+      {card.chips.map((chip, index) => <span key={`${chip.text}-${String(index)}`} className={`lc-status lc-status--${chip.tone}`}>{chip.text}</span>)}
+    </div>}
+    {card.take !== undefined && <p className="lc-scoutcard__take"><span className="lc-scoutcard__who">{scout?.name ?? 'Scout'}:</span> {card.take}</p>}
+    {card.reading === true && <p className="lc-scoutcard__reading lc-mono">{`${scout?.name ?? 'Scout'} is reading it…`}</p>}
+    {card.draft !== undefined && <div className="lc-scoutcard__draft">
+      <p className="lc-scoutcard__draftlabel lc-mono">{`Drafted for ${card.draft.name}`}</p>
+      <p className="lc-scoutcard__drafttext">{card.draft.message}</p>
+    </div>}
+    <div className="lc-scoutcard__acts">
+      {card.draft !== undefined && <button type="button" className="lc-primarybutton" onClick={() => { onSend(card.draft!, card.cardId) }}>{`Send to ${card.draft.name}`}</button>}
+      {card.draft !== undefined && <button type="button" className="lc-control lc-control--boxed" onClick={() => { onDraftIntoBox(card.draft!, card.cardId) }}>Change it first</button>}
+      {card.open !== undefined && <button type="button" className={card.draft === undefined && needsYou ? 'lc-primarybutton' : 'lc-control lc-control--boxed'} onClick={() => { onOpen(card.open!) }}>{card.open.label}</button>}
+      <button type="button" className="lc-ghostbutton lc-scoutcard__dismiss" onClick={() => { onDismiss(card.cardId) }}>Dismiss</button>
+    </div>
+  </article>
+}
+
+export function ScoutCards({ state, scout, onOpen, onSend, onDraftIntoBox, onDismiss, now = new Date() }: {
+  readonly state: ScoutState
+  /** Scout's own teammate: its face and name. */
+  readonly scout: PublicTeammate | undefined
+  readonly onOpen: (open: ScoutOpen) => void
+  readonly onSend: (draft: ScoutDraft, cardId: string) => void
+  readonly onDraftIntoBox: (draft: ScoutDraft, cardId: string) => void
+  readonly onDismiss: (cardId: string) => void
+  readonly now?: Date
+}): ReactElement | null {
+  const [all, setAll] = useState(false)
+  if (!state.settings.on || state.cards.length === 0) return null
+  // What needs the person now comes first, whenever it was found.
+  const ordered = [...state.cards.filter((card) => card.urgency === 'now'), ...state.cards.filter((card) => card.urgency !== 'now')]
+  const shown = all ? ordered : ordered.slice(0, SHOWN)
+  const name = scout?.name ?? 'Scout'
+  return <section className="lc-scout" aria-label={`${name} noticed`}>
+    <div className="lc-scout__head">
+      <span className="lc-scout__heading"><Icon name="eye" size={13} />{` ${name} noticed · ${String(state.cards.length)}`}</span>
+      {ordered.length > SHOWN && <button type="button" className="lc-ghostbutton" onClick={() => { setAll(!all) }}>{all ? 'Show fewer' : `Show all ${String(ordered.length)}`}</button>}
+    </div>
+    {state.modelSaid !== undefined && <p className="lc-scout__said lc-mono">{`${state.modelSaid} The cards below are in Locust’s words.`}</p>}
+    {shown.map((card) => <Card key={card.cardId} card={card} scout={scout} now={now} onOpen={onOpen} onSend={onSend} onDraftIntoBox={onDraftIntoBox} onDismiss={onDismiss} />)}
+  </section>
+}
+
+/*
+ * MEET SCOUT (0.756): the one press that adds it to the team, on the best free model, for a person with a team and a
+ * folder. It says what Scout reads, what it sends and to whom, before it is on -- and that it never acts by itself.
+ */
+export function ScoutInvite({ model, onTurnOn, onNotNow, busy, message }: {
+  /** The model Scout would read with, as a person reads it: "Space Bunny through OpenCode, free". */
+  readonly model: string
+  readonly onTurnOn: () => void
+  readonly onNotNow: () => void
+  readonly busy?: boolean
+  readonly message?: string
+}): ReactElement {
+  return <section className="lc-card lc-scoutinvite" aria-label="Meet Scout">
+    <div className="lc-scoutinvite__text">
+      <h2 className="lc-scoutinvite__title">Meet Scout, a teammate that keeps watch</h2>
+      <p className="lc-scoutinvite__lede">Scout looks at your pull requests and their checks, the reviews asked of you and your teammates’ turns every 10 minutes, and tells you here what needs you, with the next step drafted. It never sends, merges or changes anything: you press.</p>
+      <p className="lc-scoutinvite__sends">{`When something is new, Scout’s model reads it: titles, check names, a waiting teammate’s question. That model is ${model}. Change it like any teammate’s.`}</p>
+      {message !== undefined && <p className="lc-scoutinvite__message" role="status">{message}</p>}
+      <div className="lc-scoutinvite__acts">
+        <button type="button" className="lc-primarybutton" disabled={busy === true} onClick={onTurnOn}>Turn on Scout</button>
+        <button type="button" className="lc-ghostbutton" onClick={onNotNow}>Not now</button>
+      </div>
+    </div>
+  </section>
+}

@@ -6,6 +6,8 @@ import { WhatsNew } from './WhatsNew.js'
 import { RemoteControlSetting } from './RemoteControlSetting.js'
 import { TalkVoice } from './TalkVoice.js'
 import { TalkShortcutSetting } from './TalkShortcutSetting.js'
+import { ScoutSetting } from './ScoutSetting.js'
+import type { ScoutState } from '../../../shared/scout.js'
 import { VoiceSettings } from './VoiceSettings.js'
 import { LocustMcpSettings } from './LocustMcpSettings.js'
 import { SETTINGS_PAGES, matchedHeadings, pageMatches } from '../settingsPages.js'
@@ -1520,6 +1522,9 @@ const TERMINAL_FACES_PREVIEW: readonly (readonly ['droid' | 'ghost' | 'cat', Eye
 ]
 
 export function SettingsScreen({
+  scout,
+  scoutModel,
+  scoutRoute,
   runtimes,
   limitedRuntimes,
   usageWindows,
@@ -1599,6 +1604,10 @@ export function SettingsScreen({
   onPreviewProfileRestore,
   onRestoreProfile
 }: {
+  /** Scout (0.756): what it holds, the model it reads with, and the free model a new one would read with. */
+  readonly scout?: ScoutState
+  readonly scoutModel?: string
+  readonly scoutRoute?: { readonly runtime: string; readonly model: string }
   readonly runtimes: readonly PublicRuntimeStatus[]
   /** Runtimes whose last run ended on the account's usage limit, with its own words. */
   readonly limitedRuntimes: ReadonlyMap<string, string>
@@ -3045,6 +3054,8 @@ export function SettingsScreen({
         )}
         {shownPage === 'app' && <TalkVoice />}
         {shownPage === 'app' && <TalkShortcutSetting heading={<h2 className="lc-settings__heading">Talk from any app</h2>} />}
+        {shownPage === 'app' && <ScoutSetting heading={<h2 className="lc-settings__heading">Scout keeps watch</h2>} state={scout}
+          {...(scoutModel === undefined ? {} : { model: scoutModel })} {...(scoutRoute === undefined ? {} : { route: scoutRoute })} />}
         {shownPage === 'app' && (
         <section className="lc-settings__section">
           <h2 className="lc-settings__heading">Startup</h2>

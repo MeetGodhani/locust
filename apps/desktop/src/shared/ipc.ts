@@ -3222,6 +3222,8 @@ export type CodexMissionUpdate =
         | { readonly kind: 'side'; readonly of: string; readonly question: number }
         /** A comparison's judge (0.520): drawn in the comparison, never as a conversation. */
         | { readonly kind: 'judge'; readonly compareId: string }
+        /** One of Scout's looks (0.756): its answer fills in the cards on Home, never drawn as a conversation. */
+        | { readonly kind: 'scout' }
       /**
        * Present when this run is the newest turn of the teammate's hub (see
        * `PublicTeammate.hubMissionId`), so the roster on screen learns it
@@ -3530,6 +3532,8 @@ export interface DesktopApi {
   readonly calls?: import('./calls.js').CallsApi
   /** The keys that start Talk from any app (0.755). */
   readonly talkShortcut?: import('./talk-shortcut.js').TalkShortcutApi
+  /** Scout, a teammate that keeps watch (0.756). */
+  readonly scout?: import('./scout.js').ScoutApi
   readonly locustMcp?: import('./locust-mcp.js').LocustMcpApi
   readQueuedMessages(): Promise<QueuedMessagesResponse>
   writeQueuedMessages(rows: readonly SavedQueuedMessage[]): Promise<QueuedMessagesResponse>

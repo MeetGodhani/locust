@@ -231,6 +231,12 @@ import { approvalsOfLiveRuns } from './approvalsOfLiveRuns.js'
 import { addCallHandOff, addLiveCallTurn, liveCall, useCallHandOffs, useCallsSaved, useLiveCall } from './liveCall.js'
 import { CallTodosContext, callTodoState, type CallTodoState, type CallTodos } from './callTodos.js'
 import { pressTalk } from './talkPress.js'
+import { useScoutState } from './scoutState.js'
+import { ScoutCards, ScoutInvite } from './components/ScoutCards.js'
+import type { ScoutDraft, ScoutOpen } from '../../shared/scout.js'
+
+/** Home's Not now on Meet Scout (0.756): this window's, and Settings can still turn Scout on. */
+const SCOUT_NOT_NOW = 'locust.scout.not-now'
 import type { TalkShortcutPress } from '../../shared/talk-shortcut.js'
 import type { SavedCall } from '../../shared/calls.js'
 
@@ -1827,10 +1833,16 @@ export default function App(): ReactElement {
   const [judgingCompare, setJudgingCompare] = useState(false)
   // Another model being added to a comparison (0.523).
   const [addingCompareModel, setAddingCompareModel] = useState(false)
-  // Every judge's run: drawn in its comparison, never listed as a conversation (0.520).
-  const judgeIds = useMemo(() => judgeMissionIds(compares), [compares])
-  const isJudgeRun = (startedBy: { readonly kind: string } | undefined, missionId: string | undefined): boolean =>
-    startedBy?.kind === 'judge' || (missionId !== undefined && judgeIds.has(missionId))
+  // Every judge's run, drawn in its comparison (0.520), and every look of Scout's, whose answer is cards on Home
+  // (0.756): never listed as a conversation.
+  const scout = useScoutState()
+  const scoutLookKey = (scout?.lookIds ?? []).join(' ')
+  const hiddenRunIds = useMemo(
+    () => new Set([...judgeMissionIds(compares), ...(scoutLookKey.length === 0 ? [] : scoutLookKey.split(' '))]),
+    [compares, scoutLookKey]
+  )
+  const isHiddenRun = (startedBy: { readonly kind: string } | undefined, missionId: string | undefined): boolean =>
+    startedBy?.kind === 'judge' || startedBy?.kind === 'scout' || (missionId !== undefined && hiddenRunIds.has(missionId))
   const [compareProblem, setCompareProblem] = useState<string>()
   /** Home's Compare models opens the composer's picker (0.442). */
   const [pickerRequest, setPickerRequest] = useState(0)
@@ -6504,6 +6516,66 @@ export default function App(): ReactElement {
     // As THEM, whole (H9): not the closure's idea of who is on screen.
     void startMission(TIDY_PROMPT, undefined, { as: startAs(teammate, { route, mode, effort }, pickerRoutes) })
   }
+  /*
+   * SCOUT ON HOME (0.756, ScoutCards.tsx). Send starts the drafted turn as that teammate's own -- a new conversation
+   * of theirs, as a tidy pass is -- and Change it first puts the draft in the box addressed to them; either way the
+   * card has done its job. Open goes to the conversation or the page on GitHub. Turning Scout on adds it to the team
+   * on the steadiest free model listed here (freeStartModel, best first, passing over one that is down).
+   */
+  const [scoutBusy, setScoutBusy] = useState(false)
+  const [scoutMessage, setScoutMessage] = useState<string>()
+  const [scoutNotNow, setScoutNotNow] = useState(() => {
+    try { return window.localStorage.getItem(SCOUT_NOT_NOW) === '1' } catch { return false }
+  })
+  const scoutModel = freeStartModel('opencode', models, [], freeDown)
+  /** "Space Bunny Free through OpenCode": the model's own name as the team card says it, its agent, and what it costs. */
+  const scoutModelWords = (on: { readonly runtime: MissionRuntimeId; readonly model: string }): string => {
+    const name = homeRouteOf(on, resolvedModels, models).model
+    const free = /(^|[-/])free$/i.test(on.model) && !/\bfree\b/i.test(name) ? ', free' : ''
+    return on.runtime === 'opencode' ? `${name} through OpenCode${free}` : `${name}${free}`
+  }
+  const turnOnScout = async (): Promise<void> => {
+    const bridge = window.desktop
+    if (bridge?.scout === undefined || scoutModel === undefined || scoutBusy) return
+    setScoutBusy(true)
+    setScoutMessage(undefined)
+    try {
+      const answer = await bridge.scout.turnOn({ runtime: 'opencode', model: scoutModel })
+      if ('refused' in answer) { setScoutMessage(answer.refused); return }
+      const listed = await bridge.listTeammates().catch(() => undefined)
+      if (listed?.ok === true) {
+        setTeammates(listed.data.teammates)
+        setMissionOwners(listed.data.missionOwners)
+        rememberRosterNames(listed.data)
+      }
+    } catch {
+      setScoutMessage('Scout could not be turned on. Nothing was changed; try again.')
+    } finally {
+      setScoutBusy(false)
+    }
+  }
+  const scoutNotNowPressed = (): void => {
+    setScoutNotNow(true)
+    try { window.localStorage.setItem(SCOUT_NOT_NOW, '1') } catch { /* asked again next time */ }
+  }
+  const openScoutCard = (open: ScoutOpen): void => {
+    if (open.kind === 'conversation') openMission(open.missionId)
+    else void window.desktop?.openLink(open.url).catch(() => undefined)
+  }
+  const sendScoutDraft = (draft: ScoutDraft, cardId: string): void => {
+    const teammate = teammates.find((one) => one.teammateId === draft.teammateId)
+    if (teammate === undefined) return
+    selectTeammate(teammate.teammateId)
+    // As THEM, whole (H9), on their own route and mode: a new conversation of theirs.
+    void startMission(draft.message, undefined, { as: startAs(teammate, { route, mode, effort }, pickerRoutes) })
+    void window.desktop?.scout?.dismiss(cardId).catch(() => undefined)
+  }
+  const draftScoutIntoBox = (draft: ScoutDraft, cardId: string): void => {
+    if (!teammates.some((one) => one.teammateId === draft.teammateId)) return
+    selectTeammate(draft.teammateId)
+    setComposerFill((current) => ({ text: draft.message, seq: (current?.seq ?? 0) + 1 }))
+    void window.desktop?.scout?.dismiss(cardId).catch(() => undefined)
+  }
   const openTidyMenu = (anchor: HTMLElement): void => {
     if (rowMenu?.anchor === anchor) {
       setRowMenu(undefined)
@@ -6816,7 +6888,7 @@ export default function App(): ReactElement {
       // happens; what it must not do is accumulate.
       if (!listedAsMission({ missionId: run.data?.missionId, active: liveRunIsActive(run) })) continue
       // A question on the side is drawn in its panel, never as a conversation (0.461); a judge in its comparison (0.520).
-      if (run.startedBy?.kind === 'side' || isJudgeRun(run.startedBy, run.data?.missionId)) continue
+      if (run.startedBy?.kind === 'side' || isHiddenRun(run.startedBy, run.data?.missionId)) continue
       // A run that is still starting has no missionId yet; it is listed under
       // its pending key so the teammate reads as working from the first
       // moment, not from the first receipt.
@@ -6900,7 +6972,7 @@ export default function App(): ReactElement {
     }
     for (const mission of history) {
       if (rows.some((row) => row.missionId === mission.missionId)) continue
-      if (mission.startedBy?.kind === 'side' || judgeIds.has(mission.missionId)) continue
+      if (mission.startedBy?.kind === 'side' || hiddenRunIds.has(mission.missionId)) continue
       // Every folder's conversations, each under its own project (0.458, like
       // Claude Code). This used to drop every other folder's, so a folder
       // switch emptied the sidebar and read as the team being reset (Colin,
@@ -6960,7 +7032,7 @@ export default function App(): ReactElement {
     }
     const parents = nestedUnder(named, sentFrom)
     return named.map((row) => (parents.has(row.missionId) ? { ...row, nestedUnder: parents.get(row.missionId)! } : row))
-  }, [history, historyById, runs, workspaceId, missionTitles, compares, judgeIds])
+  }, [history, historyById, runs, workspaceId, missionTitles, compares, hiddenRunIds])
   // The conversation the box writes in, so an unsent message stays with it (0.551).
   const shownConversation = liveRun?.data?.missionId ?? shownKey
   const shownRow = shownConversation === undefined ? undefined : sidebarMissions.find((entry) => (entry.memberIds ?? [entry.missionId]).includes(shownConversation))
@@ -7396,7 +7468,7 @@ export default function App(): ReactElement {
       const data = run.data
       if (data === undefined || !liveRunIsActive(run) || recorded.has(data.missionId)) continue
       // A side question lives in its panel, not in the list (R33), as in the sidebar; a judge in its comparison.
-      if (run.startedBy?.kind === 'side' || isJudgeRun(run.startedBy, data.missionId)) continue
+      if (run.startedBy?.kind === 'side' || isHiddenRun(run.startedBy, data.missionId)) continue
       const startedAt = run.startedAtIso ?? run.events[0]?.occurredAt ?? new Date().toISOString()
       live.push({
         missionId: data.missionId,
@@ -7433,9 +7505,9 @@ export default function App(): ReactElement {
     return [
       ...live.sort((a, b) => lastActivityAt(b).localeCompare(lastActivityAt(a))),
       // Side questions (R33): "2 conversations" counted a question asked in a panel as one.
-      ...history.filter((mission) => mission.startedBy?.kind !== 'side' && !judgeIds.has(mission.missionId))
+      ...history.filter((mission) => mission.startedBy?.kind !== 'side' && !hiddenRunIds.has(mission.missionId))
     ]
-  }, [history, runs, workspaceId, judgeIds])
+  }, [history, runs, workspaceId, hiddenRunIds])
 
   const shownApprovals = approvals.filter((request) => request.runId === shownRunId)
   // Paused runs AND questions a teammate stopped on: both make its face wait on you (0.564).
@@ -7905,6 +7977,9 @@ export default function App(): ReactElement {
             />
           ) : screen === 'settings' ? (
             <SettingsScreen
+              {...(scout === undefined ? {} : { scout })}
+              {...((mate) => (mate?.route === undefined ? {} : { scoutModel: scoutModelWords(mate.route) }))(teammates.find((one) => one.teammateId === scout?.settings.teammateId))}
+              {...(scoutModel === undefined ? {} : { scoutRoute: { runtime: 'opencode', model: scoutModel } })}
               workspacePath={workspacePath}
               workspaceMade={workspaceMade}
               onChooseFolder={chooseWorkspace}
@@ -8178,6 +8253,19 @@ export default function App(): ReactElement {
 
               <FirstLaunch
                 {...(awaySummary === undefined ? {} : { away: awaySummary, awayTeammates: teammates, onOpenAway: openMission, onOpenRoutines: () => setScreen('automations'), onAwaySeen: awaySeen })}
+                {...((scoutShown) => (scoutShown === undefined ? {} : { scout: scoutShown }))((() => {
+                  // Scout on Home (0.756): its cards when it is on; when it is not, one invitation for a person with a
+                  // team, a folder and a free model to read with -- until they say Not now.
+                  if (runtimeState.phase !== 'ready' || scout === undefined || teammates.length === 0) return undefined
+                  if (scout.settings.on) {
+                    return <ScoutCards state={scout} scout={teammates.find((one) => one.teammateId === scout.settings.teammateId)} onOpen={openScoutCard}
+                      onSend={sendScoutDraft} onDraftIntoBox={draftScoutIntoBox}
+                      onDismiss={(cardId) => { void window.desktop?.scout?.dismiss(cardId).catch(() => undefined) }} />
+                  }
+                  if (scoutNotNow || scoutModel === undefined || workspacePath === undefined) return undefined
+                  return <ScoutInvite model={scoutModelWords({ runtime: 'opencode', model: scoutModel })} onTurnOn={() => { void turnOnScout() }} onNotNow={scoutNotNowPressed} busy={scoutBusy}
+                    {...(scoutMessage === undefined ? {} : { message: scoutMessage })} />
+                })())}
                 onAddTeamFromCard={() => addTeamFromCard(true)}
                 rosterUnreadable={unreadableStores.includes('teammates')}
                 runtimes={runtimes}

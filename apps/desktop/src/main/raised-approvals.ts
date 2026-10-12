@@ -26,6 +26,8 @@ export interface RaisedApprovals {
   forget(approvalId: string): void
   /** A card of this turn is still waiting (read by the MCP server's read_reply, 0.703). */
   waitingOn(missionId: string): boolean
+  /** Every card still waiting, oldest first (0.756): Scout tells the person about one that has waited long. */
+  waiting(): readonly RaisedApproval[]
   readonly size: number
 }
 
@@ -47,6 +49,9 @@ export function createRaisedApprovals(keep: number = MAX_RAISED_APPROVALS): Rais
     waitingOn(missionId) {
       for (const entry of raised.values()) if (entry.request.missionId === missionId) return true
       return false
+    },
+    waiting() {
+      return [...raised.values()]
     },
     get size() {
       return raised.size

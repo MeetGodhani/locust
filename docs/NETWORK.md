@@ -27,6 +27,7 @@ until it is listed here.
 | OpenAI voice typing | `https://api.openai.com/v1/audio/transcriptions` | Only after choosing Your OpenAI account, saving your API key, allowing audio upload, and recording with the microphone |
 | A web page a teammate made, open in the preview | eight public hosts, for libraries and fonts only | While the page is open |
 | A voice call (Talk, beside the microphone) | OpenAI's voice service, at the media address the call's answer names | On Windows, only while a call you started is on |
+| Scout's looks (a teammate that keeps watch) | GitHub, through your own GitHub CLI; then Scout's own model, through its agent (free: OpenCode's) | Only after you turn Scout on, every 10, 30 or 60 minutes while Locust runs, and its model only when something is new |
 
 **Its own updates.** A plain request for the files of the newest release in a
 public repository that holds only Locust's installers: `latest.yml`, then the
@@ -112,6 +113,22 @@ them) are a press of Talk from any app: Windows tells Locust they were pressed,
 and nothing leaves this computer until the call they start does. A call's
 summary of its to-dos is drawn from what this window already knows, and sends
 nothing.
+
+**Scout (0.756).** Off until you press Turn on Scout. Then, every 10 minutes
+while Locust runs (or 30 or 60, as you set it), Locust looks for itself: your
+open pull requests, the reviews asked of you and the default branch's checks,
+with your own GitHub CLI in the folder (`gh pr list`, `gh run list`, `gh repo
+view` -- what that sign-in can read, as Commit and the pull request chip
+already do), and its own records of a teammate waiting on you or a turn that
+failed. That look sends nothing anywhere but GitHub. Only when it finds
+something new does Scout's model read it: one turn, in Ask mode, on the agent
+and model Scout is set to -- Space Bunny through OpenCode when Locust adds it,
+a free model whose provider may keep what it is sent -- carrying the new facts
+(pull request titles and numbers, check names, a waiting card's one-line
+summary, a failed turn's error and what it was asked) and your teammates'
+names and roles. Change Scout's model like any teammate's, and its looks go
+there instead. Scout sends no message, merges, pushes or changes anything:
+every action on its cards is your press.
 
 **Hearing a voice (0.751).** Hear it, beside a voice picker, plays that voice
 saying hello. The first time for each voice it is a call like Talk's, a few

@@ -12,6 +12,9 @@ import { voicePermission } from './voice-permission.js'
 import { VOICE_READY, VOICE_DOWNLOAD, VOICE_TRANSCRIBE, VOICE_CANCEL, VOICE_PROGRESS, VOICE_SETTINGS_READ, VOICE_SETTINGS_SAVE, VOICE_OPENAI_CONSENT } from '../shared/voice.js'
 import { TALK_SHORTCUT_PENDING, TALK_SHORTCUT_PRESSED, TALK_SHORTCUT_READ, TALK_SHORTCUT_SET, isTalkShortcut, type TalkShortcutPress } from '../shared/talk-shortcut.js'
 import { createTalkShortcut, type TalkShortcut } from './talk-shortcut.js'
+import { createScout, type Scout } from './scout.js'
+import { readScoutGithub } from './scout-github.js'
+import { SCOUT_CHANGED, SCOUT_DISMISS, SCOUT_LOOK, SCOUT_SET, SCOUT_STATE, SCOUT_TURN_ON } from '../shared/scout.js'
 import { DEFAULT_CHATGPT_VOICE, VOICE_CALL_ANSWER, VOICE_CALL_AVAILABLE, VOICE_CALL_EVENT, VOICE_CALL_PREVIEW, VOICE_CALL_SET_VOICE, VOICE_CALL_START, VOICE_CALL_STOP, VOICE_CALL_TOOLS, VOICE_CALL_VOICES, VOICE_PREVIEW_SAVE, VOICE_PREVIEW_SAVED, VOICE_PREVIEW_TRIGGER, isChatGptVoice, isVoiceCallOffer, isVoiceCallTarget, type ChatGptVoice, type VoiceAddOn, type VoiceCallTarget } from '../shared/voice-call.js'
 import { createVoiceCalls } from './voice-call.js'
 import { createCallLog } from './call-log.js'
@@ -2212,6 +2215,8 @@ if (!ownsSingleInstanceLock) {
 
     // A2.14: a run's end, in order and each on its own -- its memory first,
     // so a teammate started because of this run is briefed with it.
+    // Scout, a teammate that keeps watch (0.756): made further down, heard here as every run ends.
+    let scout: Scout | undefined
     const runEnd = createRunEnd({
       memory: () => memoryReader,
       relay: () => relay,
@@ -2219,7 +2224,8 @@ if (!ownsSingleInstanceLock) {
         { label: 'routine', step: () => routineRunner },
         { label: 'room tasks', step: () => roomTasks },
         { label: 'attention', step: () => attentionReader },
-        { label: 'unwritten answers', step: () => unwrittenAnswers }
+        { label: 'unwritten answers', step: () => unwrittenAnswers },
+        { label: 'scout', step: () => scout }
       ],
       note
     })
@@ -6516,6 +6522,110 @@ if (!ownsSingleInstanceLock) {
         return compareRefused(error instanceof Error ? error.message : 'The comparisons could not be read.')
       }
     })
+
+    /*
+     * SCOUT, A TEAMMATE THAT KEEPS WATCH (0.756, scout.ts). Its looks run as a comparison's judge does: one turn in Ask
+     * mode on Scout's own route, never listed as a conversation (the window knows them by the state's lookIds), whose
+     * answer fills in the cards Locust has already made in its own words. GitHub is read with the person's own CLI.
+     */
+    const scoutGh = (args: readonly string[], cwd: string): Promise<string> => new Promise((resolve, reject) => {
+      execFile('gh', [...args], {
+        cwd, windowsHide: true, timeout: 30_000, maxBuffer: 4 * 1024 * 1024,
+        env: { ...process.env, GH_PROMPT_DISABLED: '1', GH_NO_UPDATE_NOTIFIER: '1' }
+      }, (error, stdout) => { if (error) reject(error); else resolve(String(stdout)) })
+    })
+    const scoutNameOf = async (teammateId: string | undefined): Promise<string | undefined> =>
+      teammateId === undefined ? undefined : (await teammates.list().catch(() => [])).find((mate) => mate.teammateId === teammateId)?.name
+    const keptScout = createScout({
+      file: join(app.getPath('userData'), 'scout.json'),
+      github: async () => (workspaceChosen ? readScoutGithub(workspacePath, scoutGh) : undefined),
+      waiting: async () => Promise.all(raisedApprovals.waiting().map(async ({ request, teammateId }) => {
+        const name = await scoutNameOf(teammateId)
+        return {
+          approvalId: request.approvalId, missionId: request.missionId, summary: request.summary, requestedAt: request.requestedAt,
+          ...(teammateId === undefined ? {} : { teammateId }), ...(name === undefined ? {} : { name })
+        }
+      })),
+      failedTurn: async (missionId) => {
+        const recorded = await missionLedger.getMission(missionId).catch(() => undefined)
+        if (recorded === undefined || recorded.phase !== 'failed') return undefined
+        const owner = (await teammates.missionOwners().catch(() => ({}) as Record<string, string>))[missionId]
+        const name = await scoutNameOf(owner)
+        // The runtime's own words for why, as the thread shows them (the first drive's Scout guessed without them).
+        const failedEvent = [...recorded.events].reverse().find((event) => event.type === 'run.failed')
+        const said = failedEvent?.type === 'run.failed' ? failedEvent.payload.message : undefined
+        const why = said ?? recorded.hostFailures.at(-1)?.message
+        return {
+          missionId, asked: recorded.metadata.prompt,
+          ...(owner === undefined ? {} : { teammateId: owner }), ...(name === undefined ? {} : { name }), ...(why === undefined ? {} : { why })
+        }
+      },
+      team: async () => (await teammates.list()).map((mate) => ({ teammateId: mate.teammateId, name: mate.name, role: mate.roleTitle ?? mate.role })),
+      ask: async (teammateId, prompt) => {
+        if (!workspaceChosen) return { refused: NO_WORKSPACE_MESSAGE }
+        const route = (await teammates.list()).find((mate) => mate.teammateId === teammateId)?.route
+        if (route === undefined) return { refused: 'Scout has no model to read with. Pick one for it on the Team screen.' }
+        const response = await codexMissions.start(
+          prompt,
+          route.runtime,
+          'ask',
+          { ...(route.model === 'account-default' ? {} : { model: route.model }), ...(typeof route.effort === 'string' ? { effort: route.effort } : {}) },
+          sendToWindow,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          { key: `scout:${teammateId}` }
+        )
+        if (!response.ok) return { refused: response.error.code === 'RUN_ALREADY_ACTIVE' ? 'Scout is still reading its last look.' : response.error.message }
+        sendToWindow({ kind: 'mission-started', runId: response.data.runId, missionId: response.data.missionId, prompt: 'Scout looked', data: response.data, startedBy: { kind: 'scout' } })
+        return { missionId: response.data.missionId }
+      },
+      answerOf: async (missionId) => {
+        const recorded = await missionLedger.getMission(missionId).catch(() => undefined)
+        if (recorded === undefined) return { failed: 'Scout’s look left no record to read.' }
+        const tracker = createTranscriptTracker()
+        tracker.track(recorded.events)
+        const text = tracker.latestFinal?.trim()
+        if (recorded.phase === 'completed' && text !== undefined && text.length > 0) return { text }
+        const why = recorded.hostFailures.at(-1)?.message
+        return { failed: recorded.phase === 'completed' ? 'Scout’s model said nothing.' : `Scout’s model did not answer${why === undefined ? '.' : `: ${why.slice(0, 200)}`}` }
+      },
+      makeTeammate: async (route) => {
+        const roster = await teammates.list()
+        // The Scout this Locust made before, if Scout's own file was lost: never a second one beside it.
+        const before = roster.find((mate) => mate.role === 'Custom' && mate.roleTitle === 'Keeps watch')
+        if (before !== undefined) return before.teammateId
+        const taken = new Set(roster.map((mate) => mate.name.toLowerCase()))
+        const name = ['Scout', 'Scout 2', 'Scout 3', 'Lookout'].find((one) => !taken.has(one.toLowerCase())) ?? `Scout ${String(roster.length + 1)}`
+        const made = await teammates.create({ name, hue: 'teal', role: 'Custom', roleTitle: 'Keeps watch' })
+        await teammates.rememberRoute(made.teammateId, { runtime: route.runtime, model: route.model, mode: 'ask' })
+        return made.teammateId
+      },
+      teammateExists: async (teammateId) => (await teammates.list()).some((mate) => mate.teammateId === teammateId),
+      changed: (state) => {
+        for (const window of BrowserWindow.getAllWindows()) {
+          if (!window.isDestroyed() && !window.webContents.isDestroyed()) window.webContents.send(SCOUT_CHANGED, state)
+        }
+      },
+      notify: (card) => { attention.runFinished({ title: 'Scout', body: card.said, missionId: card.open?.kind === 'conversation' ? card.open.missionId : undefined }) }
+    })
+    scout = keptScout
+    ipcMain.handle(SCOUT_STATE, (event) => (fromOwnWindow(event) ? keptScout.state() : undefined))
+    ipcMain.handle(SCOUT_TURN_ON, async (event, route: unknown) => {
+      if (!fromOwnWindow(event)) return { refused: 'That request was rejected.' }
+      const asked = (typeof route === 'object' && route !== null ? route : {}) as Record<string, unknown>
+      const kept = { runtime: asked.runtime, model: asked.model, mode: 'ask' }
+      // A Scout already on the team needs no route: it reads with its own.
+      return keptScout.turnOn(isTeammateRoute(kept) ? { runtime: kept.runtime, model: kept.model } : undefined)
+    })
+    ipcMain.handle(SCOUT_SET, (event, change: unknown) => (fromOwnWindow(event) ? keptScout.set(change) : keptScout.state()))
+    ipcMain.handle(SCOUT_DISMISS, (event, cardId: unknown) => (fromOwnWindow(event) ? keptScout.dismiss(cardId) : keptScout.state()))
+    ipcMain.handle(SCOUT_LOOK, (event) => (fromOwnWindow(event) ? keptScout.look() : keptScout.state()))
+    void keptScout.start()
+    app.once('will-quit', () => keptScout.dispose())
 
     ipcMain.handle(TEAMMATES_TAG_CHANNEL, async (event, request: unknown) => {
       if (!fromOwnWindow(event)) return { ok: false, message: 'That request was rejected.' } as const

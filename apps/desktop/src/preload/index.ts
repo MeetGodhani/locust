@@ -5,6 +5,7 @@ import { CALLS_LIST, CALLS_SAVE } from '../shared/calls.js'
 import { VOICE_CALL_ANSWER, VOICE_CALL_AVAILABLE, VOICE_CALL_EVENT, VOICE_CALL_PREVIEW, VOICE_CALL_SET_VOICE, VOICE_CALL_START, VOICE_CALL_STOP, VOICE_CALL_VOICES, VOICE_PREVIEW_SAVE, VOICE_PREVIEW_SAVED, VOICE_PREVIEW_TRIGGER } from '../shared/voice-call.js'
 import type { VoiceCallEvent } from '../shared/voice-call.js'
 import { TALK_SHORTCUT_PENDING, TALK_SHORTCUT_PRESSED, TALK_SHORTCUT_READ, TALK_SHORTCUT_SET, type TalkShortcutPress } from '../shared/talk-shortcut.js'
+import { SCOUT_CHANGED, SCOUT_DISMISS, SCOUT_LOOK, SCOUT_SET, SCOUT_STATE, SCOUT_TURN_ON, type ScoutState } from '../shared/scout.js'
 import { REMOTE_CONTROL_GET_CHANNEL, REMOTE_CONTROL_SET_CHANNEL, type RemoteControlState } from '../shared/claude-remote-control.js'
 import { FOLDER_CHANGES_CHANNEL, FOLDER_COMMIT_CHANNEL, type CommitResult, type FolderChanges } from '../shared/folder-commit.js'
 import {
@@ -426,6 +427,18 @@ const desktopApi: DesktopApi = {
   calls: {
     save: (call) => ipcRenderer.invoke(CALLS_SAVE, call),
     list: (missionIds) => ipcRenderer.invoke(CALLS_LIST, missionIds)
+  },
+  scout: {
+    state: () => ipcRenderer.invoke(SCOUT_STATE),
+    turnOn: (route) => ipcRenderer.invoke(SCOUT_TURN_ON, route),
+    set: (change) => ipcRenderer.invoke(SCOUT_SET, change),
+    dismiss: (cardId) => ipcRenderer.invoke(SCOUT_DISMISS, cardId),
+    look: () => ipcRenderer.invoke(SCOUT_LOOK),
+    onChanged: (listener) => {
+      const receive = (_event: Electron.IpcRendererEvent, state: ScoutState): void => { listener(state) }
+      ipcRenderer.on(SCOUT_CHANGED, receive)
+      return () => { ipcRenderer.removeListener(SCOUT_CHANGED, receive) }
+    }
   },
   talkShortcut: {
     read: () => ipcRenderer.invoke(TALK_SHORTCUT_READ),

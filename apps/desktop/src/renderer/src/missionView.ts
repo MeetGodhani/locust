@@ -5750,6 +5750,8 @@ export type LiveStarter =
   | { readonly kind: 'compare'; readonly compareId: string; readonly slot: string }
   // A comparison's judge (0.520): the host's question about the answers, never the person's.
   | { readonly kind: 'judge'; readonly compareId: string }
+  // One of Scout's looks (0.756): its answer fills in the cards on Home, never a conversation.
+  | { readonly kind: 'scout' }
 
 /**
  * What the person ASKED FOR, when a button sent a brief in their name (A1.2).

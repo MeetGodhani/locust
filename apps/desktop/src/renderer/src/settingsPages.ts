@@ -85,12 +85,14 @@ export const SETTINGS_PAGES: readonly SettingsPage[] = [
     label: 'General',
     group: 'Locust',
     icon: 'settings',
-    headings: ['Let your other AI apps use Locust', 'Voice typing', 'Talk from any app', 'Startup', 'Updates', 'Report a problem', 'Help'],
+    headings: ['Let your other AI apps use Locust', 'Voice typing', 'Talk from any app', 'Scout keeps watch', 'Startup', 'Updates', 'Report a problem', 'Help'],
     alsoKnownAs: {
       'Let your other AI apps use Locust': ['MCP server', 'stdio', 'Claude Code', 'Codex', 'Cursor', 'other apps'],
       'Voice typing': ['dictation', 'microphone', 'speech', 'whisper', 'transcription'],
       // The keys that start Talk from any app (0.755).
       'Talk from any app': ['shortcut', 'hotkey', 'keyboard shortcut', 'voice call', 'Ctrl+Alt+Space'],
+      // A teammate that keeps watch (0.756).
+      'Scout keeps watch': ['Scout', 'proactive', 'keeps watch', 'noticed', 'failing checks', 'review requests'],
       Startup: ['login item', 'tray', 'keep running', 'sign-in'],
       Updates: ['version', 'upgrade'],
       'Report a problem': ['bug', 'feedback', 'crash'],

@@ -57,7 +57,22 @@ export function pullRequestOf(json: string): FolderPullRequest | undefined {
   } catch {
     return undefined
   }
-  if (typeof parsed !== 'object' || parsed === null) return undefined
+  return pullRequestFrom(parsed)
+}
+
+/** `gh pr list --json <PULL_REQUEST_FIELDS>` -> each pull request in it that reads as one (0.756, for Scout). */
+export function pullRequestsOf(json: string): readonly FolderPullRequest[] {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(json)
+  } catch {
+    return []
+  }
+  return Array.isArray(parsed) ? parsed.map(pullRequestFrom).filter((one): one is FolderPullRequest => one !== undefined) : []
+}
+
+function pullRequestFrom(parsed: unknown): FolderPullRequest | undefined {
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return undefined
   const pr = parsed as Record<string, unknown>
   const number = typeof pr.number === 'number' && Number.isInteger(pr.number) && pr.number > 0 ? pr.number : undefined
   const url = typeof pr.url === 'string' && /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/pull\/\d+$/.test(pr.url) ? pr.url : undefined

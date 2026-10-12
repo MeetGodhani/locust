@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { ReactElement } from 'react'
+import type { ReactElement, ReactNode } from 'react'
 
 import type { PublicRuntimeStatus, TubePreference } from '../../../shared/ipc.js'
 import { connectedRuntimeCount, deferredOthersSentence, integrationOf, routeRowStatus, runtimeIsUsable } from '../status.js'
@@ -126,6 +126,7 @@ function BuildIcon({ name }: { readonly name: BuildIconName }): ReactElement {
 
 
 export function FirstLaunch({
+  scout,
   runtimes,
   limitedRuntimes,
   usageWindows,
@@ -202,6 +203,8 @@ export function FirstLaunch({
   readonly team?: readonly HomeTeammate[]
   /** Pressing a teammate's card: talk to them. */
   readonly onMessageTeammate?: (teammateId: string) => void
+  /** What Scout noticed, or the invitation to turn it on (0.756, ScoutCards.tsx): first on Home when there is any. */
+  readonly scout?: ReactNode
   /** Since you were away (0.590): what ended while nobody was here, when there is something to say. */
   readonly away?: AwaySummary
   readonly awayTeammates?: readonly PublicTeammate[]
@@ -520,6 +523,9 @@ export function FirstLaunch({
             )}
           </p>
         )}
+
+        {/* What Scout noticed (0.756): what needs the person now leads, before what ended while they were away. */}
+        {scout}
 
         {/* The morning-after view (0.590): first, because it is what a person back at the window came to see. */}
         {away !== undefined && onOpenAway !== undefined && onAwaySeen !== undefined && (
