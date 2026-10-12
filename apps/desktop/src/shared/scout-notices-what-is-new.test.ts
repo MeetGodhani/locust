@@ -86,8 +86,9 @@ describe('teammates', () => {
     expect(waitingFacts([card], new Date('2026-10-12T05:09:00.000Z'))).toEqual([])
     const [waiting] = waitingFacts([card], new Date('2026-10-12T05:25:00.000Z'))
     expect(waiting).toMatchObject({ key: 'waiting:ap_1', urgency: 'now', said: 'Atlas has waited 25 minutes for your OK.', open: { kind: 'conversation', missionId: 'mis_1', label: 'Open it' } })
-    // What it waits to do can be a command with a secret in it: it never goes to Scout's model.
-    expect(JSON.stringify(waiting)).not.toContain('pnpm test')
+    // What it waits to do can be a command with a secret in it: the person sees it, Scout's model never does.
+    expect(waiting?.quote).toBe('Run pnpm test')
+    expect(scoutPrompt({ facts: [waiting!], team: [] })).not.toContain('pnpm test')
   })
 
   it('a turn that failed says whose, and why in the runtime’s own words, with what was asked for the model', () => {

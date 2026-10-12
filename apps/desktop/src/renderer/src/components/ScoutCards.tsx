@@ -40,6 +40,7 @@ function Card({ card, scout, now, onOpen, onSend, onDraftIntoBox, onDismiss }: {
       <span className="lc-scoutcard__when lc-mono">{`${scout?.name ?? 'Scout'} · ${ago(card.at, now)}`}</span>
     </div>
     <p className="lc-scoutcard__said">{card.said}</p>
+    {card.quote !== undefined && <p className="lc-scoutcard__quote lc-mono">{card.quote}</p>}
     {card.chips !== undefined && card.chips.length > 0 && <div className="lc-scoutcard__chips">
       {card.chips.map((chip, index) => <span key={`${chip.text}-${String(index)}`} className={`lc-status lc-status--${chip.tone}`}>{chip.text}</span>)}
     </div>}

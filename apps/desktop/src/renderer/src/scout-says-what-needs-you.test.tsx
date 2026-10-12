@@ -36,6 +36,7 @@ describe('Scout’s cards on Home', () => {
     const html = draw(state([card({ cardId: 'card_old', said: 'Older news.' }), card({ cardId: 'card_now', urgency: 'now', said: 'Atlas has waited 25 minutes for your OK.' })]))
     expect(html.indexOf('Atlas has waited')).toBeLessThan(html.indexOf('Older news.'))
     expect(html).toMatch(/<article class="lc-card lc-scoutcard is-pending is-amber" data-scout-card="card_now">/)
+    expect(draw(state([card({ urgency: 'now', said: 'Atlas has waited 25 minutes for your OK.', quote: 'pnpm test --filter desktop' })]))).toContain('<p class="lc-scoutcard__quote lc-mono">pnpm test --filter desktop</p>')
     expect(html).toContain('Needs you')
   })
 

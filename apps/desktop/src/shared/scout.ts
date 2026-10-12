@@ -59,8 +59,10 @@ export interface ScoutFact {
   readonly urgency: ScoutUrgency
   /** Locust's sentence: the card's first line, whatever the model says. */
   readonly said: string
-  /** More for the model to read: a title, a command, a failed turn's last line. Never shown as the card's claim. */
+  /** More for the model to read: a title, a failed turn's last line. Never shown as the card's claim. */
   readonly detail?: string
+  /** What the card shows the person in mono under its sentence -- a waiting card's command -- and never gives the model. */
+  readonly quote?: string
   readonly chips?: readonly { readonly text: string; readonly tone: ScoutTone }[]
   readonly open?: ScoutOpen
   /** The teammate it is about, when it is about one. */
@@ -252,8 +254,8 @@ export interface WaitingCard {
 
 /*
  * Who waits, and how long -- never what for. A card's summary can be the exact command it would run, and a command can
- * carry a secret: it stays on the card in the conversation, as it stays out of a notification (attention.ts), and
- * never goes to Scout's model.
+ * carry a secret: the person sees it on the card, as on the approval card itself, but it stays out of a notification
+ * (attention.ts) and never goes to Scout's model.
  */
 export function waitingFacts(cards: readonly WaitingCard[], now: Date, waitMs = SCOUT_WAITING_MS): readonly ScoutFact[] {
   return cards.flatMap((card): ScoutFact[] => {
@@ -264,6 +266,7 @@ export function waitingFacts(cards: readonly WaitingCard[], now: Date, waitMs = 
       key: `waiting:${card.approvalId}`,
       urgency: 'now',
       said: `${card.name ?? 'A teammate'} has waited ${String(minutes)} minutes for your OK.`,
+      quote: clip(card.summary, 200),
       chips: [{ text: 'waiting on you', tone: 'amber' }],
       open: { kind: 'conversation', missionId: card.missionId, label: 'Open it' },
       ...(card.teammateId === undefined ? {} : { teammateId: card.teammateId })
