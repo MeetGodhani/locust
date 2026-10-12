@@ -14,6 +14,7 @@ import { callFolderTools } from './voice-call-folder.js'
  * reads failed with approval request, no approval field in locust", then "want to be able to do simple things
  * like check gmail by asking but then i also want to be able to hand off larger tasks".
  */
+const NO_TOOLS = { 'features.shell_tool': false, 'features.browser_use': false, 'features.browser_use_external': false, 'features.in_app_browser': false, 'features.computer_use': false } as const
 const roots: string[] = []
 afterEach(async () => { await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))) })
 async function folder(): Promise<string> {
@@ -107,12 +108,23 @@ describe('your connectors in the call', () => {
     // ran JavaScript here with no question, measured 2026-10-11).
     expect(voiceThreadConfig({ mcp_servers: { robinhood: { url: 'https://agent.robinhood.com/mcp/trading' }, 'my.service': { url: 'https://example.com/mcp' }, node_repl: { command: 'node_repl.exe' } } }, undefined, { connectors: true })).toEqual({
       ok: true,
-      config: { 'features.plugins': false, 'features.hooks': false, notify: [], model_reasoning_effort: 'low', 'mcp_servers.node_repl.enabled': false }
+      config: { 'features.plugins': false, 'features.hooks': false, notify: [], ...NO_TOOLS, model_reasoning_effort: 'low', 'mcp_servers.node_repl.enabled': false }
     })
     // A program whose name a key cannot hold: no call, as before.
     expect(voiceThreadConfig({ mcp_servers: { 'my.tool': { command: 'tool.exe' } } }, undefined, { connectors: true }).ok).toBe(false)
     const addOn = { command: 'locust.exe', args: ['bridge.mjs'], env: {} }
     expect(voiceThreadConfig({ mcp_servers: { locust_call: {} } }, addOn, { connectors: true }).ok).toBe(false)
+  })
+
+  it('leave Locust\'s own call tools unasked, and every other server asking as before (0.747)', () => {
+    const addOn = { command: 'locust.exe', args: ['bridge.mjs', 'conn.json', 'call'], env: { ELECTRON_RUN_AS_NODE: '1' } }
+    const testServer = { command: 'node.exe', args: ['probe.mjs'], env: {} }
+    const made = voiceThreadConfig({ mcp_servers: { robinhood: { url: 'https://agent.robinhood.com/mcp/trading' } } }, addOn, { connectors: true, testServer })
+    expect(made.ok && made.config['mcp_servers.locust_call.default_tools_approval_mode']).toBe('approve')
+    expect(made.ok && Object.keys(made.config).filter((key) => key.endsWith('approval_mode'))).toEqual(['mcp_servers.locust_call.default_tools_approval_mode'])
+    // No shell, browser or computer for the call's own Codex: asked to read, it reads through Locust's tools.
+    expect(made.ok && made.config['features.shell_tool']).toBe(false)
+    expect(made.ok && made.config['features.computer_use']).toBe(false)
   })
 
   it('say in the strip what they would do, from the question Codex asks', () => {

@@ -228,6 +228,8 @@ import type { TeammateStatusView } from './status.js'
 import { shortAgo } from './railFlyout.js'
 import type { WorktreeRemoval } from './components/WorktreeRow.js'
 import { approvalsOfLiveRuns } from './approvalsOfLiveRuns.js'
+import { addLiveCallTurn, liveCall, useCallsSaved, useLiveCall } from './liveCall.js'
+import type { SavedCall } from '../../shared/calls.js'
 
 /** The board's trash set (0.585): the sidebar's rows already leave deleted conversations out. */
 const NO_TRASH: ReadonlySet<string> = new Set()
@@ -2996,6 +2998,10 @@ export default function App(): ReactElement {
         const shown = liveRunRef.current
         if (update.data.followsUp !== undefined && shown?.data?.missionId === update.data.followsUp.missionId) {
           setShownKey(update.runId)
+        }
+        // A turn a call with a teammate started (0.747): kept with the call, so its words go around it.
+        if (update.startedBy?.kind === 'mcp' && update.startedBy.via === 'voice' && update.teammateId !== undefined && update.teammateId === liveCall()?.teammateId) {
+          addLiveCallTurn(update.missionId)
         }
         // A call with a teammate who had no conversation on screen (0.746): its first ask starts one, and the window
         // opens it, as a message the person typed would. A hand-off to someone else in the same call stays a row.
@@ -7418,6 +7424,32 @@ export default function App(): ReactElement {
     })
   }, [screen, shownMissionId, sidebarMissions])
   const shownQuestionOpen = needsYouItems.some((item) => item.kind === 'decision' && item.missionId === shownMissionId)
+  /*
+   * WHAT WAS SAID ON CALLS, IN THE THREAD (0.747): the calls kept with the conversation on screen, read again after a
+   * call is saved, and the call going on now when it belongs here.
+   */
+  const callsSaved = useCallsSaved()
+  const callNow = useLiveCall()
+  const conversationTurnIds = useMemo(
+    () => liveRun === undefined ? [] : [...(liveRun.earlierTurns ?? []).map((turn) => turn.missionId), ...(liveRun.data?.missionId === undefined ? [] : [liveRun.data.missionId])],
+    [liveRun]
+  )
+  const conversationTurnKey = conversationTurnIds.join(',')
+  const [savedCalls, setSavedCalls] = useState<readonly SavedCall[]>([])
+  useEffect(() => {
+    if (conversationTurnIds.length === 0) { setSavedCalls([]); return }
+    let alive = true
+    void window.desktop?.calls?.list(conversationTurnIds).then((list) => { if (alive) setSavedCalls(list) }).catch(() => undefined)
+    return () => { alive = false }
+    // The key stands for the ids: a new array of the same turns is not a new conversation.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversationTurnKey, callsSaved])
+  const threadCalls = useMemo(() => {
+    const ids = new Set(conversationTurnIds)
+    const here = callNow !== undefined && ((callNow.afterMissionId !== undefined && ids.has(callNow.afterMissionId)) || callNow.turns.some((turn) => ids.has(turn.missionId)))
+    return [...savedCalls.filter((call) => call.callId !== callNow?.callId), ...(here && callNow !== undefined ? [{ ...callNow, live: callNow.phase !== 'ended' }] : [])]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [savedCalls, callNow, conversationTurnKey])
   // Which teammate is replaying a routine, and which step it is on. DERIVED
   // from the runs that are actually live rather than tracked alongside them:
   // a step that ended stops being reported because its run stopped running,
@@ -8536,6 +8568,7 @@ export default function App(): ReactElement {
                 }}
                 onOpenSenderRun={(missionId) => () => openMission(missionId)}
                 earlierTurns={liveRun.earlierTurns ?? []}
+                calls={threadCalls}
                 {...inTerminalOf(liveRun)}
                 {...(() => {
                   // Where this conversation's group began briefing it. The

@@ -49,7 +49,9 @@ export const BACKED_UP_FILES = [
   'rooms.json',
   'compares.json',
   'folders.json',
-  'pets-removed.json'
+  'pets-removed.json',
+  // What was said on calls with teammates (0.747): part of the conversations it is kept with.
+  'calls.json'
 ] as const
 
 /**

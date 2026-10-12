@@ -12,6 +12,8 @@ import { voicePermission } from './voice-permission.js'
 import { VOICE_READY, VOICE_DOWNLOAD, VOICE_TRANSCRIBE, VOICE_CANCEL, VOICE_PROGRESS, VOICE_SETTINGS_READ, VOICE_SETTINGS_SAVE, VOICE_OPENAI_CONSENT } from '../shared/voice.js'
 import { DEFAULT_CHATGPT_VOICE, VOICE_CALL_ANSWER, VOICE_CALL_AVAILABLE, VOICE_CALL_EVENT, VOICE_CALL_SET_VOICE, VOICE_CALL_START, VOICE_CALL_STOP, VOICE_CALL_TOOLS, VOICE_CALL_VOICES, isChatGptVoice, isVoiceCallOffer, isVoiceCallTarget, type ChatGptVoice, type VoiceAddOn, type VoiceCallTarget } from '../shared/voice-call.js'
 import { createVoiceCalls } from './voice-call.js'
+import { createCallLog } from './call-log.js'
+import { CALLS_LIST, CALLS_SAVE } from '../shared/calls.js'
 import { CALL_FOLDER_TOOLS, callFolderTools } from './voice-call-folder.js'
 import { createVoiceSettingsStore } from './voice-settings.js'
 import { MCP_CONNECTION_FILE, createLocustMcpHost } from './locust-mcp-host.js'
@@ -3805,6 +3807,10 @@ if (!ownsSingleInstanceLock) {
       return voiceCalls.start(offer, isVoiceCallTarget(target) ? target : undefined)
     })
     ipcMain.handle(VOICE_CALL_STOP, (event) => fromVoiceWindow(event) ? voiceCalls.stop() : undefined)
+    // What was said on each call with a teammate, kept with its conversation (0.747).
+    const callLog = createCallLog(join(app.getPath('userData'), 'calls.json'))
+    ipcMain.handle(CALLS_SAVE, (event, call: unknown) => fromOwnWindow(event) ? callLog.save(call) : false)
+    ipcMain.handle(CALLS_LIST, (event, missionIds: unknown) => fromOwnWindow(event) ? callLog.list(missionIds) : [])
     ipcMain.handle(VOICE_CALL_VOICES, (event) => fromOwnWindow(event) ? voiceCallVoice() : DEFAULT_CHATGPT_VOICE)
     ipcMain.handle(VOICE_CALL_SET_VOICE, async (event, voice: unknown) => {
       if (!fromOwnWindow(event) || !isChatGptVoice(voice)) return voiceCallVoice()

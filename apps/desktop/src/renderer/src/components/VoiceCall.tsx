@@ -4,6 +4,8 @@ import { voiceCallText, type VoiceCallApi, type VoiceCallAvailability, type Voic
 import type { AvatarSpec } from '../../../shared/avatar.js'
 import type { TeammateHue } from '../../../shared/ipc.js'
 import { TeammateBot } from './TeammateBot.js'
+import { MAX_CALL_LINE, MAX_CALL_LINES, type SavedCall } from '../../../shared/calls.js'
+import { liveCall, markCallSaved, setLiveCall, updateLiveCall } from '../liveCall.js'
 import type { LiveVoiceCall } from '../voiceCall.js'
 import { setVoiceLevel, setVoiceState } from '../voiceLevel.js'
 import { Icon } from './Icon.js'
@@ -63,7 +65,33 @@ export function VoiceCallButton({ platform, onText, api = typeof window === 'und
   const anchor = useRef<HTMLSpanElement>(null)
   const [lift, setLift] = useState(0)
   const current = useRef<Phase>('idle')
-  const transition = (next: Phase): void => { current.current = next; setPhase(next) }
+  /*
+   * A CALL WITH A TEAMMATE IS KEPT WITH THEIR CONVERSATION (0.747): its lines go to the live call the thread reads,
+   * and when it ends it is saved, so the thread can put the words back among the turns it started.
+   */
+  const keep = (): void => {
+    const call = liveCall()
+    if (call === undefined) return
+    const done: SavedCall = {
+      callId: call.callId, teammateId: call.teammateId, name: call.name,
+      ...(call.afterMissionId === undefined ? {} : { afterMissionId: call.afterMissionId }),
+      startedAt: call.startedAt, endedAt: call.endedAt ?? Date.now(),
+      lines: call.lines.slice(-MAX_CALL_LINES), turns: call.turns
+    }
+    setLiveCall({ ...call, ...done, phase: 'ended', partial: { you: '', voice: '' } })
+    if (done.lines.length === 0 && done.turns.length === 0) { setLiveCall(undefined); return }
+    void (window.desktop?.calls?.save(done) ?? Promise.resolve(false)).catch(() => false).then(() => {
+      if (liveCall()?.callId === done.callId) setLiveCall(undefined)
+      markCallSaved()
+    })
+  }
+  const transition = (next: Phase): void => {
+    current.current = next
+    setPhase(next)
+    if (talkTo === undefined) return
+    if (next === 'live') updateLiveCall((call) => ({ ...call, phase: 'live' }))
+    if (next === 'ended') keep()
+  }
 
   useEffect(() => {
     if (given !== undefined || api === undefined || platform !== 'win32') return
@@ -76,10 +104,20 @@ export function VoiceCallButton({ platform, onText, api = typeof window === 'und
   useEffect(() => {
     if (api === undefined || (phase !== 'calling' && phase !== 'live')) return
     return api.onEvent((update) => {
-      if (update.kind === 'partial') setPartial((was) => ({ ...was, [update.role]: was[update.role] + update.delta }))
-      else if (update.kind === 'said') {
+      if (update.kind === 'partial') {
+        setPartial((was) => ({ ...was, [update.role]: was[update.role] + update.delta }))
+        if (talkTo !== undefined) updateLiveCall((call) => ({ ...call, partial: { ...call.partial, [update.role]: call.partial[update.role] + update.delta } }))
+      } else if (update.kind === 'said') {
         setPartial((was) => ({ ...was, [update.role]: '' }))
-        if (update.text.trim().length > 0) setLines((was) => [...was, { role: update.role, text: update.text.trim() }])
+        const text = update.text.trim()
+        if (text.length > 0) setLines((was) => [...was, { role: update.role, text }])
+        if (talkTo !== undefined) {
+          updateLiveCall((call) => ({
+            ...call,
+            partial: { ...call.partial, [update.role]: '' },
+            lines: text.length === 0 ? call.lines : [...call.lines, { role: update.role, text: text.slice(0, MAX_CALL_LINE), at: Date.now() }]
+          }))
+        }
       } else if (update.kind === 'working') setWorking(update.working)
       else if (update.kind === 'handed') setHanded((was) => [...was, { to: update.to, task: update.task }])
       else if (update.kind === 'asks') setAsks((was) => [...was, { id: update.id, what: update.what, detail: update.detail }])
@@ -137,11 +175,22 @@ export function VoiceCallButton({ platform, onText, api = typeof window === 'und
     starting.current?.abort()
     void call.current?.hangUp()
     call.current = undefined
+    // A call with a teammate that ended this way is kept like any other.
+    if (liveCall() !== undefined && liveCall()?.phase !== 'ended') keep()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const start = async (): Promise<void> => {
     if (api === undefined || current.current === 'calling' || current.current === 'live') return
     setLines([]); setHanded([]); setPartial({ you: '', voice: '' }); setMessage(''); setMuted(false); setWorking(false); setSeconds(0)
+    if (talkTo !== undefined) {
+      setLiveCall({
+        callId: `call_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`,
+        teammateId: talkTo.teammateId, name: talkTo.name,
+        ...(talkTo.conversationId === undefined ? {} : { afterMissionId: talkTo.conversationId }),
+        startedAt: Date.now(), lines: [], turns: [], phase: 'calling', partial: { you: '', voice: '' }
+      })
+    }
     transition('calling')
     const token = ++generation.current
     const controller = new AbortController()
@@ -212,7 +261,7 @@ export function VoiceCallButton({ platform, onText, api = typeof window === 'und
     {phase !== 'idle' && <div className="lc-call__strip" role="region" aria-label="Voice call" style={{ bottom: `calc(100% + ${String(lift + 10)}px)` }}>
       <div className="lc-call__head">
         {phase === 'ended'
-          ? <span className="lc-call__status">Call ended{seconds > 0 ? ` · ${clock}` : ''}</span>
+          ? <span className="lc-call__status">{talkTo === undefined ? 'Call ended' : `Call with ${talkTo.name} ended`}{seconds > 0 ? ` · ${clock}` : ''}{talkTo !== undefined && lines.length > 0 ? ' · kept in this conversation' : ''}</span>
           : <>
             {talkTo !== undefined && <TeammateBot hue={talkTo.hue} avatar={talkTo.avatar} size={28} teammateId={talkTo.teammateId} motion="full" hopsWhenDone={false}
               activity={faceActivity} presence={asks.length > 0 ? 'approval' : working ? 'working' : 'none'} />}
@@ -228,13 +277,14 @@ export function VoiceCallButton({ platform, onText, api = typeof window === 'und
             <Icon name={muted ? 'mic-off' : 'mic'} size={15} />{muted ? 'Unmute' : 'Mute'}
           </button>}
           {on && <button type="button" className="lc-control lc-call__end" onClick={() => { void end() }}>End</button>}
-          {phase === 'ended' && voiceCallText(lines, handed).length > 0 && <button type="button" className="lc-control lc-control--boxed" onClick={() => { onText(voiceCallText(lines, handed)); close() }}>Put it in the chat box</button>}
+          {phase === 'ended' && talkTo === undefined && voiceCallText(lines, handed).length > 0 && <button type="button" className="lc-control lc-control--boxed" onClick={() => { onText(voiceCallText(lines, handed)); close() }}>Put it in the chat box</button>}
           {phase === 'ended' && <button type="button" className="lc-control" onClick={close}>Close</button>}
         </span>
       </div>
-      {(shown.length > 0 || handed.length > 0 || partial.you.length > 0 || partial.voice.length > 0) && <div className="lc-call__lines">
+      {/* A call with a teammate says its lines in their conversation (0.747); the strip keeps the call's controls. */}
+      {talkTo === undefined && (shown.length > 0 || handed.length > 0 || partial.you.length > 0 || partial.voice.length > 0) && <div className="lc-call__lines">
         {shown.map((line, index) => <p key={index} className={`lc-call__line is-${line.role}`}><span className="lc-call__who">{line.role === 'you' ? 'You' : voiceName}</span>{line.text}</p>)}
-        {handed.map((hand, index) => <p key={`handed-${String(index)}`} className="lc-call__line is-handed"><span className="lc-call__who">{talkTo !== undefined && hand.to === talkTo.name ? `Sent to ${hand.to}` : `Handed to ${hand.to}`}</span>{hand.task}</p>)}
+        {handed.map((hand, index) => <p key={`handed-${String(index)}`} className="lc-call__line is-handed"><span className="lc-call__who">Handed to {hand.to}</span>{hand.task}</p>)}
         {on && (['you', 'voice'] as const).map((role) => partial[role].trim().length > 0 && <p key={`partial-${role}`} className={`lc-call__line is-${role} is-partial`}><span className="lc-call__who">{role === 'you' ? 'You' : voiceName}</span>{partial[role].trim()}</p>)}
       </div>}
       {/* A connector that would change something, asked here: nothing happens until Allow (0.742). */}

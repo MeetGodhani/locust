@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { LOCUST_MCP_CLAUDE_APP, LOCUST_MCP_CLAUDE_APP_RESTART, LOCUST_MCP_CLAUDE_APP_SET, LOCUST_MCP_GET, LOCUST_MCP_SET, LOCUST_MCP_SET_OWN_MODE } from '../shared/locust-mcp.js'
 import { VOICE_READY, VOICE_DOWNLOAD, VOICE_TRANSCRIBE, VOICE_CANCEL, VOICE_PROGRESS, VOICE_SETTINGS_READ, VOICE_SETTINGS_SAVE, VOICE_OPENAI_CONSENT } from '../shared/voice.js'
+import { CALLS_LIST, CALLS_SAVE } from '../shared/calls.js'
 import { VOICE_CALL_ANSWER, VOICE_CALL_AVAILABLE, VOICE_CALL_EVENT, VOICE_CALL_SET_VOICE, VOICE_CALL_START, VOICE_CALL_STOP, VOICE_CALL_VOICES } from '../shared/voice-call.js'
 import type { VoiceCallEvent } from '../shared/voice-call.js'
 import { REMOTE_CONTROL_GET_CHANNEL, REMOTE_CONTROL_SET_CHANNEL, type RemoteControlState } from '../shared/claude-remote-control.js'
@@ -420,6 +421,10 @@ const desktopApi: DesktopApi = {
       ipcRenderer.on(VOICE_PROGRESS, receive)
       return () => { ipcRenderer.removeListener(VOICE_PROGRESS, receive) }
     }
+  },
+  calls: {
+    save: (call) => ipcRenderer.invoke(CALLS_SAVE, call),
+    list: (missionIds) => ipcRenderer.invoke(CALLS_LIST, missionIds)
   },
   voiceCall: {
     available: () => ipcRenderer.invoke(VOICE_CALL_AVAILABLE),

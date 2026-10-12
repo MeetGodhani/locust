@@ -248,6 +248,18 @@ export function voiceThreadConfig(config: unknown, addOn?: VoiceAddOn, options: 
     'features.plugins': false,
     'features.hooks': false,
     notify: [],
+    /*
+     * NO SHELL, BROWSER OR COMPUTER for the call's own Codex (0.747). Asked to read a file, it ran a command first;
+     * the call refused it, and the voice said "I need your approval in the app to continue" when there was nothing to
+     * approve -- the confusion Colin hit on 10/11. The call reads with Locust's folder tools and works through
+     * teammates, so these go: measured 2026-10-11 on Codex 0.162.1, with `features.shell_tool` off it ran nothing
+     * and said "NO SHELL".
+     */
+    'features.shell_tool': false,
+    'features.browser_use': false,
+    'features.browser_use_external': false,
+    'features.in_app_browser': false,
+    'features.computer_use': false,
     ...(connectors ? { model_reasoning_effort: 'low' } : {})
   }
   const servers = settings.mcp_servers
@@ -279,6 +291,14 @@ export function voiceThreadConfig(config: unknown, addOn?: VoiceAddOn, options: 
     out[`mcp_servers.${VOICE_CALL_ADD_ON}.args`] = addOn.args
     out[`mcp_servers.${VOICE_CALL_ADD_ON}.env`] = addOn.env
     out[`mcp_servers.${VOICE_CALL_ADD_ON}.enabled`] = true
+    /*
+     * Its tools are used without Codex asking (0.747). Locust already said yes to each of them (voice-call.ts,
+     * onRequest), but Codex's question still reached the voice, which asked the person "quick approval check: should
+     * I run the locust call send message tool?" -- a question with no answer to give. Measured 2026-10-11 on Codex
+     * 0.162.1: with `default_tools_approval_mode` "approve", a tool that asked before ran without asking. The person's
+     * own connectors still ask, in the strip.
+     */
+    out[`mcp_servers.${VOICE_CALL_ADD_ON}.default_tools_approval_mode`] = 'approve'
   }
   return { ok: true, config: out }
 }
@@ -290,8 +310,9 @@ export function voiceCallInstructions(folderName: string, handsOff = false, conn
    * Said as what works, because the voice believed what it was not told (2026-10-11): asked to read the folder,
    * it ran commands Locust refused, and said "I just sent the request in the app" when there was nothing to answer.
    */
+  // "Never guess" (0.747): once, asked what a README said, the voice answered "friendship" without reading it.
   const folder = handsOff
-    ? `This is a voice call the person started in Locust, about the folder "${folderName}". To look in that folder, use the ${VOICE_CALL_ADD_ON} tools find_files, read_file and search_files; never run shell commands, which this call cannot run. You change no file yourself.`
+    ? `This is a voice call the person started in Locust, about the folder "${folderName}". To look in that folder, use the ${VOICE_CALL_ADD_ON} tools find_files, read_file and search_files; never run shell commands, which this call cannot run. You change no file yourself. Never guess what a file or a connector says: look first, and if you cannot, say so.`
     : `This is a voice call the person started in Locust, about the folder "${folderName}". You may read files in that folder to answer, but you change nothing yourself during this call: no edits, no commands that change anything.`
   const tools = connectors
     ? ' For quick things, like checking their email or calendar, use their connectors directly. A connector that only reads answers at once. One that would send, change or buy something first shows Allow and Deny in the call’s strip in Locust: say what it will do and ask them to press Allow, and only say it is done once the tool says so. If they press Deny, or it is not answered, it did not happen.'

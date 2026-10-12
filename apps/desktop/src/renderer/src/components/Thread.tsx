@@ -56,6 +56,9 @@ import { PdfTile } from './PdfTile.js'
 import { isPdf } from '../pdfPages.js'
 import type { ThreadItem, ThreadPeerCard } from '../missionView.js'
 import type { DecisionOption } from '../../../shared/decision.js'
+import { callPlacements, type CallPlace, type SavedCall } from '../../../shared/calls.js'
+import type { VoiceCallRole } from '../../../shared/voice-call.js'
+import { CallWords } from './CallWords.js'
 
 /**
  * The files a teammate handed over, and what the host said when a press
@@ -908,6 +911,11 @@ export interface ThreadProps {
   readonly restoredMission: PublicRecoveredMission | undefined
   /** The turn being shown, so its own memories are drawn under it. */
   readonly shownMissionId?: string
+  /**
+   * What was said on calls with this conversation's teammate (0.747), kept and live: drawn among the turns each
+   * call started (callPlacements). A live one grows as you talk; an ended one folds to a line.
+   */
+  readonly calls?: readonly (SavedCall & { readonly live?: boolean; readonly partial?: Readonly<Record<VoiceCallRole, string>> })[]
   readonly error: string | undefined
   readonly errorIsPersistence: boolean
   /** Where receipts are written; the ledger-failure card offers to open it. */
@@ -1044,6 +1052,7 @@ onResume,
   running,
   restoredMission,
   shownMissionId,
+  calls,
   error: recordedError,
   errorIsPersistence,
   ledgerPath,
@@ -1116,6 +1125,19 @@ onResume,
     return { elements, said, sizes }
   }, [earlierTurns, mayEdit, workspacePath, peers.self])
   const earlierWork = earlier.elements
+  // A call's words among the turns it started (0.747); opened by the person once it has ended.
+  const callPlaces = useMemo(
+    () => callPlacements(calls ?? [], [...earlierTurns.map((turn) => turn.missionId), ...(shownMissionId === undefined ? [] : [shownMissionId])]),
+    [calls, earlierTurns, shownMissionId]
+  )
+  const [openCalls, setOpenCalls] = useState<ReadonlySet<string>>(() => new Set())
+  const callsAt = (place: CallPlace) => (callPlaces.get(place) ?? []).map((piece) => {
+    const source = (calls ?? []).find((call) => call.callId === piece.call.callId)
+    const id = piece.call.callId
+    return <CallWords key={`${id}-${place}`} piece={{ ...piece, live: source?.live === true, ...(source?.partial === undefined ? {} : { partial: source.partial }) }}
+      teammate={peers.self} open={openCalls.has(id)}
+      onToggle={() => setOpenCalls((was) => { const next = new Set(was); if (next.has(id)) next.delete(id); else next.add(id); return next })} />
+  })
   /*
    * A LONG CONVERSATION OPENS ON ITS NEWEST TURNS (0.573). The rest wait
    * above, put on the page as the person scrolls up to them (or presses
@@ -1492,6 +1514,7 @@ onResume,
               {turn.switchedFrom !== undefined && <HandoffDivider {...turn.switchedFrom} />}
               {seam !== undefined && <TerminalDivider seam={seam} {...(backgroundTurns?.has(turn.missionId) === true ? { background: true } : {})} />}
               {!again && versionNote(turn.versions)}
+              {callsAt(`before:${turn.missionId}`)}
               {!again && userTurn(turnPromptLine(turn), turnAttachments(turn), () => editedFiles(turn.events, workspacePath), turn.startedBy === undefined && turn.inTerminal === undefined ? turn.missionId : undefined)}
               {cardsFor(index, 'before-work').map(peerCard)}
               {!again && earlierWork[index]}
@@ -1500,6 +1523,7 @@ onResume,
               {cardsFor(index, 'after-work').map(peerCard)}
               {/* What that turn taught the team, under that turn. */}
               <MemoryCard lines={memoriesOfTurn(peers.memories ?? [], turn.missionId)} />
+              {callsAt(`after:${turn.missionId}`)}
             </Fragment>
           )
         })}
@@ -1558,6 +1582,7 @@ onResume,
         */}
         {switchedFrom !== undefined && <HandoffDivider {...switchedFrom} />}
         {currentSeam !== undefined && <TerminalDivider seam={currentSeam} {...(shownMissionId !== undefined && backgroundTurns?.has(shownMissionId) === true ? { background: true } : {})} />}
+        {shownMissionId !== undefined && callsAt(`before:${shownMissionId}`)}
         {userTurn(currentLine, turnAttachments({ prompt, ...(startedBy === undefined ? {} : { startedBy }) }), running ? undefined : () => editedFiles(events, workspacePath), !running && startedBy === undefined && inTerminal === undefined ? shownMissionId : undefined)}
 
         {handoff !== undefined && (
@@ -1619,6 +1644,8 @@ onResume,
           * 2026-09-11).
           */}
         <MemoryCard lines={memoriesOfTurn(peers.memories ?? [], shownMissionId)} />
+        {shownMissionId !== undefined && callsAt(`after:${shownMissionId}`)}
+        {callsAt('end')}
         {/* Joined after the last turn started: the NEXT turn is the first briefed, so the line sits below this one. */}
         {leavingNotes((beforeTurn) => beforeTurn > earlierTurns.length)}
         {joinNotes((beforeTurn) => beforeTurn > earlierTurns.length)}

@@ -60,6 +60,7 @@ function fakeCodex(answers: FakeAnswers = {}) {
   return { child, asked, killed: () => killed, say }
 }
 
+const NO_TOOLS = { 'features.shell_tool': false, 'features.browser_use': false, 'features.browser_use_external': false, 'features.in_app_browser': false, 'features.computer_use': false } as const
 const CODEX = { commandName: 'codex', discoveredPath: 'codex', executablePath: 'codex.exe', prefixArgs: [] as string[], kind: 'native' as const }
 
 function calls(fakes: () => ReturnType<typeof fakeCodex>, options: {
@@ -109,7 +110,7 @@ describe('a voice call', () => {
       sandbox: 'read-only',
       approvalPolicy: 'untrusted',
       ephemeral: true,
-      config: { 'features.apps': false, 'features.plugins': false, 'features.hooks': false, notify: [], 'mcp_servers.robinhood.enabled': false }
+      config: { 'features.apps': false, 'features.plugins': false, 'features.hooks': false, notify: [], ...NO_TOOLS, 'mcp_servers.robinhood.enabled': false }
     })
     expect(by(fake, 'thread/realtime/start')).toMatchObject({ threadId: 'thread_1', outputModality: 'audio', transport: { type: 'webrtc', sdp: 'v=0\r\noffer' }, version: 'v3' })
     expect(String(by(fake, 'thread/realtime/start').realtimeStartInstructions)).toContain('"acme"')
@@ -325,7 +326,7 @@ describe('a voice call with your connectors', () => {
     const { fake, voice } = connected()
     await voice.start('v=0\r\noffer')
     // The fake's robinhood names no address, so it is not known to be a service elsewhere: it stays off.
-    expect(by(fake, 'thread/start').config).toEqual({ 'features.plugins': false, 'features.hooks': false, notify: [], model_reasoning_effort: 'low', 'mcp_servers.robinhood.enabled': false })
+    expect(by(fake, 'thread/start').config).toEqual({ 'features.plugins': false, 'features.hooks': false, notify: [], ...NO_TOOLS, model_reasoning_effort: 'low', 'mcp_servers.robinhood.enabled': false })
     const told = String(by(fake, 'thread/realtime/start').realtimeStartInstructions)
     expect(told).toContain('Allow and Deny in the call’s strip')
     await voice.stop()

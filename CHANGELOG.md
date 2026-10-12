@@ -11,6 +11,16 @@ Settings shows this file as What's new. An entry may group its changes under
 about when they arrive on it carries `<!-- big -->` on the line under its
 heading: the home screen then shows it once, as a splash.
 
+## 0.747.0 - 2026-10-11
+
+### New
+
+- **A call with a teammate lives in their conversation.** What you and the teammate say appears in the thread as you talk, marked as said, around the work the call asked for. When the call ends it folds to one line, like "Call with Ada · 1:43 · 4 lines said", that opens again. It's kept with the conversation after a restart.
+
+### Fixed
+
+- **A call no longer asks you to approve things that need no approval.** The voice could say "I need your approval in the app" when there was nothing to approve. A call can't run commands, open a browser, or use your computer: it reads your folder with Locust's own tools and hands work to teammates. Connectors that would change something still ask first.
+
 ## 0.746.0 - 2026-10-11
 <!-- big -->
 

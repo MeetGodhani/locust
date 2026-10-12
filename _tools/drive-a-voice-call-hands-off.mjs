@@ -83,14 +83,18 @@ try {
   await drive.evaluate(`(async () => { for (let i = 0; i < 40 && !document.querySelector('button[aria-label="Talk"]'); i += 1) await new Promise(r => setTimeout(r, 250)) })()`)
   const rowsBefore = await wrensRows()
   await drive.evaluate(`document.querySelector('button[aria-label="Talk"]').click()`)
+  // Since 0.747 a call with Wren says its lines in Wren's conversation, among the turn it starts.
+  const THREAD_LINES = `JSON.stringify([...document.querySelectorAll('.lc-callsaid')].map((line) => (line.classList.contains('is-you') ? 'You' : 'Wren') + (line.querySelector('.lc-callsaid__bubble, .lc-callsaid__text')?.innerText ?? '').replace(/\\s+/g, ' ').trim()))`
   let state = { status: '', lines: [], message: '' }
+  let said = []
   for (let second = 0; second < 120; second += 1) {
     await sleep(1000)
     state = await strip()
-    if (state.lines.some((line) => /^(Handed|Sent) to Wren/.test(line)) || state.message) break
+    said = JSON.parse(String(await drive.evaluate(THREAD_LINES)))
+    if (((await wrensRows()).length > rowsBefore.length && said.some((line) => line.startsWith('Wren'))) || state.message) break
   }
-  await drive.capture('the call, handing it over', () => JSON.stringify(state))
-  check('the strip says it handed the task to Wren', state.lines.some((line) => /^(Handed|Sent) to Wren/.test(line) && /files/i.test(line)), state.lines.join(' | '))
+  await drive.capture('the call, handing it over', () => JSON.stringify({ ...state, said }))
+  check('the call’s words are in Wren’s conversation, the ask among them', said.some((line) => /^You/.test(line) && /files/i.test(line)) && said.some((line) => line.startsWith('Wren')), said.join(' | '))
   check('no error on the way', state.message === '', state.message)
 
   // A real conversation of Wren's, new since the call began.
@@ -103,8 +107,11 @@ try {
 
   await drive.evaluate(`[...document.querySelectorAll('[role=region][aria-label="Voice call"] button')].find((b) => b.innerText.trim() === 'End')?.click()`)
   await sleep(2500)
-  // Ended, the strip shows every line, not the last three.
-  const ended = await strip()
+  // Ended, the call folds to one row in Wren's conversation; opened, it says every line (0.747).
+  const folded = String(await drive.evaluate(`document.querySelector('.lc-callrow')?.innerText.replace(/\\s+/g, ' ').trim() ?? ''`))
+  check('ended, the call folds to one row', /Call with Wren/.test(folded) && /lines? said/.test(folded), folded)
+  await drive.evaluate(`(async () => { document.querySelector('.lc-callrow')?.click(); await new Promise((r) => setTimeout(r, 500)) })()`)
+  const ended = { lines: JSON.parse(String(await drive.evaluate(THREAD_LINES))) }
   // Windows' voice saying "Wren" is often heard as "Ren".
   check('the voice heard the request', ended.lines.some((line) => /^You/.test(line) && /\bw?ren\b/i.test(line) && /files/i.test(line)), ended.lines.join(' | '))
   const marker = String(await drive.capture('Wren’s conversation, from the call', () => drive.evaluate(`(async () => {

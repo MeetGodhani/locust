@@ -21085,6 +21085,83 @@ textarea {
 .lc-call__asktext .lc-call__who { color: var(--lc-amber-text); }
 .lc-call__askdetail { display: block; font-size: 12px; color: var(--lc-text-secondary); }
 .lc-call__askacts { display: inline-flex; align-items: center; gap: var(--lc-space-2); flex: none; }
+
+/*
+ * WHAT WAS SAID ON A CALL, IN THE THREAD (0.747): your words as your bubbles, the teammate's beside its face, each
+ * marked as said rather than typed, under the call's divider; an ended call folds to one row that opens again.
+ */
+.lc-calldivider {
+  display: flex;
+  align-items: center;
+  gap: var(--lc-space-4);
+  font-size: var(--lc-text-mono-label);
+  letter-spacing: var(--lc-tracking-label);
+  text-transform: uppercase;
+  color: var(--lc-text-muted);
+}
+.lc-calldivider__rule { flex: 1; height: 1px; background: var(--lc-border-hairline); }
+.lc-calldivider__words { display: inline-flex; align-items: center; gap: 7px; }
+.lc-calldivider__dot { width: 6px; height: 6px; border-radius: 50%; background: var(--lc-lime); }
+.lc-calldivider__hide {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  color: var(--lc-text-secondary);
+  cursor: pointer;
+}
+.lc-calldivider__hide:hover { color: var(--lc-text-primary); }
+.lc-calldivider__hide:focus-visible { outline: 2px solid var(--lc-focus-ring); outline-offset: 2px; border-radius: 4px; }
+
+.lc-callsaid { display: flex; gap: var(--lc-space-4); }
+.lc-callsaid.is-you { align-self: flex-end; max-width: 78%; flex-direction: column; align-items: flex-end; gap: 4px; }
+.lc-callsaid__bubble {
+  padding: var(--lc-space-4) var(--lc-space-5);
+  border-radius: var(--lc-radius-card);
+  background: var(--lc-bg-bubble-user);
+  font-size: var(--lc-text-said);
+  text-wrap: pretty;
+}
+.lc-callsaid__gutter { flex: none; width: 24px; display: flex; justify-content: center; padding-top: 2px; }
+.lc-callsaid__body { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.lc-callsaid__text { margin: 0; font-family: var(--lc-font-prose); font-size: var(--lc-text-prose); line-height: 1.6; text-wrap: pretty; overflow-wrap: anywhere; }
+.lc-callsaid__mark { display: inline-flex; align-items: center; gap: 5px; font-size: var(--lc-text-description); color: var(--lc-text-muted); }
+.lc-callsaid.is-partial .lc-callsaid__bubble,
+.lc-callsaid.is-partial .lc-callsaid__text { color: var(--lc-text-muted); }
+
+.lc-callrow {
+  display: flex;
+  align-items: center;
+  gap: var(--lc-space-5);
+  width: 100%;
+  padding: 10px 14px;
+  text-align: left;
+  border: 1px solid var(--lc-border-card);
+  border-radius: var(--lc-radius-card);
+  background: var(--lc-bg-terminal);
+  color: var(--lc-text-primary);
+  font: inherit;
+  cursor: pointer;
+}
+.lc-callrow:hover { border-color: var(--lc-hover-border); }
+.lc-callrow:focus-visible { outline: 2px solid var(--lc-focus-ring); outline-offset: 2px; }
+.lc-callrow__mark {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 1px solid var(--lc-border-control);
+  color: var(--lc-text-secondary);
+}
+.lc-callrow__words { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.lc-callrow__title { font-weight: 500; }
+.lc-callrow__note { font-size: var(--lc-text-description); color: var(--lc-text-muted); }
+.lc-callrow__open { flex: none; font-size: var(--lc-text-description); color: var(--lc-text-secondary); }
 @media (prefers-reduced-motion: reduce) { .lc-call__bar { transition: none; } }
 
 /*

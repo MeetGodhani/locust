@@ -11,6 +11,7 @@ import { VOICE_CALL_ADD_ON, VOICE_CALL_TOOLS, isVoiceCallOffer, voiceCallInstruc
  * and robinhood without these settings, none with them. Read from his settings alone (config/read): asking
  * mcpServerStatus/list for names started every server to list its tools (Sol's #1).
  */
+const NO_TOOLS = { 'features.shell_tool': false, 'features.browser_use': false, 'features.browser_use_external': false, 'features.in_app_browser': false, 'features.computer_use': false } as const
 const COLINS_CONFIG = { model: 'gpt-6-sol', mcp_servers: { node_repl: { command: 'node_repl.exe' }, robinhood: { url: 'https://agent.robinhood.com' } } }
 
 describe('the call’s thread starts no add-on', () => {
@@ -22,13 +23,14 @@ describe('the call’s thread starts no add-on', () => {
         'features.plugins': false,
         'features.hooks': false,
         notify: [],
+        ...NO_TOOLS,
         'mcp_servers.node_repl.enabled': false,
         'mcp_servers.robinhood.enabled': false
       }
     })
     // Settings with no servers of their own still get every category switched off.
     const none = voiceThreadConfig({ model: 'x' })
-    expect(none.ok && Object.keys(none.config)).toEqual(['features.apps', 'features.plugins', 'features.hooks', 'notify'])
+    expect(none.ok && Object.keys(none.config)).toEqual(['features.apps', 'features.plugins', 'features.hooks', 'notify', ...Object.keys(NO_TOOLS)])
   })
 
   it('places no call when the settings did not read as settings (Sol’s #2: it failed open)', () => {
