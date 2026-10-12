@@ -70,10 +70,25 @@ try {
   const route = String(await drive.evaluate(`([...document.querySelectorAll('.lc-control')].find((b) => b.getAttribute('aria-haspopup') === 'listbox')?.innerText ?? '').replace(/\\s+/g, ' ')`))
   say(`route: ${route}`)
   if (!/sonnet/i.test(route)) throw new Error(`Polish is not on Sonnet: "${route}"`)
-  const sent = String(await drive.evaluate(sendAndWaitScript(brief, { waitSeconds: Math.round(hours * 3600), settle: true })))
+  const sent = String(await drive.evaluate(sendAndWaitScript(brief, { settle: false })))
+  if (sent !== 'sent') throw new Error(`the brief was not sent: ${sent}`)
+  /*
+   * Its turn is waited for here, a look every 15 s. One evaluate has no answer after 400 s (drive-lib's send), so
+   * waiting the hours inside sendAndWaitScript came back empty at 6m40s and closed the window on Polish mid-turn
+   * (2026-10-12, its first run). Done once the Stop button has been gone for two looks running.
+   */
+  const deadline = Date.now() + hours * 3_600_000
+  const running = `document.querySelector('button[aria-label^="Stop the running"]') !== null`
+  await sleep(5_000)
+  let quiet = 0
+  while (quiet < 2 && Date.now() < deadline) {
+    await sleep(15_000)
+    quiet = (await drive.evaluate(running)) === false ? quiet + 1 : 0
+  }
+  const ended = quiet >= 2 ? 'its turn ended' : `still working after ${String(hours)} h`
   reply = String(await drive.evaluate(`(document.querySelector('.lc-thread')?.innerText ?? '').slice(-20000)`))
-  say(`Polish: ${sent.slice(0, 300)}`)
-  await drive.capture('Polish, done', () => sent.slice(-400))
+  say(`Polish: ${ended} -- ${reply.replace(/\s+/g, ' ').slice(-300)}`)
+  await drive.capture('Polish, done', () => `${ended} -- ${reply.replace(/\s+/g, ' ').slice(-400)}`)
 } catch (error) {
   say(`polish failed: ${error instanceof Error ? error.message : String(error)}`)
 } finally {

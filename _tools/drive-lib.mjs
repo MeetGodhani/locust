@@ -368,7 +368,13 @@ export async function startDrive({ name, port, workspace, seed, files = {}, env 
   })
   const send = (method, params = {}) => new Promise((resolve_) => {
     const next = ++id
-    const gaveUp = setTimeout(() => { if (pending.delete(next)) resolve_(undefined) }, 400_000)
+    // Said, not silent: a wait longer than this inside one evaluate came back empty and looked like an answer
+    // (polish-after-the-sweep's first run, 2026-10-12).
+    const gaveUp = setTimeout(() => {
+      if (!pending.delete(next)) return
+      say(`  ${method} had no answer in 400 s; going on without one`)
+      resolve_(undefined)
+    }, 400_000)
     pending.set(next, (message) => { clearTimeout(gaveUp); resolve_(message) })
     socket.send(JSON.stringify({ id: next, method, params }))
   })
@@ -923,6 +929,8 @@ export function openAllStepsScript(scope = '.lc-thread') {
   })()`
 }
 
+// One evaluate has no answer after 400 s (startDrive's send), so a waitSeconds past about 390 comes back empty:
+// wait longer from the drive itself, a short look at a time (polish-after-the-sweep).
 export function sendAndWaitScript(text, { waitSeconds = 360, settle = true } = {}) {
   return `(async () => {
     const field = document.querySelector('form.command-dock textarea')
