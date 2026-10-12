@@ -43,7 +43,22 @@ const state = `JSON.stringify({
   queued: document.querySelector('.lc-queued__text')?.innerText ?? null,
   now: [...document.querySelectorAll('.lc-queued__action')].map((b) => b.innerText.trim()),
   stopped: /This run was stopped|You stopped this run/.test(document.querySelector('.lc-thread')?.innerText ?? ''),
-  replies: [...document.querySelectorAll('.lc-agentline__body')].map((el) => el.innerText.trim())
+  replies: [...document.querySelectorAll('.lc-agentline__body')].map((el) => el.innerText.trim()),
+  // A reply can be several lines (a model may write a few paragraphs around a tool), so
+  // turns are told apart by the person's own messages: what sits between the last two of
+  // them is what the stopped job said, what follows the last is the answer to the new one.
+  bubbles: document.querySelectorAll('.lc-thread .lc-bubble').length,
+  between: (() => {
+    const marks = [...document.querySelectorAll('.lc-thread .lc-bubble')]
+    if (marks.length < 2) return -1
+    const [from, to] = marks.slice(-2)
+    return [...document.querySelectorAll('.lc-agentline__body')].filter((el) => (from.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0 && (to.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_PRECEDING) !== 0).length
+  })(),
+  answer: (() => {
+    const last = [...document.querySelectorAll('.lc-thread .lc-bubble')].at(-1)
+    if (!last) return ''
+    return [...document.querySelectorAll('.lc-agentline__body')].filter((el) => (last.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0).map((el) => el.innerText.trim()).join(' ')
+  })()
 })`
 const waitFor = async (test, ms) => {
   for (let waited = 0; waited < ms; waited += 500) {
@@ -77,10 +92,10 @@ try {
   await waitFor(`!document.querySelector('.lc-queued__text') && /OSPREY/i.test([...document.querySelectorAll('.lc-agentline__body')].map((el) => el.innerText).join(' '))`, 120_000)
   await waitFor(`!(${running})`, 60_000)
   const after = JSON.parse(String(await drive.capture('stopped, and the queued message answered', () => drive.evaluate(state))))
-  // A stopped card is drawn on the latest turn only; the stopped turn is now an
-  // earlier one, so what shows it was cut short is that it has no reply.
-  check('the long job was cut short: it never answered, the queued message did', after.replies.length === 1, JSON.stringify(after.replies.map((r) => r.slice(0, 30))))
-  check('the queued message went at once and was answered, in this conversation', after.queued === null && /OSPREY/i.test(after.replies.at(-1) ?? ''), JSON.stringify(after.replies.at(-1)?.slice(0, 80)))
+  // The stopped turn is now an earlier one, so what shows it was cut short is that
+  // nothing sits between the long job's message and the queued one.
+  check('the long job was cut short: it never answered, the queued message did', after.bubbles === 2 && after.between === 0 && /OSPREY/i.test(after.answer), JSON.stringify({ bubbles: after.bubbles, between: after.between }))
+  check('the queued message went at once and was answered, in this conversation', after.queued === null && /OSPREY/i.test(after.answer), JSON.stringify(after.answer.slice(0, 80)))
 
   // ---- Ctrl+Enter. ----
   await drive.evaluate(type(longJob))
@@ -92,7 +107,7 @@ try {
   await waitFor(`!document.querySelector('.lc-queued__text') && /HERON/i.test([...document.querySelectorAll('.lc-agentline__body')].map((el) => el.innerText).join(' '))`, 120_000)
   await waitFor(`!(${running})`, 60_000)
   const keyed = JSON.parse(String(await drive.capture('Ctrl+Enter: stopped, and answered', () => drive.evaluate(state))))
-  check('Ctrl+Enter stopped the run and sent the message at once', keyed.queued === null && keyed.replies.length === 2 && /HERON/i.test(keyed.replies.at(-1) ?? ''), JSON.stringify(keyed.replies.map((r) => r.slice(0, 30))))
+  check('Ctrl+Enter stopped the run and sent the message at once', keyed.queued === null && keyed.bubbles === 4 && keyed.between === 0 && /HERON/i.test(keyed.answer), JSON.stringify({ bubbles: keyed.bubbles, between: keyed.between, answer: keyed.answer.slice(0, 60) }))
 } catch (error) {
   failures += 1
   say(`drive failed: ${error instanceof Error ? error.message : String(error)}`)
