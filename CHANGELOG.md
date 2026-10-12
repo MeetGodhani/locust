@@ -11,6 +11,13 @@ Settings shows this file as What's new. An entry may group its changes under
 about when they arrive on it carries `<!-- big -->` on the line under its
 heading: the home screen then shows it once, as a splash.
 
+## 0.761.0 - 2026-10-12
+<!-- big -->
+
+### New
+
+- **Your cloud computer.** Pick Cloud in the chat-type menu for an OpenCode teammate, and it works on a computer GitHub runs for you instead of on this PC: a Codespace on your own GitHub account, one for each repository. The first time, Locust says what it costs and sets it up in about a minute. It has 2 CPUs and 8 GB, with 60 free hours a month from GitHub, then $0.18 an hour; with no payment method on GitHub, it stops at the free hours instead. Each turn starts from this folder exactly as it is, including commits you haven't pushed and edits you haven't committed, and streams into the conversation like any turn. Its change waits there until you choose Show the change, Apply to this folder, or Discard, and nothing the teammate does there reaches GitHub. Settings > Cloud computers lists them, with a terminal onto each, Stop and Delete.
+
 ## 0.760.0 - 2026-10-12
 
 ### New
