@@ -36,6 +36,10 @@ try {
     dt?.scrollIntoView({ block: 'center' })
     await new Promise((r) => setTimeout(r, 300))
     const dd = dt?.nextElementSibling
+    // The detail sits behind "What reaches the network" (0.743); a person opens it to read it, so the drive does too.
+    const fold = dd?.querySelector('details')
+    if (fold && !fold.open) fold.querySelector('summary')?.click()
+    await new Promise((r) => setTimeout(r, 300))
     const link = dd?.querySelector('button.lc-linkbutton')
     return { text: dd?.innerText.replace(/\\s+/g, ' ').trim() ?? '', link: link?.innerText.trim() ?? null, clipped: dd ? dd.scrollWidth > dd.clientWidth + 1 : null }
   })()`))
