@@ -11,6 +11,12 @@ Settings shows this file as What's new. An entry may group its changes under
 about when they arrive on it carries `<!-- big -->` on the line under its
 heading: the home screen then shows it once, as a splash.
 
+## 0.760.0 - 2026-10-12
+
+### New
+
+- **The judge scores each answer, point by point.** When you ask a judge in a comparison, write what a good answer does, one point a line, and the judge marks every answer met or not met on each point, with its reason in a line. Above its view comes a table: each answer's score, how long it took and what it spent. Write no points and the judge sets three from your request, and says they are its own.
+
 ## 0.759.0 - 2026-10-12
 
 ### New
