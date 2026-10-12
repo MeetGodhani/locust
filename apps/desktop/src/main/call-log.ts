@@ -1,7 +1,8 @@
 import { randomBytes } from 'node:crypto'
-import { readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { readFile, rm, writeFile } from 'node:fs/promises'
 
 import { MAX_KEPT_CALLS, callsOf, isSavedCall, type SavedCall } from '../shared/calls.js'
+import { replaceFile } from './replace-file.js'
 
 /**
  * THE CALLS KEPT WITH THEIR CONVERSATIONS (0.747): what was said on each call with a teammate, in the profile's
@@ -45,7 +46,7 @@ export function createCallLog(file: string) {
         const temporary = `${file}.${randomBytes(6).toString('hex')}.tmp`
         try {
           await writeFile(temporary, `${JSON.stringify({ calls })}\n`, { encoding: 'utf8', flag: 'wx' })
-          await rename(temporary, file)
+          await replaceFile(temporary, file)
           return true
         } catch {
           await rm(temporary, { force: true }).catch(() => undefined)

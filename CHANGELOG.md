@@ -21,6 +21,10 @@ heading: the home screen then shows it once, as a splash.
 
 - **Other apps can read without asking each time.** Listing teammates, routines and background runs, and reading a reply, are now marked as read-only, so OpenClaw and Codex run them without a question. Starting a conversation, sending a message and running a routine still ask.
 
+### Fixed
+
+- **A save Windows holds for a moment is tried again.** When another program, usually the antivirus, held a file Locust was saving, the save of a background turn's return to its conversation was dropped. It now tries again for about two seconds, as do saved calls.
+
 ## 0.753.0 - 2026-10-12
 
 ### Fixed

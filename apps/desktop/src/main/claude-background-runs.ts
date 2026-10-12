@@ -1,4 +1,4 @@
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 
 import {
@@ -10,6 +10,7 @@ import {
   parseBackgroundAgents
 } from './claude-background.js'
 import type { BackgroundAgent, BackgroundState } from './claude-background.js'
+import { replaceFile } from './replace-file.js'
 
 /**
  * THE BACKGROUND TURNS LOCUST STARTED (W10, 0.683).
@@ -91,7 +92,8 @@ export function createBackgroundRuns(facts: BackgroundFacts) {
         await mkdir(dirname(facts.file), { recursive: true })
         const temporary = `${facts.file}.${String(process.pid)}.tmp`
         await writeFile(temporary, body, 'utf8')
-        await rename(temporary, facts.file)
+        // Tried again while Windows holds a file for a moment: a dropped save left a run unmarked (0.754, replace-file.ts).
+        await replaceFile(temporary, facts.file)
       })
       .catch(() => undefined)
     await writing
