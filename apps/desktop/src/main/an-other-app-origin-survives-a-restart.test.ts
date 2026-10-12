@@ -40,7 +40,9 @@ describe('an other-app origin survives a restart', () => {
     const thread = await readFile(fileURLToPath(new URL('../renderer/src/components/Thread.tsx', import.meta.url)), 'utf8')
     expect(thread).toContain("const from = via === 'voice' ? 'Started from a voice call' : 'Started from another app'")
     expect(thread).toContain('return `${from} · Ask mode (read only)`')
-    expect(thread).toContain("earlierTurns.some(turn => turn.startedBy?.kind === 'mcp')")
+    // Said when the conversation began in another app or a call (0.748), not for a turn a call asked for later.
+    expect(thread).toContain('const firstStarter = earlierTurns[0]?.startedBy ?? startedBy')
+    expect(thread).toContain("{firstStarter?.kind === 'mcp' && (")
   })
   it('classifies the token file and opt-in as excluded from every profile backup', () => {
     expect(LEFT_OUT['locust-mcp-connection.json']).toContain('token')

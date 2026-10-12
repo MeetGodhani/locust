@@ -431,6 +431,9 @@ describe('a voice call with a teammate', () => {
     const started = by(fake, 'thread/realtime/start')
     expect(started.voice).toBe('sol')
     expect(String(started.realtimeStartInstructions)).toContain('You are Wren\'s voice')
+    // And the voice itself is told who it is and never to guess (0.748): the instructions above reach the Codex behind it.
+    expect(started.initialItems).toEqual([{ role: 'developer', text: expect.stringContaining('You are the voice of Wren') }])
+    expect(String((started.initialItems as { text: string }[])[0]!.text)).toContain('Never guess')
     expect(targets).toEqual([{ teammateId: 'tm_wren', conversationId: 'mission_7' }])
     // Its ask into that conversation is said in the strip as one, under the teammate's name.
     fake.say({ method: 'item/started', params: { threadId: 'thread_1', item: { type: 'mcpToolCall', server: 'locust_call', tool: 'send_message', arguments: { conversation_id: 'mission_7', message: 'Fix it and add a test.' } } } })

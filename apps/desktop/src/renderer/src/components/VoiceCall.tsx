@@ -4,8 +4,8 @@ import { voiceCallText, type VoiceCallApi, type VoiceCallAvailability, type Voic
 import type { AvatarSpec } from '../../../shared/avatar.js'
 import type { TeammateHue } from '../../../shared/ipc.js'
 import { TeammateBot } from './TeammateBot.js'
-import { MAX_CALL_LINE, MAX_CALL_LINES, type SavedCall } from '../../../shared/calls.js'
-import { liveCall, markCallSaved, setLiveCall, updateLiveCall } from '../liveCall.js'
+import { MAX_CALL_LINE } from '../../../shared/calls.js'
+import { keptCall, liveCall, markCallSaved, setLiveCall, updateLiveCall } from '../liveCall.js'
 import type { LiveVoiceCall } from '../voiceCall.js'
 import { setVoiceLevel, setVoiceState } from '../voiceLevel.js'
 import { Icon } from './Icon.js'
@@ -63,6 +63,9 @@ export function VoiceCallButton({ platform, onText, api = typeof window === 'und
   const starting = useRef<AbortController | undefined>(undefined)
   const generation = useRef(0)
   const anchor = useRef<HTMLSpanElement>(null)
+  const stripBox = useRef<HTMLDivElement>(null)
+  /** When each one began the line they are saying (0.748): a line goes in the thread where it began, not where it ended. */
+  const lineFrom = useRef<Partial<Record<VoiceCallRole, number>>>({})
   const [lift, setLift] = useState(0)
   const current = useRef<Phase>('idle')
   /*
@@ -72,12 +75,8 @@ export function VoiceCallButton({ platform, onText, api = typeof window === 'und
   const keep = (): void => {
     const call = liveCall()
     if (call === undefined) return
-    const done: SavedCall = {
-      callId: call.callId, teammateId: call.teammateId, name: call.name,
-      ...(call.afterMissionId === undefined ? {} : { afterMissionId: call.afterMissionId }),
-      startedAt: call.startedAt, endedAt: call.endedAt ?? Date.now(),
-      lines: call.lines.slice(-MAX_CALL_LINES), turns: call.turns
-    }
+    const done = keptCall(call, lineFrom.current)
+    lineFrom.current = {}
     setLiveCall({ ...call, ...done, phase: 'ended', partial: { you: '', voice: '' } })
     if (done.lines.length === 0 && done.turns.length === 0) { setLiveCall(undefined); return }
     void (window.desktop?.calls?.save(done) ?? Promise.resolve(false)).catch(() => false).then(() => {
@@ -89,7 +88,8 @@ export function VoiceCallButton({ platform, onText, api = typeof window === 'und
     current.current = next
     setPhase(next)
     if (talkTo === undefined) return
-    if (next === 'live') updateLiveCall((call) => ({ ...call, phase: 'live' }))
+    // Counted from when the call connected, as the strip's clock is (0.748).
+    if (next === 'live') updateLiveCall((call) => ({ ...call, phase: 'live', startedAt: Date.now() }))
     if (next === 'ended') keep()
   }
 
@@ -105,17 +105,20 @@ export function VoiceCallButton({ platform, onText, api = typeof window === 'und
     if (api === undefined || (phase !== 'calling' && phase !== 'live')) return
     return api.onEvent((update) => {
       if (update.kind === 'partial') {
+        lineFrom.current[update.role] ??= Date.now()
         setPartial((was) => ({ ...was, [update.role]: was[update.role] + update.delta }))
         if (talkTo !== undefined) updateLiveCall((call) => ({ ...call, partial: { ...call.partial, [update.role]: call.partial[update.role] + update.delta } }))
       } else if (update.kind === 'said') {
         setPartial((was) => ({ ...was, [update.role]: '' }))
         const text = update.text.trim()
+        const began = lineFrom.current[update.role] ?? Date.now()
+        lineFrom.current[update.role] = undefined
         if (text.length > 0) setLines((was) => [...was, { role: update.role, text }])
         if (talkTo !== undefined) {
           updateLiveCall((call) => ({
             ...call,
             partial: { ...call.partial, [update.role]: '' },
-            lines: text.length === 0 ? call.lines : [...call.lines, { role: update.role, text: text.slice(0, MAX_CALL_LINE), at: Date.now() }]
+            lines: text.length === 0 ? call.lines : [...call.lines, { role: update.role, text: text.slice(0, MAX_CALL_LINE), at: began }]
           }))
         }
       } else if (update.kind === 'working') setWorking(update.working)
@@ -155,6 +158,22 @@ export function VoiceCallButton({ platform, onText, api = typeof window === 'und
     }
   }, [phase])
 
+  /*
+   * AND THE THREAD ENDS ABOVE IT (0.748). The strip floats over the bottom of the conversation, and with a call's lines
+   * in the thread the newest one -- the words still being said -- sat under it. While it is up, the chat box keeps
+   * the strip's height clear above itself (--lc-call-room on its form), so the thread's last line stays in view.
+   */
+  useLayoutEffect(() => {
+    const form = anchor.current?.closest('form')
+    const strip = stripBox.current
+    if (phase === 'idle' || form === null || form === undefined || strip === null) return
+    const room = (): void => { form.style.setProperty('--lc-call-room', `${String(Math.ceil(strip.getBoundingClientRect().height) + 12)}px`) }
+    room()
+    const observer = new ResizeObserver(room)
+    observer.observe(strip)
+    return () => { observer.disconnect(); form.style.removeProperty('--lc-call-room') }
+  }, [phase])
+
   // The strip stands above the whole chat box, not on its text: lifted from this button to the box's top
   // edge, and kept there if the box grows (the drive's first frame had it over "Message Wren...").
   useLayoutEffect(() => {
@@ -183,6 +202,7 @@ export function VoiceCallButton({ platform, onText, api = typeof window === 'und
   const start = async (): Promise<void> => {
     if (api === undefined || current.current === 'calling' || current.current === 'live') return
     setLines([]); setHanded([]); setPartial({ you: '', voice: '' }); setMessage(''); setMuted(false); setWorking(false); setSeconds(0)
+    lineFrom.current = {}
     if (talkTo !== undefined) {
       setLiveCall({
         callId: `call_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`,
@@ -258,7 +278,7 @@ export function VoiceCallButton({ platform, onText, api = typeof window === 'und
     >
       <Icon name="waveform" size={17} />
     </button>
-    {phase !== 'idle' && <div className="lc-call__strip" role="region" aria-label="Voice call" style={{ bottom: `calc(100% + ${String(lift + 10)}px)` }}>
+    {phase !== 'idle' && <div ref={stripBox} className="lc-call__strip" role="region" aria-label="Voice call" style={{ bottom: `calc(100% + ${String(lift + 10)}px)` }}>
       <div className="lc-call__head">
         {phase === 'ended'
           ? <span className="lc-call__status">{talkTo === undefined ? 'Call ended' : `Call with ${talkTo.name} ended`}{seconds > 0 ? ` · ${clock}` : ''}{talkTo !== undefined && lines.length > 0 ? ' · kept in this conversation' : ''}</span>

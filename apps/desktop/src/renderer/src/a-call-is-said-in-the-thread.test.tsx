@@ -3,8 +3,37 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 
 import type { SavedCall } from '../../shared/calls.js'
+import { callPlacements } from '../../shared/calls.js'
 import { seedAvatar } from '../../shared/avatar.js'
 import { CallWords } from './components/CallWords.js'
+import { keptCall, type LiveCall } from './liveCall.js'
+
+/*
+ * THE LAST WORDS ARE KEPT (0.748): a call that ends while one of you is still talking keeps those words, placed from
+ * when they began -- the voice's answer cut off by End is still what it said.
+ */
+describe('a call that ends mid-sentence', () => {
+  const live: LiveCall = {
+    callId: 'call_2', teammateId: 'tm_ada', name: 'Ada', startedAt: 1_000, phase: 'live',
+    lines: [{ role: 'you', text: 'What is the secret ingredient?', at: 5_000 }],
+    turns: [{ missionId: 'm_asked', at: 6_000 }],
+    partial: { you: '  ', voice: ' It is cardamom, and ' }
+  }
+
+  it('keeps the words still being said, from when they began, and nothing blank', () => {
+    const kept = keptCall(live, { voice: 9_000, you: 9_500 }, 12_000)
+    expect(kept.lines).toEqual([...live.lines, { role: 'voice', text: 'It is cardamom, and', at: 9_000 }])
+    expect(kept.endedAt).toBe(12_000)
+    expect(kept).not.toHaveProperty('phase')
+    expect(kept).not.toHaveProperty('partial')
+    const [after] = callPlacements([kept], ['m_asked']).get('after:m_asked') ?? []
+    expect(after?.lines.map((line) => line.text)).toEqual(['It is cardamom, and'])
+  })
+
+  it('stamps cut-off words with the end when nothing says when they began', () => {
+    expect(keptCall({ ...live, partial: { you: 'Thanks', voice: '' } }, {}, 12_000).lines.at(-1)).toEqual({ role: 'you', text: 'Thanks', at: 12_000 })
+  })
+})
 
 /*
  * WHAT WAS SAID ON A CALL, IN THE THREAD (0.747): live, it opens with its divider and grows; ended, it folds to one

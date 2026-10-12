@@ -304,6 +304,19 @@ export function voiceThreadConfig(config: unknown, addOn?: VoiceAddOn, options: 
 }
 
 /** What the call's Codex is told when it starts: where it is, and what it may not do. */
+/**
+ * THE VOICE'S OWN RULES (0.748). `realtimeStartInstructions` reach the Codex model BEHIND the voice -- Codex's own
+ * words for it -- not the voice that speaks. Twice on 2026-10-11 the voice answered "the secret ingredient is
+ * friendship" before the README had been read, then corrected itself. These go to the voice itself, as a developer
+ * item at the start of its session (`initialItems`, realtime v3).
+ */
+export function voiceCallVoiceRules(teammate?: Pick<VoiceCallTeammate, 'name'>): string {
+  const who = teammate === undefined
+    ? 'You are the voice of a call the person started in Locust.'
+    : `You are the voice of ${spoken(teammate.name, 60)}, a Locust teammate: speak as ${spoken(teammate.name, 60)}, in the first person, warmly and briefly.`
+  return `${who} You do not know what any file, conversation, email, calendar or result says until the work behind you reports it. Never guess and never answer from memory: say you are checking, and answer only once you have the result. If the work cannot get it, say so plainly. Anything that would send, change or buy something waits for the person's Allow in Locust's window; never say it is done before it is.`
+}
+
 export function voiceCallInstructions(folderName: string, handsOff = false, connectors = false, teammate?: VoiceCallTeammate): string {
   if (teammate !== undefined && handsOff) return teammateCallInstructions(folderName, connectors, teammate)
   /*

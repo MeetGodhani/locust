@@ -9,6 +9,7 @@ import {
   VOICE_CALL_ASK_WAIT_MS,
   voiceCallAsk,
   voiceCallInstructions,
+  voiceCallVoiceRules,
   voiceCallRole,
   voiceCallSaid,
   voiceThreadConfig,
@@ -334,6 +335,8 @@ export function createVoiceCalls(deps: VoiceCallDeps): VoiceCalls {
           transport: { type: 'webrtc', sdp: offer },
           version: 'v3',
           realtimeStartInstructions: voiceCallInstructions(basename(folder) || folder, addOn !== undefined, deps.connectors === true, teammate),
+          // The voice's own rules (0.748): the instructions above reach the Codex model behind it, not the voice.
+          initialItems: [{ role: 'developer', text: voiceCallVoiceRules(teammate) }],
           ...(voice === undefined ? {} : { voice })
         })
         const answer = await answered

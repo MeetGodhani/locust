@@ -21052,6 +21052,8 @@ textarea {
  */
 .lc-call { position: relative; display: inline-flex; align-items: center; }
 .lc-call__button.is-on { color: var(--lc-lime-text); background: var(--lc-lime-tint); box-shadow: inset 0 0 0 1px var(--lc-lime-border); }
+/* While a call's strip is up, the chat box keeps its height clear above itself, so the thread ends above it (0.748). */
+.lc-composer__form { margin-top: var(--lc-call-room); }
 .lc-call__strip {
   position: absolute; bottom: calc(100% + 12px); right: 0; z-index: 30;
   width: min(460px, calc(100vw - 48px)); padding: 10px 12px;

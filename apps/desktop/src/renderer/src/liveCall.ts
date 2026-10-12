@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react'
 
 import type { VoiceCallRole } from '../../shared/voice-call.js'
-import type { SavedCall } from '../../shared/calls.js'
+import { MAX_CALL_LINE, MAX_CALL_LINES, type SavedCall } from '../../shared/calls.js'
 
 /*
  * THE CALL, WHERE THE THREAD CAN READ IT (0.747). The canvas Colin passed on 2026-10-11 ("im down ... just try it
@@ -31,6 +31,22 @@ export function setLiveCall(next: LiveCall | undefined): void {
 /** Changes the live call, when there is one; nothing otherwise. */
 export function updateLiveCall(change: (call: LiveCall) => LiveCall): void {
   if (current !== undefined) setLiveCall(change(current))
+}
+
+/**
+ * The call as it is kept when it ends (0.748). Words the end of the call cut off were still said: they are kept, from
+ * when they began, so the thread does not lose the last thing either of you said.
+ */
+export function keptCall(call: LiveCall, began: Partial<Record<VoiceCallRole, number>>, now = Date.now()): SavedCall {
+  const cutOff = (['you', 'voice'] as const)
+    .filter((role) => call.partial[role].trim().length > 0)
+    .map((role) => ({ role, text: call.partial[role].trim().slice(0, MAX_CALL_LINE), at: began[role] ?? now }))
+  return {
+    callId: call.callId, teammateId: call.teammateId, name: call.name,
+    ...(call.afterMissionId === undefined ? {} : { afterMissionId: call.afterMissionId }),
+    startedAt: call.startedAt, endedAt: call.endedAt ?? now,
+    lines: [...call.lines, ...cutOff].slice(-MAX_CALL_LINES), turns: call.turns
+  }
 }
 
 /** A turn the call started: kept with its time, so the thread puts the call's words around it. */

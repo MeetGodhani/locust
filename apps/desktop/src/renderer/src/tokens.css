@@ -560,6 +560,8 @@
   /* The window's own title bar: a drag region, so nothing clickable may sit
      on it -- an overlay starts below it (see .lc-scrim). */
   --lc-titlebar-height: 38px;
+  /* Room the chat box keeps clear above itself for a call's strip (0.748): set on its form while a call is up. */
+  --lc-call-room: 0px;
   --lc-sidebar-width: 268px;
   --lc-sidebar-rail-width: 64px;
   --lc-inspector-width: 344px;

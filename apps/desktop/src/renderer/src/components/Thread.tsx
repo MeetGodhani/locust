@@ -1145,6 +1145,8 @@ onResume,
    * another budget's worth; opening another conversation starts over.
    */
   const shownIdentity = shownMissionId ?? restoredMission?.missionId ?? startedAtIso ?? ''
+  // Who began the conversation: its first turn's starter (0.748), for the marker at its top.
+  const firstStarter = earlierTurns[0]?.startedBy ?? startedBy
   const [earlierBudget, setEarlierBudget] = useState({ identity: shownIdentity, rows: EARLIER_ROWS_SHOWN })
   let earlierRows = earlierBudget.rows
   if (earlierBudget.identity !== shownIdentity) {
@@ -1479,11 +1481,13 @@ onResume,
         {startedAt !== undefined && (
           <div className="lc-thread__marker lc-mono">Started {startedAt}</div>
         )}
-        {(startedBy?.kind === 'mcp' || earlierTurns.some(turn => turn.startedBy?.kind === 'mcp')) && (
+        {firstStarter?.kind === 'mcp' && (
           // Another app's turn runs in Ask unless the person turned on each
           // teammate's own mode (0.703); the marker names the run's own mode,
           // and claims none it does not know. A voice call's hand-off says so (0.739).
-          <div className="lc-thread__marker lc-mono">{otherAppMarker(runMode, [startedBy, ...earlierTurns.map(turn => turn.startedBy)].find(by => by?.kind === 'mcp' && by.via === 'voice') === undefined ? undefined : 'voice')}</div>
+          // Only when the CONVERSATION began there (0.748): a turn a call asked for in a conversation the person
+          // started is under its call's own line, and this marker read as if the whole conversation came from it.
+          <div className="lc-thread__marker lc-mono">{otherAppMarker(runMode, firstStarter.via)}</div>
         )}
 
         {/*

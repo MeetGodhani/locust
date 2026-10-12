@@ -11,6 +11,16 @@ Settings shows this file as What's new. An entry may group its changes under
 about when they arrive on it carries `<!-- big -->` on the line under its
 heading: the home screen then shows it once, as a splash.
 
+## 0.748.0 - 2026-10-11
+
+### Fixed
+
+- **A teammate's voice no longer guesses.** It could answer before the work came back, then correct itself. It now says it's checking and answers only once the teammate has reported.
+- **Lines from a call appear in the order they were said.** A long answer used to land after the reply that interrupted it. Words still being said when the call ends are kept too.
+- **The call bar no longer covers the newest line.** The conversation leaves room for the bar while you're on a call.
+- **"Started from a voice call" marks only conversations a call began.** A typed conversation that a call joined later no longer carries the label.
+- **A call's length counts from when it connected,** matching the clock on the call bar.
+
 ## 0.747.0 - 2026-10-11
 
 ### New
