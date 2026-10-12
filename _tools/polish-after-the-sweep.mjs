@@ -7,9 +7,11 @@
 //   LOCUST_SPEND=1 node _tools/polish-after-the-sweep.mjs --sweep <sweep folder> --worktree <its worktree> --packaged <exe>
 //
 // The worktree is made beforehand (git worktree add -b polish/<date> D:\work\locust-wt\polish-<date> HEAD). Polish
-// runs on Claude Code's Sonnet in Edit mode: it changes files only in the worktree, and it spends Claude usage, so it
-// asks for LOCUST_SPEND=1. The window stays up until Polish's turn ends (at most --hours, default 3), then closes; its
-// last reply is written to POLISH-REPLY.md in the worktree beside the POLISH-REPORT.md it is asked to write.
+// runs on Claude Code's Sonnet in Auto: nobody is at the window to answer a card, and it must run git, the drives and
+// the tests -- told to work only in the worktree, push nothing and spend nothing, behind Locust's own command guard.
+// It spends Claude usage, so it asks for LOCUST_SPEND=1. The window stays up until Polish's turn ends (at most
+// --hours, default 3), then closes; its last reply is written to POLISH-REPLY.md in the worktree beside the
+// POLISH-REPORT.md it is asked to write.
 
 import { writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
@@ -33,6 +35,7 @@ const brief = [
   '2. A stale drive: fix the drive in _tools/ so it checks what the app draws now, without making it check less.',
   '3. An app bug whose cause you can see and whose fix is small: fix it in apps/desktop/src, with a vitest test named for the behaviour that fails without the fix.',
   '4. Anything else: leave the code alone and write down what you saw.',
+  `To check a drive you changed, run it as the sweep did: node _tools/<drive>.mjs --packaged ${packaged}. Do not run the whole sweep or the whole test suite; run the tests you wrote with npx vitest run <file> from apps/desktop if node_modules is there, and say so if it is not.`,
   'One commit per fix, its message naming the drive and why. Work only in this folder. Never push, never change a version or the CHANGELOG, never set LOCUST_SPEND, and never run anything that would spend a paid account.',
   'When you are done, write POLISH-REPORT.md at this folder\'s root: a table with one row per drive that did not pass -- the drive, your verdict (app bug, stale drive, provider, unclear), what you changed, the commit, and how you checked it -- then two or three lines on what a person should look at first.'
 ].join('\n\n')
@@ -46,9 +49,9 @@ const drive = await startDrive({
   outPath: join(recordRoot('polish-after-the-sweep-2026-10-12'), 'packaged'),
   seed: {
     schemaVersion: 1,
-    teammates: [{ teammateId: 'tm_polish', name: 'Polish', hue: 'butter', role: 'Docs & QA', roleTitle: 'Overnight polish', createdAt: '2026-10-12T12:00:00.000Z', route: { runtime: 'claude', model: 'claude-sonnet-5-5', mode: 'accept-edits' } }],
+    teammates: [{ teammateId: 'tm_polish', name: 'Polish', hue: 'butter', role: 'Docs & QA', roleTitle: 'Overnight polish', createdAt: '2026-10-12T12:00:00.000Z', route: { runtime: 'claude', model: 'claude-sonnet-5-5', mode: 'auto' } }],
     missionOwners: {},
-    settings: { swarm: false, relay: false, relayHopCap: 2, memoryMode: 'off', autoMode: false }
+    settings: { swarm: false, relay: false, relayHopCap: 2, memoryMode: 'off', autoMode: true }
   }
 })
 
