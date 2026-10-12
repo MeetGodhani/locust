@@ -21164,6 +21164,8 @@ textarea {
 .lc-callrow__title { font-weight: 500; }
 .lc-callrow__note { font-size: var(--lc-text-description); color: var(--lc-text-muted); }
 .lc-callrow__open { flex: none; font-size: var(--lc-text-description); color: var(--lc-text-secondary); }
+/* A connector's question on a call with a teammate (0.749): the approval card, at the call's place in the thread. */
+.lc-callask { align-self: stretch; }
 @media (prefers-reduced-motion: reduce) { .lc-call__bar { transition: none; } }
 
 /*

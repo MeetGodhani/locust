@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react'
 
-import type { VoiceCallRole } from '../../shared/voice-call.js'
+import type { VoiceCallAskField, VoiceCallRole } from '../../shared/voice-call.js'
 import { MAX_CALL_LINE, MAX_CALL_LINES, type SavedCall } from '../../shared/calls.js'
 
 /*
@@ -13,6 +13,30 @@ export interface LiveCall extends SavedCall {
   readonly phase: 'calling' | 'live' | 'ended'
   /** Words still being said, by whom. */
   readonly partial: Readonly<Record<VoiceCallRole, string>>
+  /** A connector's questions waiting on the person (0.749): cards in the conversation, never kept with the call. */
+  readonly asks?: readonly LiveCallAsk[]
+}
+
+/** One connector's question on the call: what it would do, and each value it would send. */
+export interface LiveCallAsk {
+  readonly id: string
+  readonly what: string
+  readonly detail: string
+  readonly fields: readonly VoiceCallAskField[]
+}
+
+/*
+ * THE ANSWER, FROM THE CARD (0.749). The Talk button owns the call, and the card in the thread answers its questions:
+ * the button says here how, for as long as its call is on.
+ */
+let answerer: ((id: string, allowed: boolean) => Promise<void>) | undefined
+export function setLiveCallAnswer(next: ((id: string, allowed: boolean) => Promise<void>) | undefined): void {
+  answerer = next
+}
+/** False when no call is on to take it, or the answer did not reach it. */
+export async function answerLiveCallAsk(id: string, allowed: boolean): Promise<boolean> {
+  if (answerer === undefined) return false
+  try { await answerer(id, allowed); return true } catch { return false }
 }
 
 let current: LiveCall | undefined

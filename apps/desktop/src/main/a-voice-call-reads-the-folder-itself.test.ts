@@ -132,7 +132,17 @@ describe('your connectors in the call', () => {
       serverName: 'codex_apps', mode: 'form', message: 'Allow the codex_apps MCP server to run tool "gmail_send_email"?',
       _meta: { codex_approval_kind: 'mcp_tool_call', tool_params_display: [{ display_name: 'to', value: 'a@example.com' }, { display_name: 'subject', value: 'Hi\nthere' }] } // public-guard: allow (a placeholder address in a test)
     }
-    expect(voiceCallAsk(asked)).toEqual({ what: 'ChatGPT: gmail send email', detail: 'to: a@example.com · subject: Hi there' }) // public-guard: allow (a placeholder address in a test)
+    expect(voiceCallAsk(asked)).toEqual({
+      what: 'ChatGPT: gmail send email', detail: 'to: a@example.com · subject: Hi there', // public-guard: allow (a placeholder address in a test)
+      // One row each on the card in a teammate's conversation (0.749).
+      fields: [{ name: 'to', value: 'a@example.com' }, { name: 'subject', value: 'Hi there' }] // public-guard: allow (a placeholder address in a test)
+    })
+    // A value that is not text is said as JSON; a nameless one is left out; eight at most, each bounded.
+    const many = { ...asked, _meta: { ...asked._meta, tool_params_display: [{ display_name: 'quantity', value: 1 }, { value: 'nameless' }, ...Array.from({ length: 9 }, (_, index) => ({ display_name: 'note ' + String(index), value: 'x'.repeat(700) }))] } }
+    const fields = voiceCallAsk(many)?.fields ?? []
+    expect(fields[0]).toEqual({ name: 'quantity', value: '1' })
+    expect(fields).toHaveLength(8)
+    expect(Math.max(...fields.map((field) => field.value.length))).toBe(600)
     expect(voiceCallAsk({ ...asked, mode: 'url' })).toBeUndefined()
     expect(voiceCallAsk({ ...asked, _meta: {} })).toBeUndefined()
     expect(voiceCallAsk('nothing')).toBeUndefined()

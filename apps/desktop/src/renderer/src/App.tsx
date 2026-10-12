@@ -8793,7 +8793,8 @@ export default function App(): ReactElement {
           <Composer
             draftKey={composerDraftKey}
             // Talk in a teammate's conversation is a call with them, into it (0.746).
-            {...(talkTo === undefined ? {} : { talkTo })}
+            // With the call drawn in this conversation, a connector's question is a card in it (0.749).
+            {...(talkTo === undefined ? {} : { talkTo: { ...talkTo, asksInThread: threadCalls.some((call) => 'live' in call && call.live) } })}
             metal={metal}
             metalStrength={metalStrength}
             metalMotion={metalMotion}

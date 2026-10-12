@@ -59,6 +59,7 @@ import type { DecisionOption } from '../../../shared/decision.js'
 import { callPlacements, type CallPlace, type SavedCall } from '../../../shared/calls.js'
 import type { VoiceCallRole } from '../../../shared/voice-call.js'
 import { CallWords } from './CallWords.js'
+import type { LiveCallAsk } from '../liveCall.js'
 
 /**
  * The files a teammate handed over, and what the host said when a press
@@ -915,7 +916,7 @@ export interface ThreadProps {
    * What was said on calls with this conversation's teammate (0.747), kept and live: drawn among the turns each
    * call started (callPlacements). A live one grows as you talk; an ended one folds to a line.
    */
-  readonly calls?: readonly (SavedCall & { readonly live?: boolean; readonly partial?: Readonly<Record<VoiceCallRole, string>> })[]
+  readonly calls?: readonly (SavedCall & { readonly live?: boolean; readonly partial?: Readonly<Record<VoiceCallRole, string>>; readonly asks?: readonly LiveCallAsk[] })[]
   readonly error: string | undefined
   readonly errorIsPersistence: boolean
   /** Where receipts are written; the ledger-failure card offers to open it. */
@@ -1134,7 +1135,7 @@ onResume,
   const callsAt = (place: CallPlace) => (callPlaces.get(place) ?? []).map((piece) => {
     const source = (calls ?? []).find((call) => call.callId === piece.call.callId)
     const id = piece.call.callId
-    return <CallWords key={`${id}-${place}`} piece={{ ...piece, live: source?.live === true, ...(source?.partial === undefined ? {} : { partial: source.partial }) }}
+    return <CallWords key={`${id}-${place}`} piece={{ ...piece, live: source?.live === true, ...(source?.partial === undefined ? {} : { partial: source.partial }), ...(source?.asks === undefined ? {} : { asks: source.asks }) }}
       teammate={peers.self} open={openCalls.has(id)}
       onToggle={() => setOpenCalls((was) => { const next = new Set(was); if (next.has(id)) next.delete(id); else next.add(id); return next })} />
   })

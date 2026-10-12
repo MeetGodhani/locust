@@ -14,6 +14,7 @@ import {
   voiceCallSaid,
   voiceThreadConfig,
   type VoiceAddOn,
+  type VoiceCallAsked,
   type VoiceCallAvailability,
   type VoiceCallTarget,
   type VoiceCallTeammate,
@@ -201,7 +202,7 @@ export function createVoiceCalls(deps: VoiceCallDeps): VoiceCalls {
   }
 
   /** Puts one question in the strip and waits for Allow, Deny, the time running out or the call ending. */
-  const ask = (call: Live, asked: { readonly what: string; readonly detail: string }): Promise<boolean> =>
+  const ask = (call: Live, asked: VoiceCallAsked): Promise<boolean> =>
     new Promise((resolve) => {
       const id = randomUUID()
       const timer = setTimeout(() => { settle(false) }, deps.askWaitMs ?? VOICE_CALL_ASK_WAIT_MS)
@@ -212,7 +213,7 @@ export function createVoiceCalls(deps: VoiceCallDeps): VoiceCalls {
         resolve(allowed)
       }
       call.asks.set(id, settle)
-      deps.send({ kind: 'asks', id, what: asked.what, detail: asked.detail })
+      deps.send({ kind: 'asks', id, what: asked.what, detail: asked.detail, fields: asked.fields })
     })
 
   const stop = async (): Promise<void> => {

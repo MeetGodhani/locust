@@ -66,8 +66,11 @@ export type VoiceCallEvent =
   | { readonly kind: 'working'; readonly working: boolean }
   /** The voice handed something to a teammate (0.739): a real conversation, in the teammate's own mode. */
   | { readonly kind: 'handed'; readonly to: string; readonly task: string }
-  /** One of the person's connectors would change something: it waits for Allow in the strip (0.742). */
-  | { readonly kind: 'asks'; readonly id: string; readonly what: string; readonly detail: string }
+  /**
+   * One of the person's connectors would change something: it waits for Allow in the strip (0.742), or, on a call
+   * with a teammate, on a card in their conversation, one row for each value it would send (0.749).
+   */
+  | { readonly kind: 'asks'; readonly id: string; readonly what: string; readonly detail: string; readonly fields?: readonly VoiceCallAskField[] }
   /** That wait is over: answered, timed out, or the call ended. */
   | { readonly kind: 'asked'; readonly id: string; readonly allowed: boolean }
   | { readonly kind: 'error'; readonly message: string }
@@ -132,7 +135,7 @@ export function voiceCallServerName(server: string): string {
  * carrying `codex_approval_kind: mcp_tool_call`, `tool_description` and `tool_params_display` ([{display_name,
  * value}]). Undefined for anything that is not that question: it is declined unasked.
  */
-export function voiceCallAsk(params: unknown): { readonly what: string; readonly detail: string } | undefined {
+export function voiceCallAsk(params: unknown): VoiceCallAsked | undefined {
   if (typeof params !== 'object' || params === null) return undefined
   const p = params as Record<string, unknown>
   const meta = typeof p._meta === 'object' && p._meta !== null ? p._meta as Record<string, unknown> : {}
@@ -141,18 +144,31 @@ export function voiceCallAsk(params: unknown): { readonly what: string; readonly
   const words = (value: string): string => value.replace(/[_-]+/g, ' ').trim()
   const what = `${voiceCallServerName(p.serverName)}: ${tool === undefined ? 'a tool' : words(tool)}`
   const shown = Array.isArray(meta.tool_params_display) ? meta.tool_params_display : []
-  const detail = shown
-    .map((entry) => {
+  const fields = shown
+    .map((entry): VoiceCallAskField | undefined => {
       if (typeof entry !== 'object' || entry === null) return undefined
       const { display_name: name, value } = entry as Record<string, unknown>
-      if (typeof name !== 'string') return undefined
-      const said = typeof value === 'string' ? value : JSON.stringify(value)
-      return `${name}: ${String(said).replace(/\s+/g, ' ').slice(0, 160)}`
+      if (typeof name !== 'string' || name.trim().length === 0) return undefined
+      const said = typeof value === 'string' ? value : (JSON.stringify(value) as string | undefined) ?? ''
+      return { name: name.replace(/\s+/g, ' ').trim().slice(0, 60), value: said.replace(/\s+/g, ' ').trim().slice(0, 600) }
     })
-    .filter((line): line is string => line !== undefined)
-    .join(' · ')
-    .slice(0, 400)
-  return { what: what.slice(0, 140), detail }
+    .filter((field): field is VoiceCallAskField => field !== undefined)
+    .slice(0, 8)
+  const detail = fields.map((field) => `${field.name}: ${field.value.slice(0, 160)}`).join(' · ').slice(0, 400)
+  return { what: what.slice(0, 140), detail, fields }
+}
+
+/** One value a connector would send, as Codex names it: a name such as "subject", and what it would send. */
+export interface VoiceCallAskField {
+  readonly name: string
+  readonly value: string
+}
+
+/** A connector's question, for the strip (what, detail) and for the card in a teammate's conversation (fields). */
+export interface VoiceCallAsked {
+  readonly what: string
+  readonly detail: string
+  readonly fields: readonly VoiceCallAskField[]
 }
 
 /** An offer is SDP from this window's own RTCPeerConnection: bounded text that starts as SDP does. */

@@ -5,7 +5,7 @@ import type { AvatarSpec } from '../../../shared/avatar.js'
 import type { TeammateHue } from '../../../shared/ipc.js'
 import { TeammateBot } from './TeammateBot.js'
 import { MAX_CALL_LINE } from '../../../shared/calls.js'
-import { keptCall, liveCall, markCallSaved, setLiveCall, updateLiveCall } from '../liveCall.js'
+import { keptCall, liveCall, markCallSaved, setLiveCall, setLiveCallAnswer, updateLiveCall } from '../liveCall.js'
 import type { LiveVoiceCall } from '../voiceCall.js'
 import { setVoiceLevel, setVoiceState } from '../voiceLevel.js'
 import { Icon } from './Icon.js'
@@ -34,6 +34,8 @@ export interface VoiceCallTalkTo {
   readonly avatar: AvatarSpec
   /** The conversation on screen, when it is theirs. */
   readonly conversationId?: string
+  /** The call is drawn in the conversation on screen, so a connector's question is a card there, not a row here (0.749). */
+  readonly asksInThread?: boolean
 }
 
 export function VoiceCallButton({ platform, onText, api = typeof window === 'undefined' ? undefined : window.desktop?.voiceCall, availability: given, talkTo }: {
@@ -77,7 +79,8 @@ export function VoiceCallButton({ platform, onText, api = typeof window === 'und
     if (call === undefined) return
     const done = keptCall(call, lineFrom.current)
     lineFrom.current = {}
-    setLiveCall({ ...call, ...done, phase: 'ended', partial: { you: '', voice: '' } })
+    setLiveCallAnswer(undefined)
+    setLiveCall({ ...call, ...done, phase: 'ended', partial: { you: '', voice: '' }, asks: [] })
     if (done.lines.length === 0 && done.turns.length === 0) { setLiveCall(undefined); return }
     void (window.desktop?.calls?.save(done) ?? Promise.resolve(false)).catch(() => false).then(() => {
       if (liveCall()?.callId === done.callId) setLiveCall(undefined)
@@ -123,8 +126,13 @@ export function VoiceCallButton({ platform, onText, api = typeof window === 'und
         }
       } else if (update.kind === 'working') setWorking(update.working)
       else if (update.kind === 'handed') setHanded((was) => [...was, { to: update.to, task: update.task }])
-      else if (update.kind === 'asks') setAsks((was) => [...was, { id: update.id, what: update.what, detail: update.detail }])
-      else if (update.kind === 'asked') setAsks((was) => was.filter((asked) => asked.id !== update.id))
+      else if (update.kind === 'asks') {
+        setAsks((was) => [...was, { id: update.id, what: update.what, detail: update.detail }])
+        if (talkTo !== undefined) updateLiveCall((call) => ({ ...call, asks: [...(call.asks ?? []), { id: update.id, what: update.what, detail: update.detail, fields: update.fields ?? [] }] }))
+      } else if (update.kind === 'asked') {
+        setAsks((was) => was.filter((asked) => asked.id !== update.id))
+        if (talkTo !== undefined) updateLiveCall((call) => ({ ...call, asks: (call.asks ?? []).filter((asked) => asked.id !== update.id) }))
+      }
       else if (update.kind === 'error') setMessage(update.message)
       else if (update.kind === 'ended' && current.current === 'live') {
         setAsks([])
@@ -210,6 +218,7 @@ export function VoiceCallButton({ platform, onText, api = typeof window === 'und
         ...(talkTo.conversationId === undefined ? {} : { afterMissionId: talkTo.conversationId }),
         startedAt: Date.now(), lines: [], turns: [], phase: 'calling', partial: { you: '', voice: '' }
       })
+      setLiveCallAnswer((id, allowed) => api.answer(id, allowed))
     }
     transition('calling')
     const token = ++generation.current
@@ -266,6 +275,8 @@ export function VoiceCallButton({ platform, onText, api = typeof window === 'und
   const clock = `${String(Math.floor(seconds / 60))}:${String(seconds % 60).padStart(2, '0')}`
   const shown = phase === 'ended' ? lines : lines.slice(-3)
   const loud = Math.max(levels.you, levels.voice)
+  // On a call with a teammate whose conversation is on screen, a connector's question is a card there (0.749).
+  const asksInThread = talkTo?.asksInThread === true
   return <span className="lc-call" ref={anchor}>
     <button
       type="button"
@@ -296,6 +307,7 @@ export function VoiceCallButton({ platform, onText, api = typeof window === 'und
           {phase === 'live' && <button type="button" className="lc-control" aria-pressed={muted} onClick={() => { const next = !muted; setMuted(next); call.current?.setMuted(next) }}>
             <Icon name={muted ? 'mic-off' : 'mic'} size={15} />{muted ? 'Unmute' : 'Mute'}
           </button>}
+          {on && asksInThread && asks.length > 0 && <button type="button" className="lc-control lc-control--boxed" onClick={() => { document.querySelector('[data-call-ask]')?.scrollIntoView({ block: 'center' }) }}>Show</button>}
           {on && <button type="button" className="lc-control lc-call__end" onClick={() => { void end() }}>End</button>}
           {phase === 'ended' && talkTo === undefined && voiceCallText(lines, handed).length > 0 && <button type="button" className="lc-control lc-control--boxed" onClick={() => { onText(voiceCallText(lines, handed)); close() }}>Put it in the chat box</button>}
           {phase === 'ended' && <button type="button" className="lc-control" onClick={close}>Close</button>}
@@ -307,8 +319,9 @@ export function VoiceCallButton({ platform, onText, api = typeof window === 'und
         {handed.map((hand, index) => <p key={`handed-${String(index)}`} className="lc-call__line is-handed"><span className="lc-call__who">Handed to {hand.to}</span>{hand.task}</p>)}
         {on && (['you', 'voice'] as const).map((role) => partial[role].trim().length > 0 && <p key={`partial-${role}`} className={`lc-call__line is-${role} is-partial`}><span className="lc-call__who">{role === 'you' ? 'You' : voiceName}</span>{partial[role].trim()}</p>)}
       </div>}
-      {/* A connector that would change something, asked here: nothing happens until Allow (0.742). */}
-      {on && asks.map((asked) => <div key={asked.id} className="lc-call__ask" role="group" aria-label={`Allow ${asked.what}?`}>
+      {/* A connector that would change something, asked here: nothing happens until Allow (0.742). With a teammate
+          whose conversation is on screen, it is asked on a card there, and the strip's Show points at it (0.749). */}
+      {on && !asksInThread && asks.map((asked) => <div key={asked.id} className="lc-call__ask" role="group" aria-label={`Allow ${asked.what}?`}>
         <p className="lc-call__asktext"><span className="lc-call__who">Allow?</span>{asked.what}{asked.detail.length > 0 && <span className="lc-call__askdetail">{asked.detail}</span>}</p>
         <span className="lc-call__askacts">
           <button type="button" className="lc-control lc-control--boxed" onClick={() => { void api.answer(asked.id, true) }}>Allow</button>

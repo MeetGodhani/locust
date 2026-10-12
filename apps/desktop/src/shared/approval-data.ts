@@ -109,6 +109,9 @@ export function commandEffectsUnknown(request: { readonly kind: string; readonly
   return request.kind === 'command' && request.dataSentSays === undefined && request.reversibleSays === undefined && !commandReachesNetwork(request.detail)
 }
 
+/** What a connector does cannot be undone from here: said on every card that asks for one (0.749, a call's card too). */
+export const CONNECTOR_NOT_UNDOABLE = 'Unknown — a connector acts on the service it reaches, and Locust cannot undo what happens there.'
+
 export const COMMAND_EFFECTS_UNKNOWN = 'Unknown. Locust cannot tell what a command sends or undo what it does; it can do anything the sandbox allows.'
 
 /**

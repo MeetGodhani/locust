@@ -339,6 +339,8 @@ describe('a voice call with your connectors', () => {
     await settle()
     const [asked] = asksOf(sent)
     expect(asked).toMatchObject({ what: 'robinhood: place equity order', detail: 'symbol: AAPL · quantity: 1' })
+    // And each value on its own, for the card in a teammate's conversation (0.749).
+    expect(asked?.fields).toEqual([{ name: 'symbol', value: 'AAPL' }, { name: 'quantity', value: '1' }])
     expect(fake.asked.some((entry) => entry.method === 'answer:50')).toBe(false)
     voice.answer(asked!.id, true)
     await settle()

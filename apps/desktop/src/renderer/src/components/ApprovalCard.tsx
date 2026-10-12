@@ -3,7 +3,7 @@ import type { ReactElement } from 'react'
 
 import type { MissionApprovalDecision, MissionApprovalRequest, MissionQuestion } from '../../../shared/ipc.js'
 import { runtimeDisplayName } from '../../../shared/runtimes.js'
-import { COMMAND_EFFECTS_UNKNOWN, commandEffectsUnknown, dataSentLine } from '../../../shared/approval-data.js'
+import { COMMAND_EFFECTS_UNKNOWN, CONNECTOR_NOT_UNDOABLE, commandEffectsUnknown, dataSentLine } from '../../../shared/approval-data.js'
 import { commandReach } from '../../../shared/command-reach.js'
 import { Icon } from './Icon.js'
 import { RuntimeMark } from './RuntimeMark.js'
@@ -269,7 +269,7 @@ export function ApprovalCard({
       : request.kind === 'file-change'
         ? 'Yes for tracked files, if the workspace is under version control.'
         : request.kind === 'connector'
-          ? 'Unknown — a connector acts on the service it reaches, and Locust cannot undo what happens there.'
+          ? CONNECTOR_NOT_UNDOABLE
           : 'Nothing is changed by answering.')
   // A command that acts on programs this run did not start (0.578): the
   // arena's `taskkill //F //IM python.exe` stops every Python on the computer,

@@ -11,6 +11,12 @@ Settings shows this file as What's new. An entry may group its changes under
 about when they arrive on it carries `<!-- big -->` on the line under its
 heading: the home screen then shows it once, as a splash.
 
+## 0.749.0 - 2026-10-12
+
+### Improved
+
+- **On a call with a teammate, Allow is a card in their conversation.** When a connector wants to send or change something during the call, it asks on the same card as every other approval in Locust. The card shows what it would do and each value it would send, with Allow once and Deny. Saying yes out loud doesn't allow it. The call bar shows Waiting for you to allow it, and Show takes you to the card.
+
 ## 0.748.0 - 2026-10-11
 
 ### Fixed

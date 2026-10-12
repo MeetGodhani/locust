@@ -1,8 +1,12 @@
+import { Fragment, useRef, useState } from 'react'
 import type { ReactElement } from 'react'
 
 import { callLength, type CallPiece, type SavedCallLine } from '../../../shared/calls.js'
 import type { PublicTeammate } from '../../../shared/ipc.js'
 import type { VoiceCallRole } from '../../../shared/voice-call.js'
+import { CONNECTOR_NOT_UNDOABLE, dataSentLine } from '../../../shared/approval-data.js'
+import { answerLiveCallAsk, type LiveCallAsk } from '../liveCall.js'
+import { FRESH_CARD_MS } from './ApprovalCard.js'
 import { Icon } from './Icon.js'
 import { TeammateBot } from './TeammateBot.js'
 
@@ -18,6 +22,8 @@ export interface CallPieceShown extends CallPiece {
   /** On now: drawn open, growing, with words still being said. */
   readonly live: boolean
   readonly partial?: Readonly<Record<VoiceCallRole, string>>
+  /** A connector's questions waiting on the person, on the call's last piece (0.749). */
+  readonly asks?: readonly LiveCallAsk[]
 }
 
 const at = (time: number): string => new Date(time).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
@@ -41,6 +47,47 @@ function Line({ line, teammate, partial }: { readonly line: SavedCallLine; reado
       <p className="lc-callsaid__text">{line.text}</p>
       {partial !== true && <SaidMark />}
     </div>
+  </div>
+}
+
+/** "subject" -> "Subject": a connector names its values in lower case; the card's other rows are capitalised. */
+const rowName = (name: string): string => `${name.charAt(0).toUpperCase()}${name.slice(1)}`
+
+/*
+ * A CONNECTOR'S QUESTION, ON A CARD IN THE CONVERSATION (0.749). Canvas board 2, "Waiting on you: Allow is a card in
+ * the thread": on a call with a teammate, what a connector asks before it sends or changes anything is the same card
+ * as every other approval in Locust -- the action, each value it would send, what leaves this machine, whether it can
+ * be undone -- and only the card allows it. A yes said on the call is words, not an answer.
+ */
+function CallAskCard({ ask, name }: { readonly ask: LiveCallAsk; readonly name: string }): ReactElement {
+  const [busy, setBusy] = useState(false)
+  // A card that has just appeared takes no answer: a double click's second half (ApprovalCard's N9).
+  const shownAt = useRef(Date.now())
+  const answer = (allowed: boolean): void => {
+    if (busy || Date.now() - shownAt.current < FRESH_CARD_MS) return
+    setBusy(true)
+    void answerLiveCallAsk(ask.id, allowed).then((reached) => { if (!reached) setBusy(false) })
+  }
+  return <div className="lc-card is-pending is-amber lc-callask" role="group" aria-label={`Allow ${ask.what}?`} data-call-ask={ask.id}>
+    <div className="lc-card__head">
+      <span className="lc-approval__title"><Icon name="shield" size={13} />{' '}Approval required — exact action</span>
+      <span className="lc-rail__meta">{`On the call with ${name}`}</span>
+    </div>
+    <dl className="lc-receipt">
+      <dt>Action</dt>
+      <dd>{ask.what}</dd>
+      {ask.fields.length === 0 && ask.detail.length > 0 && <><dt>Exact</dt><dd className="lc-mono lc-approval__detail">{ask.detail}</dd></>}
+      {ask.fields.map((field, index) => <Fragment key={`${field.name}-${String(index)}`}><dt>{rowName(field.name)}</dt><dd>{field.value}</dd></Fragment>)}
+      <dt>Data sent</dt>
+      <dd>{dataSentLine('connector', '')}</dd>
+      <dt>Reversible</dt>
+      <dd>{CONNECTOR_NOT_UNDOABLE}</dd>
+    </dl>
+    <div className="lc-approval__actions">
+      <button type="button" className="lc-primarybutton" disabled={busy} onClick={() => { answer(true) }}>Allow once</button>
+      <button type="button" className="lc-denybutton" disabled={busy} onClick={() => { answer(false) }}>Deny</button>
+    </div>
+    <p className="lc-approval__note">Nothing has happened yet. Saying yes on the call does not allow it; Allow once does.</p>
   </div>
 }
 
@@ -77,6 +124,7 @@ export function CallWords({ piece, teammate, open, onToggle }: {
     {!shut && piece.lines.map((line, index) => <Line key={`${String(line.at)}-${String(index)}`} line={line} teammate={teammate} />)}
     {partial !== undefined && (['you', 'voice'] as const).map((role) => partial[role].trim().length > 0
       && <Line key={`partial-${role}`} line={{ role, text: partial[role].trim(), at: Date.now() }} teammate={teammate} partial />)}
+    {live && piece.last && (piece.asks ?? []).map((ask) => <CallAskCard key={ask.id} ask={ask} name={call.name} />)}
     {!shut && !live && piece.last && <div className="lc-thread__marker lc-mono">{`Call ended · ${callLength(call)}`}</div>}
   </>
 }
