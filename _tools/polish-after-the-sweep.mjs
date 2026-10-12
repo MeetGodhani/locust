@@ -4,7 +4,10 @@
 // morning; this is Locust doing the same with Locust: a teammate in a Locust window of its own reads the drive
 // sweep's report and fixes what it can, in a worktree, one commit per fix, and writes what it did. Nothing is pushed.
 //
-//   LOCUST_SPEND=1 node _tools/polish-after-the-sweep.mjs --sweep <sweep folder> --worktree <its worktree> --packaged <exe>
+//   LOCUST_SPEND=1 node _tools/polish-after-the-sweep.mjs --sweep <sweep folder> --worktree <its worktree> --packaged <exe> [--notes <file>]
+//
+// --notes: a file of what is already known about the sweep -- a red already explained, a build newer than the one
+// the sweep ran -- given to Polish before it starts, so it does not spend its turn on them.
 //
 // The worktree is made beforehand (git worktree add -b polish/<date> D:\work\locust-wt\polish-<date> HEAD). Polish
 // runs on Claude Code's Sonnet in Auto: nobody is at the window to answer a card, and it must run git, the drives and
@@ -13,7 +16,7 @@
 // --hours, default 3), then closes; its last reply is written to POLISH-REPLY.md in the worktree beside the
 // POLISH-REPORT.md it is asked to write.
 
-import { writeFile } from 'node:fs/promises'
+import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
 import { openTeammateScript, recordRoot, say, sendAndWaitScript, sleep, startDrive } from './drive-lib.mjs'
@@ -24,9 +27,11 @@ const worktree = arg('--worktree')
 const packaged = arg('--packaged')
 const hours = Number(arg('--hours') ?? '3')
 if (sweep === undefined || worktree === undefined || packaged === undefined) {
-  say('usage: LOCUST_SPEND=1 node _tools/polish-after-the-sweep.mjs --sweep <folder> --worktree <folder> --packaged <exe> [--hours 3]')
+  say('usage: LOCUST_SPEND=1 node _tools/polish-after-the-sweep.mjs --sweep <folder> --worktree <folder> --packaged <exe> [--hours 3] [--notes <file>]')
   process.exit(2)
 }
+const notesFile = arg('--notes')
+const notes = notesFile === undefined ? '' : (await readFile(notesFile, 'utf8')).trim()
 
 const brief = [
   `You are Polish, Locust's overnight teammate. Last night Locust's drive sweep ran every free drive in _tools against the packaged build; its results are in ${sweep}: SUMMARY.md has one row per drive (PASS, FAIL, TIMED OUT, EXIT), logs/ has each drive's whole output, and captures/ has the frames each drive took.`,
@@ -37,7 +42,8 @@ const brief = [
   '4. Anything else: leave the code alone and write down what you saw.',
   `To check a drive you changed, run it as the sweep did: node _tools/<drive>.mjs --packaged ${packaged}. Do not run the whole sweep or the whole test suite; run the tests you wrote with npx vitest run <file> from apps/desktop if node_modules is there, and say so if it is not.`,
   'One commit per fix, its message naming the drive and why. Work only in this folder. Never push, never change a version or the CHANGELOG, never set LOCUST_SPEND, and never run anything that would spend a paid account.',
-  'When you are done, write POLISH-REPORT.md at this folder\'s root: a table with one row per drive that did not pass -- the drive, your verdict (app bug, stale drive, provider, unclear), what you changed, the commit, and how you checked it -- then two or three lines on what a person should look at first.'
+  'When you are done, write POLISH-REPORT.md at this folder\'s root: a table with one row per drive that did not pass -- the drive, your verdict (app bug, stale drive, provider, unclear), what you changed, the commit, and how you checked it -- then two or three lines on what a person should look at first.',
+  ...(notes === '' ? [] : [`Already known before you start:\n${notes}`])
 ].join('\n\n')
 
 const drive = await startDrive({
