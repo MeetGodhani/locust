@@ -28,6 +28,7 @@ until it is listed here.
 | A web page a teammate made, open in the preview | eight public hosts, for libraries and fonts only | While the page is open |
 | A voice call (Talk, beside the microphone) | OpenAI's voice service, at the media address the call's answer names | On Windows, only while a call you started is on |
 | Scout's looks (a teammate that keeps watch) | GitHub, through your own GitHub CLI; then Scout's own model, through its agent (free: OpenCode's) | Only after you turn Scout on, every 10, 30 or 60 minutes while Locust runs, and its model only when something is new |
+| Your cloud computer (a teammate's turn sent with Cloud) | GitHub, through your own GitHub CLI: Codespaces, and the codespace itself over `gh codespace ssh`; from there, the teammate's model, through its agent (OpenCode) | Only after you pick Cloud for an OpenCode teammate and press Set it up, and then for each turn you send with Cloud |
 
 **Its own updates.** A plain request for the files of the newest release in a
 public repository that holds only Locust's installers: `latest.yml`, then the
@@ -131,6 +132,23 @@ what it was asked) and your teammates'
 names and roles. Change Scout's model like any teammate's, and its looks go
 there instead. Scout sends no message, merges, pushes or changes anything:
 every action on its cards is your press.
+
+**Your cloud computer (0.761).** Off until you pick Cloud in the chat-type menu
+for an OpenCode teammate and press Set it up. Locust then asks GitHub, with your
+own GitHub CLI, to make a codespace for the folder's repository on your GitHub
+account (`gh codespace create`: 2 CPUs and 8 GB, stops itself after 10 idle
+minutes, deleted after a week unused) and installs OpenCode on it from npm. For
+each turn you send with Cloud, Locust sends that codespace this folder as it is
+-- commits not pushed, edits not committed, files not added, as one git bundle
+over `gh codespace ssh` -- and starts OpenCode's own server there, reached
+through that ssh connection's tunnel: Locust picks a free port on `127.0.0.1`
+here and the tunnel forwards it to the server there. Your words go to that
+server, and from it to the teammate's model; its change is read back over the
+same connection. The agent there runs without the codespace's GitHub sign-in,
+so nothing it does reaches GitHub; its change comes into this folder only when
+you press Apply. GitHub counts the codespace's hours (60 free a month at this
+size) and charges for more only if your GitHub account has a way to pay.
+Locust holds no GitHub token: gh keeps it where gh keeps it.
 
 **Hearing a voice (0.751).** Hear it, beside a voice picker, plays that voice
 saying hello. The first time for each voice it is a call like Talk's, a few

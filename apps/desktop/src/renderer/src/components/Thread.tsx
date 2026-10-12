@@ -42,6 +42,8 @@ import { ApprovalCard } from './ApprovalCard.js'
 import { CancellationCard, stoppedBeforeAnyTool } from './CancellationCard.js'
 import { SignInButton } from './SignInButton.js'
 import { AgentAvatar, AgentText, DiagnosticLine, LiveStepCard, PlanSteps } from './ThreadItems.js'
+import { CloudChangeCard, CloudMarker } from './CloudTurn.js'
+import type { PublicCloudTurn } from '../../../shared/cloud-computer.js'
 import { DecisionCard } from './DecisionCard.js'
 import { ResumeCard } from './ResumeCard.js'
 import { resumeOffer } from '../resume.js'
@@ -787,6 +789,16 @@ export function otherAppMarker(mode: MissionMode | undefined, via?: 'voice'): st
 
 export interface ThreadProps {
   readonly prompt: string
+  /**
+   * YOUR CLOUD COMPUTER (0.761): the turns of this conversation that ran there, by mission, and what to do with a
+   * change waiting there. Each answers with what went wrong, or undefined when it was done.
+   */
+  readonly cloud?: {
+    readonly turns: ReadonlyMap<string, PublicCloudTurn>
+    readonly onPatch: (missionId: string) => Promise<string | undefined>
+    readonly onApply: (missionId: string) => Promise<string | undefined>
+    readonly onDiscard: (missionId: string) => Promise<string | undefined>
+  }
   /** The folder now open, so the receipt names one only for its own missions. */
   readonly workspaceId?: string | undefined
   /** Who started the current turn; a host-briefed one is not the person's words. */
@@ -1076,8 +1088,18 @@ onResume,
   inTerminal,
   backgroundTurns,
   handoff,
-  peers
+  peers,
+  cloud
 }: ThreadProps): ReactElement {
+  // Where a turn ran, under the person's words, and what became of its change, under its work (0.761).
+  const cloudMarkerFor = (missionId: string | undefined): ReactElement | null => {
+    const turn = missionId === undefined ? undefined : cloud?.turns.get(missionId)
+    return turn === undefined ? null : <CloudMarker turn={turn} />
+  }
+  const cloudCardFor = (missionId: string | undefined): ReactElement | null => {
+    const turn = missionId === undefined ? undefined : cloud?.turns.get(missionId)
+    return turn === undefined || cloud === undefined ? null : <CloudChangeCard key={`cloud-${turn.missionId}`} turn={turn} onPatch={cloud.onPatch} onApply={cloud.onApply} onDiscard={cloud.onDiscard} />
+  }
   const error = recordedError === undefined ? undefined : providerErrorSentence(recordedError, events[0]?.sourceAdapter ?? restoredMission?.runtime)
   // What the run was allowed, hoisted so EVERY turn can be told -- not just
   // the newest. `no files changed` existed only on the last turn, so scrolling
@@ -1101,6 +1123,9 @@ onResume,
    * plan it started from (`carriedPlan`) and the notices already carried
    * (`saidBefore`).
    */
+  // A turn on the cloud computer changed nothing HERE (0.761): what it changed is its card's to say, so the line
+  // never says "no files changed" over a change waiting there.
+  const cloudTurnIds = cloud?.turns
   const earlier = useMemo(() => {
     const said = new Set<string>()
     /** Each turn's rows, which is what decides how many turns go on the page (EARLIER_ROWS_SHOWN). */
@@ -1108,7 +1133,7 @@ onResume,
     const elements = earlierTurns.map((turn, index) => {
       const built = buildThread(turn.events, {
         running: false,
-        mayEdit,
+        mayEdit: mayEdit && cloudTurnIds?.has(turn.missionId) !== true,
         carriedPlan: index === 0 ? [] : lastPlanOf(earlierTurns[index - 1]!.events),
         saidBefore: new Set(said),
         // Said for the latest turn and never for these, so a turn whose whole
@@ -1132,7 +1157,7 @@ onResume,
       )
     })
     return { elements, said, sizes }
-  }, [earlierTurns, mayEdit, workspacePath, peers.self])
+  }, [earlierTurns, mayEdit, workspacePath, peers.self, cloudTurnIds])
   const earlierWork = earlier.elements
   // A call's words among the turns it started (0.747); opened by the person once it has ended.
   const callPlaces = useMemo(
@@ -1181,7 +1206,7 @@ onResume,
     saidBefore: earlier.said,
     awaitingDecision: approvals.length > 0,
     spokeToPeers: peers.messages.length > 0,
-    mayEdit,
+    mayEdit: mayEdit && (shownMissionId === undefined || cloud?.turns.has(shownMissionId) !== true),
     // Only the orb reads this: `solving` is the one of the four mapped states
     // no open tool can answer for, because planning is the turn's mode.
     planMode,
@@ -1535,10 +1560,12 @@ onResume,
               {!again && versionNote(turn.versions)}
               {callsAt(`before:${turn.missionId}`)}
               {!again && userTurn(turnPromptLine(turn), turnAttachments(turn), () => editedFiles(turn.events, workspacePath), turn.startedBy === undefined && turn.inTerminal === undefined ? turn.missionId : undefined)}
+              {!again && cloudMarkerFor(turn.missionId)}
               {cardsFor(index, 'before-work').map(peerCard)}
               {!again && earlierWork[index]}
               {/* An earlier turn stopped before it said anything had nothing under it, as if still waiting (0.496; Claude Code: "Interrupted"). */}
               {!again && stoppedBeforeSaying(turn.events) && <div className="lc-thread__note">Stopped before it replied</div>}
+              {cloudCardFor(turn.missionId)}
               {cardsFor(index, 'after-work').map(peerCard)}
               {/* What that turn taught the team, under that turn. */}
               <MemoryCard lines={memoriesOfTurn(peers.memories ?? [], turn.missionId)} />
@@ -1603,6 +1630,7 @@ onResume,
         {currentSeam !== undefined && <TerminalDivider seam={currentSeam} {...(shownMissionId !== undefined && backgroundTurns?.has(shownMissionId) === true ? { background: true } : {})} />}
         {shownMissionId !== undefined && callsAt(`before:${shownMissionId}`)}
         {userTurn(currentLine, turnAttachments({ prompt, ...(startedBy === undefined ? {} : { startedBy }) }), running ? undefined : () => editedFiles(events, workspacePath), !running && startedBy === undefined && inTerminal === undefined ? shownMissionId : undefined)}
+        {cloudMarkerFor(shownMissionId)}
 
         {handoff !== undefined && (
           <>
@@ -1649,6 +1677,7 @@ onResume,
           {...(onStopRun === undefined || !running ? {} : { onStop: onStopRun })}
         />
 
+        {!running && cloudCardFor(shownMissionId)}
         {cardsFor(earlierTurns.length, 'after-work').map(peerCard)}
         {peers.notices.map((notice, index) => (
           <DiagnosticLine key={`peer_notice_${index}`} level={notice.level} message={notice.message} />

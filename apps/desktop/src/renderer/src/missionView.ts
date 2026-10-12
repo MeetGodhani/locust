@@ -1,6 +1,7 @@
 import type { NormalizedRuntimeEvent, ToolPatch } from '@teammate/runtime-adapters'
 import { providerErrorSentence } from '@teammate/runtime-adapters/provider-error'
 
+import { cloudRelative } from '../../shared/cloud-computer.js'
 import { SUBAGENT_TOOL } from './faceState.js'
 import { EVENT_WINDOW, TRIMMED_TURN_LINE, windowEvents } from '../../shared/event-window.js'
 import { isImagePath } from '../../shared/image-files.js'
@@ -1687,6 +1688,9 @@ export function relativePath(path: string, workspacePath: string | undefined): s
   // reads `answer.txt`, not its copy's home path beside the same file counted twice.
   const routineCopy = /(?:^|\/)\.locust\/routines\/rt_[A-Za-z0-9]+\/(.+)$/.exec(full)
   if (routineCopy?.[1] !== undefined) return routineCopy[1]
+  // A turn on the cloud computer (0.761): its copy there, /workspaces/.locust/t_<id>, reads as this folder.
+  const inCloud = cloudRelative(full)
+  if (inCloud !== undefined) return inCloud
   // A skill's own file, read from the copy Locust made for the run (0.679,
   // main/claude-skills.ts): it reads as the file it is a copy of -- the
   // folder's .claude/skills, or ~/.claude/skills for the person's own --

@@ -154,6 +154,8 @@ import { TeammateBot } from './components/TeammateBot.js'
 import { BesideConversation } from './components/BesideConversation.js'
 import { SideChat } from './components/SideChat.js'
 import { CloudTasks } from './components/CloudTasks.js'
+import { CloudSetupDialog, type CloudSetupState } from './components/CloudSetupDialog.js'
+import type { PublicCloudTurn } from '../../shared/cloud-computer.js'
 import { BackgroundRuns } from './components/BackgroundRuns.js'
 import type { PublicBackgroundRun } from '../../shared/background.js'
 import { ReviewChanges } from './components/ReviewChanges.js'
@@ -436,6 +438,8 @@ function applyMissionUpdate(run: LiveRunState, update: CodexMissionUpdate): Live
   // A host-started run is adopted by the listener, never applied to a run.
   if (update.kind === 'mission-started') return live
   if (update.kind === 'start-phase') return live
+  // The cloud computer's turn cards and its setting up are kept beside the runs (0.761).
+  if (update.kind === 'cloud-turn' || update.kind === 'cloud-setup') return live
   // A hop being started belongs to a teammate, not to any one run.
   if (update.kind === 'relay-starting' || update.kind === 'relay-start-settled') return live
   // A room's board moving is the room's business, not this run's.
@@ -1905,6 +1909,9 @@ export default function App(): ReactElement {
    * menu, this folder's tasks, and the panel beside the conversation.
    */
   const [cloudOn, setCloudOn] = useState(false)
+  // YOUR CLOUD COMPUTER (0.761): the turns that ran there, by mission, and the first-time dialog.
+  const [cloudTurns, setCloudTurns] = useState<ReadonlyMap<string, PublicCloudTurn>>(() => new Map())
+  const [cloudSetup, setCloudSetup] = useState<CloudSetupState>()
   /** Background (W10): picked in the chat-type menu, the runs, the panel, and why the last send did not start. */
   const [backgroundOn, setBackgroundOn] = useState(false)
   const [backgroundRuns, setBackgroundRuns] = useState<readonly PublicBackgroundRun[]>([])
@@ -2792,6 +2799,8 @@ export default function App(): ReactElement {
     const removeMissionListener = bridge.onCodexMissionUpdate((update) => {
       // A start's phase (0.602) arrives before the run knows its id: matched by teammate, not by id.
       if (update.kind === 'start-phase') setRuns((current) => withStartPhase(current, update))
+      if (update.kind === 'cloud-turn') setCloudTurns((current) => new Map(current).set(update.turn.missionId, update.turn))
+      if (update.kind === 'cloud-setup') setCloudSetup((current) => (current?.phase === 'working' ? { ...current, step: update.step } : current))
       // A3.3: kept by mission, apart from the run state -- a finished run is
       // rebuilt from its record, which holds no check, and a result that
       // landed first was wiped by that rebuild (drive, 2026-09-25).
@@ -3722,6 +3731,18 @@ export default function App(): ReactElement {
    * last setup used there.
    */
   const setupKey = useRef(pickKey)
+  /*
+   * A CONVERSATION THAT WENT TO THE CLOUD STAYS THERE (0.761): reopened, its composer has Cloud on when its latest
+   * turn ran on the cloud computer -- once per conversation, so Cloud turned off by the person stays off.
+   */
+  const cloudRestored = useRef(new Set<string>())
+  const latestRanInCloud = liveRun?.data?.missionId !== undefined && cloudTurns.has(liveRun.data.missionId)
+  useEffect(() => {
+    if (!latestRanInCloud || cloudRestored.current.has(pickKey)) return
+    cloudRestored.current.add(pickKey)
+    if (composerRoute.runtime === 'opencode') setCloudOn(true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per conversation, as it is opened
+  }, [latestRanInCloud, pickKey])
   useEffect(() => {
     if (setupKey.current !== pickKey) {
       setupKey.current = pickKey
@@ -4327,6 +4348,11 @@ export default function App(): ReactElement {
       setBackgroundOn(false)
       return true
     }
+    // YOUR CLOUD COMPUTER (0.761): an OpenCode teammate's turn runs on the repository's codespace, as a turn of this
+    // conversation. Cloud stays on, so the conversation's next turn goes there too.
+    if (cloudOn && comparing === undefined && composerRoute.runtime === 'opencode') {
+      return startFromComposer(prompt, sendOptions?.leaveOut, true)
+    }
     // Cloud (0.503): the task goes to Codex Cloud, and the panel follows it.
     if (cloudOn && comparing === undefined && composerRoute.runtime === 'claude') {
       if (!bridge) return 'Locust is not ready yet. Nothing was sent.'
@@ -4667,7 +4693,7 @@ export default function App(): ReactElement {
       return { text: 'The tagged teammates could not be sent it.', sent: false }
     }
   }
-  const startFromComposer = async (prompt: string, leaveOut?: readonly string[]): Promise<boolean | string> => {
+  const startFromComposer = async (prompt: string, leaveOut?: readonly string[], cloud?: boolean): Promise<boolean | string> => {
     startRefusal.current = undefined
     const rewind = rewinding !== undefined && rewinding.key === shownKey ? rewinding : undefined
     // Files first, so the teammate starts on the folder as it was (0.502).
@@ -4677,7 +4703,7 @@ export default function App(): ReactElement {
     if (rewind !== undefined && rewind.putBack && rewind.files.length > 0 && putBack === undefined) {
       return 'Not sent: the files could not be put back, so nothing was changed. Untick it to send the edit on its own.'
     }
-    const started = await startMission(prompt, undefined, { fromComposer: true, ...(leaveOut === undefined || leaveOut.length === 0 ? {} : { leaveOut }), ...(rewind === undefined ? {} : { rewind: { ...rewind, ...(putBack === undefined ? {} : { putBackResult: putBack }) } }) })
+    const started = await startMission(prompt, undefined, { fromComposer: true, ...(cloud === true ? { cloud: true } : {}), ...(leaveOut === undefined || leaveOut.length === 0 ? {} : { leaveOut }), ...(rewind === undefined ? {} : { rewind: { ...rewind, ...(putBack === undefined ? {} : { putBackResult: putBack }) } }) })
     if (started && rewind !== undefined) setRewinding(undefined)
     return started ? true : (startRefusal.current ?? false)
   }
@@ -4722,6 +4748,8 @@ export default function App(): ReactElement {
       readonly as?: StartAs
       /** Typed in the box and sent from it: a refusal can hand the words back. */
       readonly fromComposer?: boolean
+      /** Sent with Cloud for a teammate whose maker has no cloud: it runs on the person's cloud computer (0.761). */
+      readonly cloud?: boolean
       /** A reply on another runtime: the brief sections the person left out (0.527). */
       readonly leaveOut?: readonly string[]
       /** Started again from an edited earlier message (0.498). */
@@ -4863,6 +4891,7 @@ export default function App(): ReactElement {
         ...(as?.oneOff === true ? { keepSavedRoute: true } : {}),
         ...(continuing === undefined ? {} : { followUpOf: continuing.data!.missionId }),
         ...(continuing === undefined || options?.leaveOut === undefined ? {} : { leaveOut: options.leaveOut }),
+        ...(options?.cloud === true ? { cloud: true as const } : {}),
         ...(rewind === undefined ? {} : { ...(rewind.before === undefined ? {} : { followUpOf: rewind.before }), rewind: { tip: rewind.tip, ...(rewind.setAside === undefined ? {} : { setAside: rewind.setAside }) } })
       })
       if (!response.ok) {
@@ -4945,6 +4974,22 @@ export default function App(): ReactElement {
           startRefusal.current = `Not sent: ${response.error.message} Your message is back in the box.`
           return false
         }
+        /*
+         * NO CLOUD COMPUTER FOR THIS REPOSITORY YET (0.761) -- deleted since Cloud was picked, or GitHub's permission
+         * taken back. Nothing started: the words go back in the box and the dialog asks, as it did the first time.
+         */
+        if (response.error.code === 'CLOUD_SETUP_NEEDED') {
+          setRuns((current) => {
+            const next = new Map(current)
+            next.delete(key)
+            return next
+          })
+          setShownKey((current) => (current === key ? previousKey : current))
+          const setup = response.error.cloudSetup
+          setCloudSetup(setup === undefined || setup.permission === true ? { phase: 'permission', message: response.error.message } : { phase: 'ask', repo: setup.repo })
+          startRefusal.current = 'Not sent: your cloud computer is not set up for this repository yet. Your message is back in the box.'
+          return false
+        }
         // A ledger that cannot be written is the same failure whether it hits
         // on the FIRST write or the fortieth, and only the second one used to
         // reach the card that explains it. The first -- a ledger folder that
@@ -4972,7 +5017,8 @@ export default function App(): ReactElement {
 
       const runId = response.data.runId
       // The conversation this starts (or continues) keeps the setup it was sent with (0.552).
-      chatSetups.current.set(response.data.missionId, { mode: modeOverride ?? runMode, effort: runEffort })
+      // A turn sent with Cloud keeps Cloud on for the conversation's next turn (0.761).
+      chatSetups.current.set(response.data.missionId, { mode: modeOverride ?? runMode, effort: runEffort, ...(options?.cloud === true ? { kind: { compare: false, blind: false, cloud: true } } : {}) })
       // The host recorded the owner; mirror it so the sidebar files the
       // mission under the teammate at once rather than after a refresh.
       if (teammateId !== undefined) {
@@ -7569,6 +7615,71 @@ export default function App(): ReactElement {
     // The key stands for the ids: a new array of the same turns is not a new conversation.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conversationTurnKey, callsSaved])
+  /*
+   * YOUR CLOUD COMPUTER (0.761). The shown conversation's turns that ran there, read when it is opened; a turn
+   * starting or ending there says so itself ('cloud-turn').
+   */
+  const shownTurnIds = useMemo(
+    () => [...(liveRun?.earlierTurns ?? []).map((turn) => turn.missionId), ...(liveRun?.data?.missionId === undefined ? [] : [liveRun.data.missionId])],
+    [liveRun?.earlierTurns, liveRun?.data?.missionId]
+  )
+  const shownTurnKey = shownTurnIds.join(',')
+  useEffect(() => {
+    if (shownTurnIds.length === 0) return
+    void window.desktop?.cloudTurns(shownTurnIds).then((found) => {
+      if (found.length === 0) return
+      setCloudTurns((current) => {
+        const next = new Map(current)
+        for (const turn of found) next.set(turn.missionId, turn)
+        return next
+      })
+    }).catch(() => undefined)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed by the ids themselves
+  }, [shownTurnKey])
+  const cloudTurnAct = async (missionId: string, act: 'apply' | 'discard'): Promise<string | undefined> => {
+    const bridge = window.desktop
+    if (bridge === undefined) return 'Locust is not ready yet.'
+    const done = await (act === 'apply' ? bridge.applyCloudTurn(missionId) : bridge.discardCloudTurn(missionId)).catch(() => undefined)
+    if (done === undefined) return 'Locust could not reach your cloud computer. Try again in a moment.'
+    if (!done.ok) return done.message
+    setCloudTurns((current) => new Map(current).set(missionId, done.turn))
+    return undefined
+  }
+  const threadCloud = {
+    turns: cloudTurns,
+    onPatch: async (missionId: string) => window.desktop?.cloudTurnPatch(missionId).catch(() => undefined),
+    onApply: (missionId: string) => cloudTurnAct(missionId, 'apply'),
+    onDiscard: (missionId: string) => cloudTurnAct(missionId, 'discard')
+  }
+  /** Cloud picked for an OpenCode teammate (0.761): the first time for a repository, the dialog asks. */
+  const checkCloudComputer = async (): Promise<void> => {
+    const state = await window.desktop?.cloudComputerForFolder().catch(() => undefined)
+    if (state === undefined) return
+    if (state.ok) {
+      setCloudSetup(state.computer === undefined ? { phase: 'ask', repo: state.repo } : undefined)
+      return
+    }
+    setCloudSetup(
+      state.permission === true
+        ? { phase: 'permission', message: state.message }
+        : state.notOnGitHub === true
+          ? { phase: 'not-on-github', message: state.message }
+          : { phase: 'failed', message: state.message }
+    )
+  }
+  const setUpCloudComputer = async (repo: string): Promise<void> => {
+    setCloudSetup({ phase: 'working', repo, step: 'making' })
+    const done = await window.desktop?.setUpCloudComputer().catch(() => undefined)
+    if (done === undefined) {
+      setCloudSetup({ phase: 'failed', repo, message: 'Locust could not reach GitHub. Try again in a moment.' })
+      return
+    }
+    if (done.ok) {
+      setCloudSetup({ phase: 'ready', repo: done.repo })
+      return
+    }
+    setCloudSetup(done.permission === true ? { phase: 'permission', message: done.message } : { phase: 'failed', repo, message: done.message })
+  }
   const threadCalls = useMemo(() => {
     const ids = new Set(conversationTurnIds)
     const here = callNow !== undefined && ((callNow.afterMissionId !== undefined && ids.has(callNow.afterMissionId)) || callNow.turns.some((turn) => ids.has(turn.missionId)))
@@ -8738,6 +8849,7 @@ export default function App(): ReactElement {
                 onOpenSenderRun={(missionId) => () => openMission(missionId)}
                 earlierTurns={liveRun.earlierTurns ?? []}
                 calls={threadCalls}
+                cloud={threadCloud}
                 {...inTerminalOf(liveRun)}
                 {...(() => {
                   // Where this conversation's group began briefing it. The
@@ -9111,21 +9223,26 @@ export default function App(): ReactElement {
               on: cloudOn,
               onMode: (on) => {
                 setCloudOn(on)
+                // The person's own cloud computer (0.761): on at once; the first time for a repository, the dialog.
+                if (on && composerRoute.runtime === 'opencode') {
+                  void checkCloudComputer()
+                  return
+                }
                 if (on) {
                   setCloudPanel(true)
                   void window.desktop?.cloudWhere().then(setCloudWhere).catch(() => undefined)
                   void window.desktop?.listClaudeCloud().then(setClaudeCloud).catch(() => undefined)
                 }
               },
-              where: composerRoute.runtime === 'claude' ? 'claude' : 'codex',
+              where: composerRoute.runtime === 'claude' ? 'claude' : composerRoute.runtime === 'opencode' ? 'computer' : 'codex',
               environment: {
                 value: cloudEnvironment.folder === workspacePath ? cloudEnvironment.value : '',
                 onChange: (value) => setCloudEnvironment({ folder: workspacePath ?? '', value, edited: true })
               },
-              ...(composerRoute.runtime === 'claude'
+              ...(composerRoute.runtime === 'claude' || composerRoute.runtime === 'opencode'
                 ? {}
                 : composerRoute.runtime !== 'codex'
-                ? { refusal: 'Cloud runs on Codex or Claude: pick one of their models first.' }
+                ? { refusal: 'Cloud runs on Codex, Claude or OpenCode: pick one of their models first.' }
                 : cloudWhere?.codexReady === false
                   ? { refusal: 'Codex CLI is not installed or not signed in here.' }
                   // Not on GitHub is not refused here (0.504): the panel says so, with the folders that are.
@@ -9670,6 +9787,23 @@ export default function App(): ReactElement {
       )}
       {feedbackFor !== undefined && (
         <FeedbackDialog conversation={feedbackFor.conversation} onClose={() => setFeedbackFor(undefined)} />
+      )}
+      {cloudSetup !== undefined && (
+        <CloudSetupDialog
+          state={cloudSetup}
+          teammateName={pickedTeammate?.name}
+          onSetUp={() => {
+            const repo = 'repo' in cloudSetup ? cloudSetup.repo : undefined
+            if (repo !== undefined && repo.length > 0) void setUpCloudComputer(repo)
+          }}
+          onAllow={() => void window.desktop?.allowCloudComputers().catch(() => undefined)}
+          onCheckAgain={() => void checkCloudComputer()}
+          onClose={() => {
+            // Not set up: Cloud goes back off, so a send cannot go nowhere.
+            if (cloudSetup.phase !== 'ready') setCloudOn(false)
+            setCloudSetup(undefined)
+          }}
+        />
       )}
       {routineRunFor !== undefined && <RoutineRunDialog routine={routineRunFor} onRun={(values) => startRoutine(routineRunFor.routineId, values)} onCancel={() => setRoutineRunFor(undefined)} />}
       {routineExport !== undefined && <RoutineExportDialog flagged={routineExport.flagged} onExport={(paths) => exportRoutine(routineExport.routineId, paths)} onCancel={() => setRoutineExport(undefined)} />}

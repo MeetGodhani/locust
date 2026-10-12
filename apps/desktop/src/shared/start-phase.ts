@@ -19,6 +19,15 @@ export function startPhaseLabel(phase: StartPhase | undefined, runtimeName: stri
       return 'Reading the folder'
     case 'starting-runtime':
       return `Starting ${runtimeName}`
+    // Your cloud computer (0.761). MEASURED: made in about 35 s, woken in about a minute and a half.
+    case 'cloud-making':
+      return 'Making your cloud computer, about a minute'
+    case 'cloud-waking':
+      return 'Waking your cloud computer, about a minute and a half'
+    case 'cloud-installing':
+      return `Setting up ${runtimeName} on your cloud computer`
+    case 'cloud-bringing':
+      return 'Bringing this folder to your cloud computer'
     default:
       return 'Starting'
   }

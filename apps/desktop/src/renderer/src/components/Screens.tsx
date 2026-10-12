@@ -16,6 +16,7 @@ import { AddConnector } from './AddConnector.js'
 import { GitHubAccount } from './GitHubAccount.js'
 import { ConnectorHealth } from './ConnectorHealth.js'
 import type { SettingsPageId } from '../settingsPages.js'
+import { CloudComputers } from './CloudComputers.js'
 import type { LoginItemState, RuntimeUpdatesState, MetalMotion, MetalPreset, MetalStrength, ProfileBackupResponse, ProfileRestorePreview, ProfileRestoreResponse } from '../../../shared/ipc.js'
 import { backedUpLine, countsLine, folderName } from '../backupWords.js'
 import { SUPPORT_ADDRESS } from '../../../shared/support.js'
@@ -2293,6 +2294,33 @@ export function SettingsScreen({
               </p>
             </More>
             <OwnModels onChanged={onOwnModelsChanged} />
+          </section>
+        )}
+        {/*
+          * YOUR CLOUD COMPUTERS (0.761, CloudComputers.tsx). Colin, 2026-10-12: "see if theres a way that we can
+          * assign any teammate to the cloud or vm". Each is the person's own GitHub Codespace, listed from GitHub.
+          */}
+        {shownPage === 'cloud' && (
+          <section className="lc-settings__section">
+            <h2 className="lc-settings__heading">Cloud computers</h2>
+            <p className="lc-settings__lede">
+              Where a teammate works when you pick Cloud and its maker has no cloud of its own: a GitHub Codespace on your
+              GitHub account, one for each repository.
+            </p>
+            <More>
+              <p>
+                Each is 2 CPUs and 8 GB. GitHub includes 60 hours a month at this size on a free account; after that it
+                is $0.18 an hour, charged by GitHub, and with no payment method on GitHub it stops at the free hours
+                instead. It stops itself after 10 minutes with nothing to do, keeps its files while stopped, and is
+                deleted after a week unused. Locust charges nothing.
+              </p>
+              <p>
+                A teammate there works on a copy of this folder as it was when the conversation went to the cloud, and
+                runs without GitHub&rsquo;s sign-in, so nothing it does reaches GitHub. Its change comes into this folder
+                only when you press Apply.
+              </p>
+            </More>
+            <CloudComputers />
           </section>
         )}
         {/*

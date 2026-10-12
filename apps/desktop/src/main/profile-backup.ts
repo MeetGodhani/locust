@@ -81,6 +81,7 @@ export const LEFT_OUT: Readonly<Record<string, string>> = {
   'voice-settings.json': 'your voice API key and consent: Windows locks the key to this account, so choose voice typing again after a restore',
   'claude-cloud.json': 'cloud sessions, which belong to this machine and its sign-in',
   'cloud-tasks.json': 'cloud tasks, which belong to this machine and its sign-in',
+  'cloud-turns.json': "turns sent to your cloud computer, which name this machine's folders: their changes stay on the codespace, on GitHub (0.761)",
   'brief-sessions.json': 'each agent\'s own session names, which do not carry to another machine',
   'runtime-commands.json': 'where each AI agent is installed on this machine',
   'runtime-facts.json': 'what was found out about the AI agents installed here',

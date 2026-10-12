@@ -36,6 +36,8 @@ import { COMPARE_SLOTS, COMPARE_TREES_DIRECTORY, comparesGoneWith, compareNeedsC
 import { reverseChanges } from '../shared/reverse-diff.js'
 import { createCloudTaskService, launchRunner } from './cloud-task-service.js'
 import { environmentOf, githubRepoOf, leavingNoLog } from './cloud-tasks.js'
+import { createCloudComputers } from './cloud-computer.js'
+import { createCloudTurns } from './cloud-turns.js'
 import { createClaudeCloud } from './claude-cloud.js'
 import { createRemoteControl } from './claude-remote-control.js'
 import { registerRemoteControlIpc } from './remote-control-ipc.js'
@@ -93,7 +95,7 @@ import { MAX_PROMPT_LENGTH, createCodexMissionService, resumableThreadOf, runtim
 import { chosenLeaveOut, howTurnEnded } from './handoff.js'
 import { officeWordsSection } from './office-words.js'
 import { createRoutineCopies } from './routine-copy.js'
-import { openInTerminal, terminalRequestFor } from './open-in-terminal.js'
+import { openInTerminal, openProgramInTerminal, terminalRequestFor } from './open-in-terminal.js'
 import { catchUpTerminal, createTerminalCatchUp, createTerminalImports, createTranscriptReader, transcriptPathFor } from './terminal-catch-up.js'
 import type { CatchUpFacts } from './terminal-catch-up.js'
 import { importSession, listImportableSessions } from './session-import.js'
@@ -137,7 +139,7 @@ import { decideReveal, insideOnDisk } from './reveal-file.js'
 import { readWorkspaceImage } from './workspace-image.js'
 import { readPdfPages } from './pdf-pages.js'
 import { addConnector, removeConnector } from './connector-add.js'
-import { createGithubAccount } from './github-account.js'
+import { createGithubAccount, ghCommand } from './github-account.js'
 import { FOLDER_PULL_REQUEST_CHANNEL, PULL_REQUEST_NEWS_CHANNEL, PULL_REQUEST_WATCH_CHANNEL } from '../shared/pull-request.js'
 import { createPullRequestWatch } from './pull-request-watch.js'
 import { FOLDER_DIFF_CHANNEL } from '../shared/folder-diff.js'
@@ -348,6 +350,17 @@ import {
   CLOUD_DIFF_CHANNEL,
   CLOUD_APPLY_CHANNEL,
   CLOUD_FOLDERS_CHANNEL,
+  CLOUD_TURNS_CHANNEL,
+  CLOUD_TURN_PATCH_CHANNEL,
+  CLOUD_TURN_APPLY_CHANNEL,
+  CLOUD_TURN_DISCARD_CHANNEL,
+  CLOUD_COMPUTERS_CHANNEL,
+  CLOUD_COMPUTER_STOP_CHANNEL,
+  CLOUD_COMPUTER_REMOVE_CHANNEL,
+  CLOUD_COMPUTER_TERMINAL_CHANNEL,
+  CLOUD_COMPUTER_ALLOW_CHANNEL,
+  CLOUD_COMPUTER_FOLDER_CHANNEL,
+  CLOUD_COMPUTER_SETUP_CHANNEL,
   CLAUDE_CLOUD_START_CHANNEL,
   CLAUDE_CLOUD_LIST_CHANNEL,
   CLAUDE_CLOUD_HOME_CHANNEL,
@@ -2326,6 +2339,12 @@ if (!ownsSingleInstanceLock) {
       // kill on Windows), started IN its folder (0.378) -- a session made
       // without naming one is the server's own folder's.
       opencodeServeSpawn: (executablePath, args, env, cwd) => spawnAppServer(executablePath, args, env, cwd),
+      // 0.761: a turn sent with Cloud, on the repository's GitHub Codespace (cloud-turns.ts). Lazily, as above.
+      cloud: {
+        of: (missionId) => cloudTurns.of(missionId),
+        prepare: (input) => cloudTurns.prepare(input),
+        settled: (missionId) => cloudTurns.settled(missionId)
+      },
       // 0.377: an Agent Client Protocol agent (Copilot, for Approve-each), started IN its folder.
       acpSpawn: (executablePath, args, env, cwd) => spawnAppServer(executablePath, args, env, cwd),
       // W12: what it said it can do, said in Settings; the next sweep reads it.
@@ -4681,6 +4700,69 @@ if (!ownsSingleInstanceLock) {
      * what folder the cloud is in". The folders Locust already knows, each
      * asked for its GitHub remote -- read-only, and only those still there.
      */
+    /*
+     * YOUR CLOUD COMPUTER (0.761, cloud-turns.ts): a conversation's turns on the repository's GitHub Codespace, their
+     * changes -- shown, brought home, put back -- and the computers themselves, for Settings.
+     */
+    const cloudTurns = createCloudTurns({
+      file: join(app.getPath('userData'), 'cloud-turns.json'),
+      computers: createCloudComputers(),
+      git: gitRunner,
+      onChange: (turn) => sendToWindow({ kind: 'cloud-turn', turn })
+    })
+    // A turn Locust closed on is read now, quietly; the window is told as each one is.
+    void cloudTurns.settleLeftover().catch(() => undefined)
+    const missionIdsOf = (value: unknown): readonly string[] =>
+      Array.isArray(value) ? value.filter((id): id is string => typeof id === 'string' && /^mission_[A-Za-z0-9_-]{1,80}$/.test(id)).slice(0, 200) : []
+    const missionIdOf = (value: unknown): string | undefined => missionIdsOf([value])[0]
+    const computerName = (value: unknown): string | undefined => (typeof value === 'string' && /^[A-Za-z0-9-]{8,90}$/.test(value) ? value : undefined)
+    ipcMain.handle(CLOUD_TURNS_CHANNEL, async (event, ids: unknown) => (fromOwnWindow(event) ? cloudTurns.turns(missionIdsOf(ids)) : []))
+    ipcMain.handle(CLOUD_TURN_PATCH_CHANNEL, async (event, id: unknown) => {
+      const missionId = missionIdOf(id)
+      return fromOwnWindow(event) && missionId !== undefined ? cloudTurns.patch(missionId) : undefined
+    })
+    ipcMain.handle(CLOUD_TURN_APPLY_CHANNEL, async (event, id: unknown) => {
+      const missionId = missionIdOf(id)
+      if (!fromOwnWindow(event) || missionId === undefined) return { ok: false, message: 'That change could not be brought here.' }
+      return cloudTurns.apply(missionId)
+    })
+    ipcMain.handle(CLOUD_TURN_DISCARD_CHANNEL, async (event, id: unknown) => {
+      const missionId = missionIdOf(id)
+      if (!fromOwnWindow(event) || missionId === undefined) return { ok: false, message: 'That change could not be put back.' }
+      return cloudTurns.discard(missionId)
+    })
+    ipcMain.handle(CLOUD_COMPUTERS_CHANNEL, async (event) => (fromOwnWindow(event) ? cloudTurns.computers() : { ok: false, message: 'That request was rejected.' }))
+    ipcMain.handle(CLOUD_COMPUTER_STOP_CHANNEL, async (event, value: unknown) => {
+      const name = computerName(value)
+      if (!fromOwnWindow(event) || name === undefined) return { ok: false, message: 'That cloud computer could not be stopped.' }
+      return cloudTurns.stop(name)
+    })
+    ipcMain.handle(CLOUD_COMPUTER_REMOVE_CHANNEL, async (event, value: unknown) => {
+      const name = computerName(value)
+      if (!fromOwnWindow(event) || name === undefined) return { ok: false, message: 'That cloud computer could not be deleted.' }
+      return cloudTurns.remove(name)
+    })
+    ipcMain.handle(CLOUD_COMPUTER_TERMINAL_CHANNEL, async (event, value: unknown) => {
+      const name = computerName(value)
+      if (!fromOwnWindow(event) || name === undefined) return { ok: false, message: 'That terminal could not be opened.' }
+      return openProgramInTerminal({ file: ghCommand(), args: ['codespace', 'ssh', '-c', name] }, workspacePath, 'Your cloud computer', {
+        ...(process.env.LOCALAPPDATA === undefined ? {} : { localAppData: process.env.LOCALAPPDATA })
+      })
+    })
+    const openCodeVersionHere = async (): Promise<string | undefined> =>
+      (await discoverForWork().catch(() => [])).find((entry) => entry.id === 'opencode')?.version?.version
+    ipcMain.handle(CLOUD_COMPUTER_FOLDER_CHANNEL, async (event) => (fromOwnWindow(event) ? cloudTurns.forFolder(workspacePath) : { ok: false, message: 'That request was rejected.' }))
+    ipcMain.handle(CLOUD_COMPUTER_SETUP_CHANNEL, async (event) => {
+      if (!fromOwnWindow(event)) return { ok: false, message: 'That request was rejected.' }
+      return cloudTurns.setUp({ folder: workspacePath, openCodeVersion: await openCodeVersionHere(), step: (step) => sendToWindow({ kind: 'cloud-setup', step }) })
+    })
+    // GitHub's codespace permission, which the person gives in the terminal and their browser: Locust never sees it.
+    ipcMain.handle(CLOUD_COMPUTER_ALLOW_CHANNEL, async (event) => {
+      if (!fromOwnWindow(event)) return { ok: false, message: 'That request was rejected.' }
+      return openProgramInTerminal({ file: ghCommand(), args: ['auth', 'refresh', '-h', 'github.com', '-s', 'codespace'] }, workspacePath, 'Allow Locust to make codespaces', {
+        ...(process.env.LOCALAPPDATA === undefined ? {} : { localAppData: process.env.LOCALAPPDATA })
+      })
+    })
     ipcMain.handle(CLOUD_FOLDERS_CHANNEL, async (event) => {
       if (!fromOwnWindow(event)) return []
       const known = (await folders.list().catch(() => [])).filter((folder) => existsSync(folder.path) && !isInstallFolder(folder.path)).slice(0, 40)
@@ -7890,7 +7972,11 @@ if (!ownsSingleInstanceLock) {
           undefined,
           rewindTip(payload) !== undefined && followUpOf !== undefined,
           // A reply on another runtime: what the person chose to leave out of its brief (0.527).
-          chosenLeaveOut((payload as { readonly leaveOut?: unknown }).leaveOut)
+          chosenLeaveOut((payload as { readonly leaveOut?: unknown }).leaveOut),
+          // Your cloud computer (0.761): only the person's own Cloud, and Set it up when they pressed it.
+          (payload as { readonly cloud?: unknown }).cloud === true
+            ? { setUp: (payload as { readonly cloudSetUp?: unknown }).cloudSetUp === true }
+            : undefined
         )
         if (response.ok) {
           await assignOwner(peer?.self.teammateId, response.data.missionId)

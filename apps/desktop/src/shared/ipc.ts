@@ -21,6 +21,7 @@ import type { ConnectorAddRequest, ConnectorAddResponse, ConnectorAgent } from '
 import type { GithubAccount, GithubCliVersions, GithubInstallResult, GithubSignInCode, GithubSignInResult } from './github-account.js'
 import type { FolderPullRequest, PullRequestNews } from './pull-request.js'
 import type { FolderDiff } from './folder-diff.js'
+import type { CloudFolderState, CloudSetupStep, PublicCloudComputer, PublicCloudTurn } from './cloud-computer.js'
 import type { OfficeDocument } from './office-document.js'
 import type { Workbook } from './sheet.js'
 import type { AboutYouSuggestion } from './about-you.js'
@@ -837,6 +838,18 @@ export const CLOUD_DIFF_CHANNEL = 'cloud:diff'
 export const CLOUD_APPLY_CHANNEL = 'cloud:apply'
 /** The person's folders that are on GitHub, for a cloud task from a folder that is not (0.504). */
 export const CLOUD_FOLDERS_CHANNEL = 'cloud:folders'
+/** Your cloud computer (0.761): a conversation's turns there, their changes, and the computers themselves. */
+export const CLOUD_TURNS_CHANNEL = 'cloud-turn:list'
+export const CLOUD_TURN_PATCH_CHANNEL = 'cloud-turn:patch'
+export const CLOUD_TURN_APPLY_CHANNEL = 'cloud-turn:apply'
+export const CLOUD_TURN_DISCARD_CHANNEL = 'cloud-turn:discard'
+export const CLOUD_COMPUTERS_CHANNEL = 'cloud-computer:list'
+export const CLOUD_COMPUTER_STOP_CHANNEL = 'cloud-computer:stop'
+export const CLOUD_COMPUTER_REMOVE_CHANNEL = 'cloud-computer:remove'
+export const CLOUD_COMPUTER_TERMINAL_CHANNEL = 'cloud-computer:terminal'
+export const CLOUD_COMPUTER_ALLOW_CHANNEL = 'cloud-computer:allow'
+export const CLOUD_COMPUTER_FOLDER_CHANNEL = 'cloud-computer:folder'
+export const CLOUD_COMPUTER_SETUP_CHANNEL = 'cloud-computer:set-up'
 /**
  * CLAUDE'S CLOUD (0.538, main/claude-cloud.ts): a task handed to a Claude Code
  * cloud session, in a window of its own; listed here so it can be found on
@@ -917,6 +930,10 @@ export interface PublicCloudTask {
   readonly appliedAt?: string
 }
 /** Where this folder stands for a cloud task: a GitHub repository, its branch, what GitHub lacks. */
+export type CloudTurnResponse = { readonly ok: true; readonly turn: PublicCloudTurn } | { readonly ok: false; readonly message: string }
+export type CloudComputersResponse =
+  | { readonly ok: true; readonly computers: readonly PublicCloudComputer[] }
+  | { readonly ok: false; readonly message: string; readonly permission?: true }
 export interface PublicCloudWhere {
   readonly repo: string | undefined
   readonly branch: string | undefined
@@ -2366,6 +2383,11 @@ export type CodexMissionErrorCode =
    * edit the app's own files.
    */
   | 'NO_WORKSPACE'
+  /**
+   * The turn was sent with Cloud, and the repository has no cloud computer yet -- or GitHub has not let Locust make
+   * one (0.761). Nothing was started; the window asks the person, with what it costs.
+   */
+  | 'CLOUD_SETUP_NEEDED'
 
 export interface CodexMissionError {
   readonly code: CodexMissionErrorCode
@@ -2378,6 +2400,8 @@ export interface CodexMissionError {
    * 2026-09-24).
    */
   readonly busy?: 'pool'
+  /** On CLOUD_SETUP_NEEDED only: which repository, and whether GitHub's permission is what is missing. */
+  readonly cloudSetup?: { readonly repo: string; readonly branch?: string; readonly permission?: true }
   /**
    * On HANDOFF_REFUSED only: the refusal came before anything was stopped,
    * so the mission is still running where it was (M9). Without it the window
@@ -2947,6 +2971,12 @@ export interface CodexMissionStartRequest {
   readonly routeOverrideFor?: string
   /** A reply on another runtime: brief sections the person chose to leave out (0.527). */
   readonly leaveOut?: readonly string[]
+  /**
+   * YOUR CLOUD COMPUTER (0.761): this turn runs on the repository's GitHub Codespace, not on this computer.
+   * `cloudSetUp`: the person pressed Set it up, so the repository's first one may be made.
+   */
+  readonly cloud?: true
+  readonly cloudSetUp?: true
 }
 
 /**
@@ -3095,7 +3125,8 @@ export type CodexMissionCancelResponse =
   | { readonly ok: false; readonly error: CodexMissionError }
 
 /** The phases of a start, in order (0.602): what the live line says while nothing has arrived. */
-export type StartPhase = 'looking' | 'briefing' | 'reading-folder' | 'starting-runtime'
+/** The cloud computer's four (0.761): made, woken, the agent installed there, this folder brought over. */
+export type StartPhase = 'looking' | 'briefing' | 'reading-folder' | 'starting-runtime' | 'cloud-making' | 'cloud-waking' | 'cloud-installing' | 'cloud-bringing'
 
 export type CodexMissionUpdate =
   | {
@@ -3104,6 +3135,16 @@ export type CodexMissionUpdate =
       readonly runId: string
       readonly missionId: string
       readonly events: readonly Extract<NormalizedRuntimeEvent, { readonly type: 'message.delta' }>[]
+    }
+  | {
+      /** A turn on the cloud computer: where it ran, and what became of its change (0.761). */
+      readonly kind: 'cloud-turn'
+      readonly turn: PublicCloudTurn
+    }
+  | {
+      /** Setting up the cloud computer, step by step, for the dialog (0.761). */
+      readonly kind: 'cloud-setup'
+      readonly step: CloudSetupStep
     }
   | {
       /** The start's phase (0.602), sent while the window's run is still "starting" and before it knows its ids. */
@@ -3740,6 +3781,21 @@ export interface DesktopApi {
   cloudTaskDiff(taskId: string): Promise<string | undefined>
   applyCloudTask(taskId: string): Promise<CloudApplyResponse>
   cloudFolders(): Promise<readonly PublicCloudFolder[]>
+  /** Your cloud computer (0.761). */
+  cloudTurns(missionIds: readonly string[]): Promise<readonly PublicCloudTurn[]>
+  cloudTurnPatch(missionId: string): Promise<string | undefined>
+  applyCloudTurn(missionId: string): Promise<CloudTurnResponse>
+  discardCloudTurn(missionId: string): Promise<CloudTurnResponse>
+  cloudComputers(): Promise<CloudComputersResponse>
+  stopCloudComputer(name: string): Promise<{ readonly ok: true } | { readonly ok: false; readonly message: string }>
+  removeCloudComputer(name: string): Promise<{ readonly ok: true } | { readonly ok: false; readonly message: string }>
+  openCloudComputerTerminal(name: string): Promise<OpenInTerminalResponse>
+  /** GitHub's codespace permission for this computer's gh, given in a terminal Locust opens (gh auth refresh). */
+  allowCloudComputers(): Promise<OpenInTerminalResponse>
+  /** This folder's repository and its cloud computer, if it has one. */
+  cloudComputerForFolder(): Promise<CloudFolderState>
+  /** Made and readied for this folder's repository, each step said as a 'cloud-setup' update. */
+  setUpCloudComputer(): Promise<CloudFolderState>
   /** Claude's cloud (0.538): a window of Claude Code with the task given; the list; `--teleport` to bring one home. */
   /** `choice`: the box's Claude model and effort, which the session runs on (0.557). */
   startClaudeCloud(prompt: string, teammateId?: string, choice?: { readonly model?: string; readonly effort?: string; readonly environment?: string }): Promise<ClaudeCloudStartResponse>

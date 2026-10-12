@@ -286,8 +286,11 @@ export interface ComposerProps {
     readonly on: boolean
     readonly onMode: (on: boolean) => void
     readonly refusal?: string
-    /** Which cloud the picked model goes to (0.538): Codex Cloud, or Claude's. Absent: Codex. */
-    readonly where?: 'codex' | 'claude'
+    /**
+     * Which cloud the picked model goes to (0.538): Codex Cloud, or Claude's. Absent: Codex. `computer` (0.761): the
+     * person's own cloud computer, a GitHub Codespace, for a teammate whose maker has no cloud.
+     */
+    readonly where?: 'codex' | 'claude' | 'computer'
     readonly environment?: { readonly value: string; readonly onChange: (value: string) => void }
   }
   /**
@@ -436,6 +439,8 @@ const CHAT_MODES: readonly { readonly id: 'direct' | 'compare' | 'blind' | 'clou
  * window opens unless Claude Code has a question for the person.
  */
 const CLAUDE_CLOUD_DESC = 'Runs in Claude’s cloud; follow it on claude.ai, tell it more from here, bring it home when it is done'
+/** The Cloud choice for a teammate whose maker has no cloud (0.761): the person's own, a GitHub Codespace. */
+const COMPUTER_CLOUD_DESC = 'Runs on your cloud computer, a GitHub Codespace; watch it here, bring the change home when it is done'
 
 export function Composer({
   talkTo,
@@ -918,7 +923,7 @@ export function Composer({
     asking !== undefined ? (asking.blind === true ? 'blind' : 'compare') : background?.on === true ? 'background' : cloud?.on === true ? 'cloud' : compare?.on === true ? (compare.blind === true ? 'blind' : 'compare') : 'direct'
   const versus = asking?.label ?? versusLabel((compare?.picks ?? []).map((pick) => pick.label))
   // One column left answering (the others could not start) is asked as one.
-  const placeholder = background?.on === true && asking === undefined ? 'Say what Claude should keep working on…' : cloud?.on === true && asking === undefined ? (cloud.where === 'claude' ? 'Describe a task for Claude’s cloud…' : 'Describe a task for Codex Cloud…') : asking !== undefined ? (asking.columns <= 1 ? 'Ask a follow-up…' : `Ask ${asking.columns === 2 ? 'both' : `all ${String(asking.columns)}`}…`) : workingNow
+  const placeholder = background?.on === true && asking === undefined ? 'Say what Claude should keep working on…' : cloud?.on === true && asking === undefined ? (cloud.where === 'claude' ? 'Describe a task for Claude’s cloud…' : cloud.where === 'computer' ? 'Describe a task for your cloud computer…' : 'Describe a task for Codex Cloud…') : asking !== undefined ? (asking.columns <= 1 ? 'Ask a follow-up…' : `Ask ${asking.columns === 2 ? 'both' : `all ${String(asking.columns)}`}…`) : workingNow
     ? queued === undefined
       ? `Say what is next — it goes to ${workingName} when this finishes…`
       : 'Edit the queued message to change it…'
@@ -1941,7 +1946,7 @@ export function Composer({
                           <Icon name={option.icon} size={15} />
                           <span className="lc-menu__text">
                             <span className="lc-menu__name">{option.name}</span>
-                            <span className="lc-menu__desc">{option.id === 'cloud' && cloud?.refusal !== undefined ? cloud.refusal : option.id === 'cloud' && cloud?.where === 'claude' ? CLAUDE_CLOUD_DESC : option.desc}</span>
+                            <span className="lc-menu__desc">{option.id === 'cloud' && cloud?.refusal !== undefined ? cloud.refusal : option.id === 'cloud' && cloud?.where === 'claude' ? CLAUDE_CLOUD_DESC : option.id === 'cloud' && cloud?.where === 'computer' ? COMPUTER_CLOUD_DESC : option.desc}</span>
                           </span>
                           {chatMode === option.id && <Icon name="check" size={13} />}
                         </button>
@@ -1954,7 +1959,7 @@ export function Composer({
                     aria-haspopup="menu"
                     aria-expanded={chatModeOpen}
                     aria-label={`Chat mode: ${CHAT_MODES.find((option) => option.id === chatMode)?.name ?? 'Direct'}`}
-                    title={CHAT_MODES.find((option) => option.id === chatMode)?.desc}
+                    title={chatMode === 'cloud' && cloud?.where === 'computer' ? COMPUTER_CLOUD_DESC : chatMode === 'cloud' && cloud?.where === 'claude' ? CLAUDE_CLOUD_DESC : CHAT_MODES.find((option) => option.id === chatMode)?.desc}
                     disabled={running || asking !== undefined}
                     onClick={() => setChatModeOpen(!chatModeOpen)}
                   >

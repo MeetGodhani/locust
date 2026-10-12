@@ -124,6 +124,7 @@ import type { PreparedSkills } from './claude-skills.js'
 import { checkpointMessage, checkpointNotice, checkpointSentence, turnOutcomeOf } from './turn-checkpoint.js'
 import type { TurnOutcome } from './turn-checkpoint.js'
 import type { CheckpointMessage, CheckpointResult } from './worktrees.js'
+import type { CloudTurns, ServeSpawn } from './cloud-turns.js'
 
 export const MAX_PROMPT_LENGTH = 8_000
 /**
@@ -296,7 +297,12 @@ export interface CodexMissionService {
      * leave out (0.527, handoff.ts DROPPABLE_SECTION_NAMES). Only the
      * direct-message handler supplies it, from what the composer showed.
      */
-    leaveOut?: readonly string[]
+    leaveOut?: readonly string[],
+    /**
+     * YOUR CLOUD COMPUTER (0.761, cloud-turns.ts): the turn runs on the repository's GitHub Codespace. Only the
+     * direct-message handler supplies it, from the composer's Cloud; `setUp` when the person pressed Set it up.
+     */
+    cloud?: { readonly setUp?: boolean }
   ): Promise<CodexMissionStartResponse>
   cancel(runId: unknown): CodexMissionCancelResponse
   /**
@@ -422,6 +428,11 @@ interface CodexMissionServiceOptions {
    * so it can stop and ask (A6.7) -- IN the teammate's folder (0.378).
    * Absent: OpenCode has no Approve-each.
    */
+  /**
+   * YOUR CLOUD COMPUTER (0.761, cloud-turns.ts): readies the repository's codespace for a turn sent with Cloud, says
+   * which conversations ran there, and reads what a turn changed once it ends.
+   */
+  readonly cloud?: Pick<CloudTurns, 'of' | 'prepare' | 'settled'>
   readonly opencodeServeSpawn?: (
     executablePath: string,
     args: readonly string[],
@@ -1370,7 +1381,8 @@ export function createCodexMissionService(options: CodexMissionServiceOptions): 
       slot?: { readonly key: string; readonly cwd?: string },
       side?: { readonly of: string; readonly question: number },
       rewind?: boolean,
-      leaveOut?: readonly string[]
+      leaveOut?: readonly string[],
+      cloud?: { readonly setUp?: boolean }
     ): Promise<CodexMissionStartResponse> {
       // The start's phases (0.602): said to the window as they begin, and timed for the note the run's end writes.
       const sentAt = Date.now()
@@ -1577,6 +1589,22 @@ export function createCodexMissionService(options: CodexMissionServiceOptions): 
           ) as CodexMissionStartResponse
         }
 
+        // YOUR CLOUD COMPUTER (0.761): OpenCode first, on its own server there; refused in words, before anything.
+        if (cloud !== undefined) {
+          if (runtime !== 'opencode') {
+            return error('RUNTIME_START_FAILED', 'Your cloud computer runs OpenCode teammates for now. Pick an OpenCode model, or turn Cloud off.') as CodexMissionStartResponse
+          }
+          if (options.cloud === undefined || options.opencodeServeSpawn === undefined) {
+            return error('RUNTIME_START_FAILED', 'Cloud is not available in this window.') as CodexMissionStartResponse
+          }
+          if (side !== undefined) {
+            return error('RUNTIME_START_FAILED', 'A question on the side is asked on this computer, not on your cloud computer.') as CodexMissionStartResponse
+          }
+          if (chosenModel !== undefined && chosenModel.startsWith('own-')) {
+            return error('RUNTIME_START_FAILED', 'A model of your own answers from this computer, so it cannot go to your cloud computer. Pick an OpenCode model, or turn Cloud off.') as CodexMissionStartResponse
+          }
+        }
+
         // A reply resumes the earlier mission's own session. The handle comes
         // from the durable record of THAT mission, never from the renderer:
         // the renderer names a mission, and the host decides what that means.
@@ -1729,7 +1757,13 @@ export function createCodexMissionService(options: CodexMissionServiceOptions): 
               peer,
               undefined,
               relay,
-              startedBy
+              startedBy,
+              undefined,
+              undefined,
+              undefined,
+              undefined,
+              undefined,
+              cloud
             )
             if (!switched.ok) return switched
             // The receipt says it was a switch, so the window can draw the
@@ -1788,6 +1822,21 @@ export function createCodexMissionService(options: CodexMissionServiceOptions): 
             coldEarlier = [...(await earlierTurnsOf(prior)), ...(again ? [] : [{ asked: prior.metadata.prompt, answered: said.latestFinal }])]
           }
           }
+        }
+        /*
+         * HERE OR THERE (0.761). This computer and the cloud one each keep their own OpenCode sessions, so a reply
+         * that moves between them cannot resume the other's: it starts afresh, told what was said before, as a reply
+         * on another runtime is.
+         */
+        const priorCloud = followUpOf === undefined || options.cloud === undefined ? undefined : await options.cloud.of(followUpOf).catch(() => undefined)
+        if (followUpOf !== undefined && side === undefined && rewind !== true && (priorCloud !== undefined) !== (cloud !== undefined) && resumeThreadId !== undefined) {
+          const prior = await options.ledger.getMission(followUpOf).catch(() => undefined)
+          if (prior !== undefined) {
+            const said = createTranscriptTracker()
+            said.track(prior.events)
+            coldEarlier = [...(await earlierTurnsOf(prior)), { asked: prior.metadata.prompt, answered: said.latestFinal }]
+          }
+          resumeThreadId = undefined
         }
 
         const runId = `run_${createId()}`
@@ -1937,7 +1986,7 @@ export function createCodexMissionService(options: CodexMissionServiceOptions): 
         // a teammate with its own folder is in a worktree of a repository
         // that is not this one. Absent unless the run really is in a
         // worktree.
-        const repositoryRoot = peer?.repositoryRoot
+        const repositoryRoot = cloud === undefined ? peer?.repositoryRoot : undefined
         /*
          * Somewhere for a Claude Code run to ASK before using a connector.
          *
@@ -1951,7 +2000,8 @@ export function createCodexMissionService(options: CodexMissionServiceOptions): 
           globalThis.process.env.LOCUST_ASK_CONNECTORS === '1' || (await options.askConnectors?.()) === true
         const commandGuardPath = runtime === 'claude' ? await options.commandGuard?.() : undefined
         const copilotGuardPlugin = runtime === 'copilot' ? await options.copilotCommandGuard?.().catch(() => undefined) : undefined
-        const openCodeGuardPlugin = runtime === 'opencode' ? await options.openCodeCommandGuard?.().catch(() => undefined) : undefined
+        // A cloud turn's guard is the computer it runs on: nothing there reaches GitHub (cloud-computer.ts).
+        const openCodeGuardPlugin = runtime === 'opencode' && cloud === undefined ? await options.openCodeCommandGuard?.().catch(() => undefined) : undefined
         const codexGuardConfig = runtime === 'codex' ? await options.codexCommandGuard?.(runCwd).catch(() => undefined) : undefined
         const permissionBridge =
           runtime === 'claude' && effectiveSandbox !== 'full-access' && options.permissionHost !== undefined
@@ -2165,6 +2215,31 @@ export function createCodexMissionService(options: CodexMissionServiceOptions): 
             'RUNTIME_START_FAILED',
             `That runtime cannot be started with the options chosen.${why} Nothing was recorded.`
           ) as CodexMissionStartResponse
+        }
+
+        /*
+         * YOUR CLOUD COMPUTER, READIED (0.761): made or woken, OpenCode on it, this folder brought over -- each said
+         * on the live line as it begins. Nothing is recorded until it is ready: a refusal here hands the words back.
+         */
+        let cloudSpawn: ServeSpawn | undefined
+        if (cloud !== undefined && options.cloud !== undefined) {
+          const prepared = await options.cloud.prepare({
+            missionId,
+            folder: runCwd,
+            ...(followUpOf === undefined ? {} : { follows: followUpOf }),
+            openCodeVersion: chosen.version?.version,
+            ...(cloud.setUp === true ? { setUp: true } : {}),
+            say
+          })
+          if (!prepared.ok) {
+            return prepared.setup === undefined
+              ? error('RUNTIME_START_FAILED', prepared.message) as CodexMissionStartResponse
+              : { ok: false, error: { code: 'CLOUD_SETUP_NEEDED', message: prepared.message, cloudSetup: prepared.setup } }
+          }
+          if (startLifecycleVersion !== lifecycleVersion) {
+            return error('RUNTIME_START_FAILED', 'The mission was stopped before your cloud computer was ready.') as CodexMissionStartResponse
+          }
+          cloudSpawn = prepared.spawn
         }
 
         // What the runtime is SENT is the person's words plus their teammates'
@@ -2474,7 +2549,7 @@ ${sentPrompt.trim()}`
             process = startOpenCodeServeRun({
               // Auto approves what its config did not deny, as `run --auto` did (0.677).
               ...(mode !== 'approve-each' && effectiveSandbox === 'full-access' ? { approveAll: true } : {}),
-              spawn: options.opencodeServeSpawn!,
+              spawn: cloudSpawn ?? options.opencodeServeSpawn!,
               command,
               prompt: runtimePrompt,
               ...(openCodeCommand === undefined ? {} : { slashCommand: openCodeCommand }),
@@ -2490,6 +2565,11 @@ ${sentPrompt.trim()}`
               signal: controller.signal,
               now
             })
+            if (cloudSpawn !== undefined) {
+              // What the turn changed there is read once it ends, for the card under it (cloud-turns.ts).
+              const settle = (): void => void options.cloud?.settled(missionId).catch(() => undefined)
+              process.completion.then(settle, settle)
+            }
           } else if (copilotAcp) {
             say('starting-runtime')
             // Each thing Copilot asks becomes the same card Codex's do. A

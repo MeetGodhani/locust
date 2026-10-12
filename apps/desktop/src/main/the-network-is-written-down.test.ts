@@ -46,7 +46,9 @@ const LISTED: Readonly<Record<string, { readonly places: number; readonly said: 
   // Test: the models the address serves, then one capped chat request with a tool.
   'own-models.ts': { places: 2, said: ['Testing one of your own models', 'When you press Test'] },
   // The default fetch, and the one request every look and keep goes through.
-  'skill-library.ts': { places: 2, said: ['Skills from GitHub', 'Redirects are followed only to those two hosts'] }
+  'skill-library.ts': { places: 2, said: ['Skills from GitHub', 'Redirects are followed only to those two hosts'] },
+  // A free port picked on 127.0.0.1 for the tunnel to OpenCode's server on the codespace (0.761).
+  'cloud-computer.ts': { places: 1, said: ['Your cloud computer', 'Locust picks a free port on `127.0.0.1`'] }
 }
 
 describe('every place Locust reaches the network is in docs/NETWORK.md', () => {

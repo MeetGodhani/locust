@@ -246,3 +246,42 @@ export async function openInTerminal(request: TerminalRequest, options: OpenInTe
     return { ok: false, message: `The terminal could not be opened (${error instanceof Error ? error.message : String(error)}). The conversation is here, as it was.` }
   }
 }
+
+/**
+ * A program Locust chose, in a terminal window of its own (0.761): `gh codespace ssh` onto the person's cloud
+ * computer, or `gh auth refresh` for GitHub's codespace permission, which the person answers there themselves.
+ * Windows Terminal when it starts, else a console window; Terminal on a Mac.
+ */
+export async function openProgramInTerminal(
+  program: { readonly file: string; readonly args: readonly string[] },
+  cwd: string,
+  title: string,
+  options: OpenInTerminalOptions = {}
+): Promise<OpenInTerminalResponse> {
+  const platform = options.platform ?? process.platform
+  const run = options.spawn ?? spawn
+  if (platform === 'darwin') return openInMacTerminal(cwd, program, undefined, run)
+  if (platform !== 'win32') return { ok: false, message: 'Opening a terminal works on Windows and macOS so far.' }
+  const wtArgs = windowsTerminalArgs(program, cwd, title)
+  if (options.prefer !== 'console' && wtArgs !== undefined) {
+    const wt = options.localAppData === undefined ? 'wt.exe' : join(options.localAppData, 'Microsoft', 'WindowsApps', 'wt.exe')
+    try {
+      const child = run(wt, [...wtArgs], { detached: true, stdio: 'ignore', windowsHide: false })
+      if ((await started(child)) === true) {
+        child.unref()
+        return { ok: true, where: 'Windows Terminal' }
+      }
+    } catch {
+      // Not installed, or refused: the console window below.
+    }
+  }
+  try {
+    const child = run('cmd.exe', [consoleLine(program, [])], { cwd, detached: true, stdio: 'ignore', windowsHide: false, windowsVerbatimArguments: true })
+    const result = await started(child)
+    if (result !== true) return { ok: false, message: `The terminal could not be opened (${result.message}).` }
+    child.unref()
+    return { ok: true, where: 'a console window' }
+  } catch (error) {
+    return { ok: false, message: `The terminal could not be opened (${error instanceof Error ? error.message : String(error)}).` }
+  }
+}

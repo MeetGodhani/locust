@@ -107,6 +107,17 @@ import {
   CLOUD_DIFF_CHANNEL,
   CLOUD_APPLY_CHANNEL,
   CLOUD_FOLDERS_CHANNEL,
+  CLOUD_TURNS_CHANNEL,
+  CLOUD_TURN_PATCH_CHANNEL,
+  CLOUD_TURN_APPLY_CHANNEL,
+  CLOUD_TURN_DISCARD_CHANNEL,
+  CLOUD_COMPUTERS_CHANNEL,
+  CLOUD_COMPUTER_STOP_CHANNEL,
+  CLOUD_COMPUTER_REMOVE_CHANNEL,
+  CLOUD_COMPUTER_TERMINAL_CHANNEL,
+  CLOUD_COMPUTER_ALLOW_CHANNEL,
+  CLOUD_COMPUTER_FOLDER_CHANNEL,
+  CLOUD_COMPUTER_SETUP_CHANNEL,
   CLAUDE_CLOUD_START_CHANNEL,
   CLAUDE_CLOUD_LIST_CHANNEL,
   CLAUDE_CLOUD_HOME_CHANNEL,
@@ -268,6 +279,8 @@ import type {
   ClaudeCloudReading,
   CloudStartResponse,
   CloudApplyResponse,
+  CloudTurnResponse,
+  CloudComputersResponse,
   RewindPutBackRequest,
   RewindPutBackResponse,
   AttachFilesResponse,
@@ -400,6 +413,7 @@ export type {
   RuntimeDiscoveryResponse,
   RuntimeProbeStatus
 } from '../shared/ipc.js'
+import type { CloudFolderState, PublicCloudTurn } from '../shared/cloud-computer.js'
 
 const desktopApi: DesktopApi = {
   locustMcp: {
@@ -675,6 +689,17 @@ const desktopApi: DesktopApi = {
   cloudTaskDiff: (taskId: string) => ipcRenderer.invoke(CLOUD_DIFF_CHANNEL, taskId) as Promise<string | undefined>,
   applyCloudTask: (taskId: string) => ipcRenderer.invoke(CLOUD_APPLY_CHANNEL, taskId) as Promise<CloudApplyResponse>,
   cloudFolders: () => ipcRenderer.invoke(CLOUD_FOLDERS_CHANNEL) as Promise<readonly PublicCloudFolder[]>,
+  cloudTurns: (missionIds: readonly string[]) => ipcRenderer.invoke(CLOUD_TURNS_CHANNEL, missionIds) as Promise<readonly PublicCloudTurn[]>,
+  cloudTurnPatch: (missionId: string) => ipcRenderer.invoke(CLOUD_TURN_PATCH_CHANNEL, missionId) as Promise<string | undefined>,
+  applyCloudTurn: (missionId: string) => ipcRenderer.invoke(CLOUD_TURN_APPLY_CHANNEL, missionId) as Promise<CloudTurnResponse>,
+  discardCloudTurn: (missionId: string) => ipcRenderer.invoke(CLOUD_TURN_DISCARD_CHANNEL, missionId) as Promise<CloudTurnResponse>,
+  cloudComputers: () => ipcRenderer.invoke(CLOUD_COMPUTERS_CHANNEL) as Promise<CloudComputersResponse>,
+  stopCloudComputer: (name: string) => ipcRenderer.invoke(CLOUD_COMPUTER_STOP_CHANNEL, name) as Promise<{ readonly ok: true } | { readonly ok: false; readonly message: string }>,
+  removeCloudComputer: (name: string) => ipcRenderer.invoke(CLOUD_COMPUTER_REMOVE_CHANNEL, name) as Promise<{ readonly ok: true } | { readonly ok: false; readonly message: string }>,
+  openCloudComputerTerminal: (name: string) => ipcRenderer.invoke(CLOUD_COMPUTER_TERMINAL_CHANNEL, name) as Promise<OpenInTerminalResponse>,
+  allowCloudComputers: () => ipcRenderer.invoke(CLOUD_COMPUTER_ALLOW_CHANNEL) as Promise<OpenInTerminalResponse>,
+  cloudComputerForFolder: () => ipcRenderer.invoke(CLOUD_COMPUTER_FOLDER_CHANNEL) as Promise<CloudFolderState>,
+  setUpCloudComputer: () => ipcRenderer.invoke(CLOUD_COMPUTER_SETUP_CHANNEL) as Promise<CloudFolderState>,
   getRemoteControl: () => ipcRenderer.invoke(REMOTE_CONTROL_GET_CHANNEL) as Promise<RemoteControlState>,
   setRemoteControl: (enabled: boolean) => ipcRenderer.invoke(REMOTE_CONTROL_SET_CHANNEL, enabled) as Promise<RemoteControlState>,
   startClaudeCloud: (prompt: string, teammateId?: string, choice?: { readonly model?: string; readonly effort?: string; readonly environment?: string }) => ipcRenderer.invoke(CLAUDE_CLOUD_START_CHANNEL, prompt, teammateId, choice) as Promise<ClaudeCloudStartResponse>,

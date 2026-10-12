@@ -28,7 +28,7 @@ const entries = [...PAGES.matchAll(/id: '([^']+)',\s*label: (?:'([^']+)'|"([^"]+
 
 describe('the settings list', () => {
   it('files every page under a group, with an icon the set can draw', () => {
-    expect(entries.map((entry) => entry.id)).toEqual(['app', 'appearance', 'privacy', 'teammates', 'memory', 'relay', 'runtimes', 'models', 'connectors', 'workspace', 'whatsnew'])
+    expect(entries.map((entry) => entry.id)).toEqual(['app', 'appearance', 'privacy', 'teammates', 'memory', 'relay', 'runtimes', 'models', 'connectors', 'cloud', 'workspace', 'whatsnew'])
     for (const entry of entries) expect(ICONS, entry.icon ?? '').toMatch(new RegExp(`\\n    '?${entry.icon ?? ''}'?: `))
   })
 

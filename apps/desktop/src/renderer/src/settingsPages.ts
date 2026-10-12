@@ -59,6 +59,7 @@ export type SettingsPageId =
   | 'runtimes'
   | 'models'
   | 'connectors'
+  | 'cloud'
   | 'workspace'
   | 'whatsnew'
 
@@ -214,6 +215,17 @@ export const SETTINGS_PAGES: readonly SettingsPage[] = [
       Connectors: ['mcp', 'tools', 'server'],
       // 0.716: one connector, to every agent at once.
       'Add a connector': ['add mcp', 'mcp server', 'every agent', 'all agents']
+    }
+  },
+  {
+    // Your cloud computer (0.761): a GitHub Codespace for each repository a teammate works on in the cloud.
+    id: 'cloud',
+    label: 'Cloud computers',
+    group: 'Agents',
+    icon: 'cloud',
+    headings: ['Cloud computers'],
+    alsoKnownAs: {
+      'Cloud computers': ['cloud', 'codespace', 'codespaces', 'vm', 'virtual machine', 'remote', 'cloud teammate', 'github codespaces', 'free hours']
     }
   },
   {
