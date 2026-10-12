@@ -49,9 +49,11 @@ describe('where a run is told it stands', () => {
     const exchange = createPeerExchange({ workroom: {} as Options['workroom'], ledger: {} as Options['ledger'], memory })
     await exchange.briefSolo('Make the game.', 'opencode', { folder: 'C:/work/arena-rpg', ownFolder: 'C:/Users/me/.locust/compare/cmp_1-b' })
     expect(seen[0]?.ownFolder).toBe('C:/Users/me/.locust/compare/cmp_1-b')
-    // The mission service passes a slot's folder as `ownFolder` on both paths.
+    // The mission service passes the run's own folder -- a slot's copy, or since 0.762 the conversation's copy on the
+    // cloud computer -- as `ownFolder` on both paths.
     const service = readFileSync(fileURLToPath(new URL('./codex-mission.ts', import.meta.url)), 'utf8')
-    expect(service.match(/\.\.\.\(slot\?\.cwd === undefined \? \{\} : \{ ownFolder: slot\.cwd \}\)/g)).toHaveLength(2)
+    expect(service).toMatch(/const ownFolder = cloudDir \?\? slot\?\.cwd/)
+    expect(service.match(/\.\.\.\(ownFolder === undefined \? \{\} : \{ ownFolder \}\)/g)).toHaveLength(2)
     // And the brief reads it as standing apart (index.ts).
     const host = readFileSync(fileURLToPath(new URL('./index.ts', import.meta.url)), 'utf8')
     expect(host).toMatch(/const standsApart = peer\?\.cwd !== undefined \|\| conversation\?\.ownFolder !== undefined/)
