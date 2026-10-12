@@ -11,6 +11,14 @@ Settings shows this file as What's new. An entry may group its changes under
 about when they arrive on it carries `<!-- big -->` on the line under its
 heading: the home screen then shows it once, as a splash.
 
+## 0.758.0 - 2026-10-12
+
+### Improved
+
+- **A turn that goes quiet says so.** When a teammate's turn has said nothing for five minutes, its line says "no word for 6 min", with Stop beside it. A command that takes a while, like a test suite, still shows what it's running, without the note.
+- **Since you were away says what each run came to.** Each row on Home now has a second line: the first line of what the run answered, or why it failed. A routine that ran overnight tells you what it did before you open it.
+- **Scout tells you about a pull request that's ready and waiting, and about new issues.** A pull request of yours that passes its checks, has nothing asked of it and has waited three days gets one card: merge it, or close it. Issues opened this week on the folder's repository get a card each, three at most per look.
+
 ## 0.757.0 - 2026-10-12
 
 ### Fixed
