@@ -73,6 +73,7 @@ export const LEFT_OUT: Readonly<Record<string, string>> = {
   'locust-mcp.json': 'whether other AI apps can use Locust on this machine: enable again after a restore',
   'voice-call-mcp': 'a voice call\'s own token for handing work to teammates: minted again for every call (0.739)',
   'voice-call.json': 'the voice Talk speaks in: a preference, picked again in a moment after a restore (0.745)',
+  'voice-previews': 'the greeting each voice gave the first time it was played: made again by playing it (0.751)',
   'claude-app.json': 'when Locust last changed the Claude app\'s settings on this machine, to say whether Claude needs a restart (0.741)',
   'own-models.json': 'your own model keys: Windows locks them to this account, so add them again after a restore',
   'voice-settings.json': 'your voice API key and consent: Windows locks the key to this account, so choose voice typing again after a restore',

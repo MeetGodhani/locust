@@ -143,6 +143,10 @@ describe('your connectors in the call', () => {
     expect(fields[0]).toEqual({ name: 'quantity', value: '1' })
     expect(fields).toHaveLength(8)
     expect(Math.max(...fields.map((field) => field.value.length))).toBe(600)
+    // ChatGPT's apps name a tool by its app, as Colin's account lists them (0.750): the card says the app.
+    expect(voiceCallAsk({ ...asked, message: 'Allow the codex_apps MCP server to run tool "gmail.send_email"?' })?.what).toBe('Gmail: send email')
+    expect(voiceCallAsk({ ...asked, message: 'Allow the codex_apps MCP server to run tool "google_calendar.create_event"?' })?.what).toBe('Google calendar: create event')
+    expect(voiceCallAsk({ ...asked, serverName: 'probe', message: 'Allow the probe MCP server to run tool "notes.send"?' })?.what).toBe('probe: notes.send')
     expect(voiceCallAsk({ ...asked, mode: 'url' })).toBeUndefined()
     expect(voiceCallAsk({ ...asked, _meta: {} })).toBeUndefined()
     expect(voiceCallAsk('nothing')).toBeUndefined()

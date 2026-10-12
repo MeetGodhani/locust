@@ -109,6 +109,14 @@ Add-ons your computer runs as programs, plugins and hooks stay switched off for
 that thread. Nothing is sent before you press Talk, and End, leaving the
 conversation, or closing Locust ends it.
 
+**Hearing a voice (0.751).** Hear it, beside a voice picker, plays that voice
+saying hello. The first time for each voice it is a call like Talk's, a few
+seconds long, with nothing of yours in it: no microphone (the window sends a
+"Hello?" made by Windows' own speech on this computer), no folder tools, no
+connectors and no add-ons. The greeting that comes back is kept on this
+computer, in Locust's own folder, and every play after that is the kept one,
+sending nothing.
+
 **A web page in the preview.** A page a teammate made runs inside Locust. It may
 load libraries, stylesheets and fonts -- GET and HEAD over https only -- from
 `cdnjs.cloudflare.com`, `cdn.jsdelivr.net`, `unpkg.com`, `esm.sh`,

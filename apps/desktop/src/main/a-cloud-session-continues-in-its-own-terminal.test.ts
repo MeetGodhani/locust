@@ -85,4 +85,5 @@ it('Real git makes a fresh terminal checkout while the original folder keeps its
   expect(await readFile(join(where, 'cart.txt'), 'utf8')).toBe('committed')
   expect(await readFile(join(root, 'cart.txt'), 'utf8')).toBe('uncommitted')
   expect(git('worktree', 'list')).toContain('locust-cloud-abcdef-here')
-})
+  // Real git, several commands: 5.2 s on GitHub's Windows runner for 0.750, past the 5 s default (fine here).
+}, 30_000)

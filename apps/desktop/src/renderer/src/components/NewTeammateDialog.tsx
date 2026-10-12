@@ -22,7 +22,8 @@ import { branchNameFor } from '../../../shared/worktree-name.js'
 import { dollars, isMonthlyLimit } from '../../../shared/spend.js'
 import type { Spend } from '../../../shared/spend.js'
 import { agentNamed } from '../../../shared/runtimes.js'
-import { CHATGPT_VOICES, voiceName } from '../../../shared/voice-call.js'
+import { CHATGPT_VOICES, isChatGptVoice, voiceName } from '../../../shared/voice-call.js'
+import { VoicePlay } from './VoicePlay.js'
 
 /** What the dialog hands back. A limit is `null` when an edit removes one. */
 export interface TeammateDraft {
@@ -879,10 +880,14 @@ export function NewTeammateDialog({
 
           <label className="lc-field">
             <span className="lc-fieldlabel lc-mono">Voice</span>
-            <select className="lc-input" aria-label="Voice for this teammate" value={voice} onChange={(event) => setVoice(event.target.value)}>
-              <option value="">Talk’s own voice, from Settings</option>
-              {CHATGPT_VOICES.map((entry) => <option key={entry.id} value={entry.id}>{voiceName(entry.id)} — {entry.about}</option>)}
-            </select>
+            <span className="lc-voicepick">
+              <select className="lc-input" aria-label="Voice for this teammate" value={voice} onChange={(event) => setVoice(event.target.value)}>
+                <option value="">Talk’s own voice, from Settings</option>
+                {CHATGPT_VOICES.map((entry) => <option key={entry.id} value={entry.id}>{voiceName(entry.id)} — {entry.about}</option>)}
+              </select>
+              {/* Hear it before choosing it (0.751). */}
+              <VoicePlay voice={isChatGptVoice(voice) ? voice : undefined} />
+            </span>
             <span className="lc-field__hint">
               {`How ${trimmed.length === 0 ? 'this teammate' : trimmed} sounds when you press Talk in ${trimmed.length === 0 ? 'its' : `${trimmed}’s`} conversation. ChatGPT’s voices, on your ChatGPT plan; the work stays on its own AI agent.`}
             </span>

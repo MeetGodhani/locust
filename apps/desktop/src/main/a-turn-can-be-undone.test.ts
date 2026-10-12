@@ -39,7 +39,8 @@ const turn = async (workspace: string) => {
   await rm(join(workspace, 'gone.md'))
 }
 
-describe('a turn, undone', () => {
+// Real files and git under each test: 5.0-5.4 s on GitHub's Windows runner for 0.750, past the 5 s default.
+describe('a turn, undone', { timeout: 30_000 }, () => {
   it('names what the turn changed, and nothing git ignores', async () => {
     const { workspace, checkpoints } = await setUp()
     const before = await checkpoints.take(workspace)
@@ -93,7 +94,7 @@ describe('a turn, undone', () => {
   })
 })
 
-describe("a turn's record", () => {
+describe("a turn's record", { timeout: 30_000 }, () => {
   it('is ready with its count, then undone once, and says what it did', async () => {
     const { workspace, root, checkpoints } = await setUp()
     const records = createTurnRecords(join(root, 'turns.json'))

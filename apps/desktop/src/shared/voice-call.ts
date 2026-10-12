@@ -24,6 +24,11 @@ export const VOICE_CALL_ANSWER = 'voice-call:answer'
 /** Which voice a call speaks in (0.745): read, and set. */
 export const VOICE_CALL_VOICES = 'voice-call:voices'
 export const VOICE_CALL_SET_VOICE = 'voice-call:set-voice'
+/** Hearing a voice before choosing it (0.751): a short call of its own, and the greeting it gave, kept. */
+export const VOICE_CALL_PREVIEW = 'voice-call:preview'
+export const VOICE_PREVIEW_SAVED = 'voice-preview:saved'
+export const VOICE_PREVIEW_SAVE = 'voice-preview:save'
+export const VOICE_PREVIEW_TRIGGER = 'voice-preview:trigger'
 
 /*
  * CHATGPT'S OWN VOICES (0.745). Colin, 2026-10-11, holding ChatGPT's "Choose your voice" (Sol, "Savvy and
@@ -118,6 +123,34 @@ export interface VoiceCallApi {
   voice(): Promise<ChatGptVoice>
   setVoice(voice: ChatGptVoice): Promise<ChatGptVoice>
   onEvent(listener: (event: VoiceCallEvent) => void): () => void
+  /** A short call with only this voice, to hear it greet you (0.751); ended with `stop`. */
+  preview?(offer: string, voice: ChatGptVoice): Promise<VoiceCallStartResult>
+  /** The greeting a voice gave before, kept so it plays at once; undefined when there is none yet. */
+  previewSaved?(voice: ChatGptVoice): Promise<Uint8Array | undefined>
+  previewSave?(voice: ChatGptVoice, audio: Uint8Array): Promise<boolean>
+  /** A spoken "Hello?" made by Windows' own speech, for the voice to answer: v3 speaks only after a spoken turn. */
+  previewTrigger?(): Promise<Uint8Array | undefined>
+}
+
+/*
+ * HEARING A VOICE BEFORE CHOOSING IT (0.751). Canvas board 4, "Each teammate has a voice": "Press a voice's play
+ * button to hear it." ChatGPT's own picker plays a sample; Codex has none to give, and its v3 voice speaks only after
+ * a SPOKEN turn -- measured 2026-10-12 on Codex 0.162.1: `appendText`, `appendSpeech` (with client-managed handoffs
+ * too) and the start's `prompt` only append context, and `response.create` on the data channel is refused ("requires
+ * a session with Responses delegation"). A spoken "Hello?" played into a silent call works: Sol answered "Hello, I'm
+ * Sol, it's lovely to meet you" about three seconds after it. So the first play is a short call on the person's
+ * plan, and the greeting is kept; every play after that is the kept one.
+ */
+export function voicePreviewRules(voice: ChatGptVoice): string {
+  const name = voiceName(voice)
+  return `This is a short preview of how your voice sounds, for someone choosing a voice in Locust. Your voice is called ${name}. Whatever you hear, answer with one warm sentence of greeting that says your name is ${name}, and nothing else. Do not ask a question.`
+}
+
+/** A kept greeting is a WebM recording of a few seconds, from this window's own recorder. */
+export const VOICE_PREVIEW_MAX_BYTES = 1_500_000
+export function isVoicePreviewAudio(value: unknown): value is Uint8Array {
+  return value instanceof Uint8Array && value.byteLength >= 1_000 && value.byteLength <= VOICE_PREVIEW_MAX_BYTES
+    && value[0] === 0x1a && value[1] === 0x45 && value[2] === 0xdf && value[3] === 0xa3
 }
 
 /** How long a connector's question waits for the person before it is a Deny. */
@@ -142,7 +175,12 @@ export function voiceCallAsk(params: unknown): VoiceCallAsked | undefined {
   if (meta.codex_approval_kind !== 'mcp_tool_call' || p.mode !== 'form' || typeof p.serverName !== 'string') return undefined
   const tool = typeof p.message === 'string' ? /run tool "([^"]{1,120})"/.exec(p.message)?.[1] : undefined
   const words = (value: string): string => value.replace(/[_-]+/g, ' ').trim()
-  const what = `${voiceCallServerName(p.serverName)}: ${tool === undefined ? 'a tool' : words(tool)}`
+  // ChatGPT's own apps name their tools by app (0.750, read from Colin's account: `gmail.send_email`, 197 of them):
+  // the app is what a person knows, so "Gmail: send email" rather than "ChatGPT: gmail.send email".
+  const app = p.serverName === 'codex_apps' && tool !== undefined ? /^([a-z0-9_-]{1,40})\.(.+)$/i.exec(tool) : null
+  const what = app !== null
+    ? `${words(app[1]!).charAt(0).toUpperCase()}${words(app[1]!).slice(1)}: ${words(app[2]!)}`
+    : `${voiceCallServerName(p.serverName)}: ${tool === undefined ? 'a tool' : words(tool)}`
   const shown = Array.isArray(meta.tool_params_display) ? meta.tool_params_display : []
   const fields = shown
     .map((entry): VoiceCallAskField | undefined => {

@@ -10,9 +10,11 @@ import {
   voiceCallAsk,
   voiceCallInstructions,
   voiceCallVoiceRules,
+  voicePreviewRules,
   voiceCallRole,
   voiceCallSaid,
   voiceThreadConfig,
+  type ChatGptVoice,
   type VoiceAddOn,
   type VoiceCallAsked,
   type VoiceCallAvailability,
@@ -72,7 +74,8 @@ export interface VoiceCallDeps {
 
 export interface VoiceCalls {
   available(): Promise<VoiceCallAvailability>
-  start(offer: string, target?: VoiceCallTarget): Promise<VoiceCallStartResult>
+  /** With `preview`, a short call with only that voice, to hear it before choosing it (0.751): nothing else is on. */
+  start(offer: string, target?: VoiceCallTarget, preview?: ChatGptVoice): Promise<VoiceCallStartResult>
   stop(): Promise<void>
   /** The person's Allow or Deny for one question in the strip; an id no call is waiting on changes nothing. */
   answer(id: unknown, allowed: unknown): void
@@ -98,6 +101,8 @@ interface Live {
 interface Ticket {
   cancelled: boolean
   call?: Live
+  /** A voice heard before it is chosen (0.751): one preview may take another's place, never a call's. */
+  preview?: boolean
 }
 
 const ANSWER_TIMEOUT_MS = 20_000
@@ -230,17 +235,19 @@ export function createVoiceCalls(deps: VoiceCallDeps): VoiceCalls {
         : { available: true }
     },
 
-    async start(offer, target) {
+    async start(offer, target, preview) {
+      // A voice heard before it is chosen never ends a call that is on (0.751).
+      if (preview !== undefined && current !== undefined && current.preview !== true) return { ok: false, message: 'A call is on. End it to hear a voice.' }
       // The ticket is taken before the first await, so a second press or an End can always see this start.
       const previous = current
-      const ticket: Ticket = { cancelled: false }
+      const ticket: Ticket = { cancelled: false, ...(preview === undefined ? {} : { preview: true }) }
       current = ticket
       if (previous !== undefined) await cancel(previous)
       if (ticket.cancelled) return { ok: false, message: ENDED }
       const folder = deps.folder()
       if (folder === undefined) { if (current === ticket) current = undefined; return { ok: false, message: 'Pick a folder first.' } }
       // The teammate the call is with (0.746); one that cannot be found makes an ordinary call, never a refused one.
-      const teammate = target === undefined ? undefined : await deps.teammate?.(target).catch(() => undefined)
+      const teammate = target === undefined || preview !== undefined ? undefined : await deps.teammate?.(target).catch(() => undefined)
       if (ticket.cancelled) return { ok: false, message: ENDED }
       const codex = await deps.codex().catch(() => undefined)
       if (ticket.cancelled) return { ok: false, message: ENDED }
@@ -264,7 +271,7 @@ export function createVoiceCalls(deps: VoiceCallDeps): VoiceCalls {
             if (p.serverName === VOICE_CALL_ADD_ON) {
               return call.addOn === true && meta.codex_approval_kind === 'mcp_tool_call' ? { action: 'accept', content: {} } : { action: 'decline' }
             }
-            const asked = deps.connectors === true ? voiceCallAsk(p) : undefined
+            const asked = deps.connectors === true && preview === undefined ? voiceCallAsk(p) : undefined
             if (asked === undefined || call.ended) return { action: 'decline' }
             return (await ask(call, asked)) ? { action: 'accept', content: {} } : { action: 'decline' }
           }
@@ -298,11 +305,12 @@ export function createVoiceCalls(deps: VoiceCallDeps): VoiceCalls {
         // The settings alone, which start nothing (#1); unreadable settings place no call (#2).
         const read = await client.request('config/read', { cwd: folder }).catch(() => undefined)
         if (!going()) return refuse(ENDED)
-        // Locust's own add-on for the hand-offs; a call without it still talks.
-        const addOn = deps.addOn === undefined ? undefined : await deps.addOn.open().catch(() => undefined)
+        // Locust's own add-on for the hand-offs; a call without it still talks. A preview has nothing to hand over.
+        const addOn = deps.addOn === undefined || preview !== undefined ? undefined : await deps.addOn.open().catch(() => undefined)
         if (addOn !== undefined) call.addOn = true
         if (!going()) return refuse(ENDED)
-        const threadConfig = voiceThreadConfig(isRecord(read) ? read.config : undefined, addOn, { connectors: deps.connectors === true, ...(deps.testServer === undefined ? {} : { testServer: deps.testServer }) })
+        // A preview is the voice alone: no connectors, no add-on of the person's, nothing to run (0.751).
+        const threadConfig = voiceThreadConfig(isRecord(read) ? read.config : undefined, addOn, preview !== undefined ? {} : { connectors: deps.connectors === true, ...(deps.testServer === undefined ? {} : { testServer: deps.testServer }) })
         if (!threadConfig.ok) return refuse(threadConfig.message)
         const thread = await client.request('thread/start', {
           cwd: folder,
@@ -316,7 +324,7 @@ export function createVoiceCalls(deps: VoiceCallDeps): VoiceCalls {
         if (threadId === undefined) return refuse('Codex did not start the call’s conversation.')
         call.threadId = threadId
         // The voice chosen in Settings; one that cannot be read is Codex's own, never a refused call.
-        const voice = teammate?.voice ?? await deps.voice?.().catch(() => undefined)
+        const voice = preview ?? teammate?.voice ?? await deps.voice?.().catch(() => undefined)
         if (!going()) return refuse(ENDED)
         // With a teammate and Locust's add-on, the add-on may continue that teammate's conversation, this call only.
         if (teammate !== undefined && addOn !== undefined) {
@@ -330,16 +338,22 @@ export function createVoiceCalls(deps: VoiceCallDeps): VoiceCalls {
         })
         // Settled whichever way the start goes, so a failure before the answer is never unhandled.
         answered.catch(() => undefined)
-        await client.request('thread/realtime/start', {
-          threadId,
-          outputModality: 'audio',
-          transport: { type: 'webrtc', sdp: offer },
-          version: 'v3',
-          realtimeStartInstructions: voiceCallInstructions(basename(folder) || folder, addOn !== undefined, deps.connectors === true, teammate),
-          // The voice's own rules (0.748): the instructions above reach the Codex model behind it, not the voice.
-          initialItems: [{ role: 'developer', text: voiceCallVoiceRules(teammate) }],
-          ...(voice === undefined ? {} : { voice })
-        })
+        await client.request('thread/realtime/start', preview !== undefined
+          ? {
+              // The voice alone, told only to greet: nothing of the folder or of Codex's own start goes with it.
+              threadId, outputModality: 'audio', transport: { type: 'webrtc', sdp: offer }, version: 'v3', includeStartupContext: false,
+              initialItems: [{ role: 'developer', text: voicePreviewRules(preview) }], voice: preview
+            }
+          : {
+              threadId,
+              outputModality: 'audio',
+              transport: { type: 'webrtc', sdp: offer },
+              version: 'v3',
+              realtimeStartInstructions: voiceCallInstructions(basename(folder) || folder, addOn !== undefined, deps.connectors === true, teammate),
+              // The voice's own rules (0.748): the instructions above reach the Codex model behind it, not the voice.
+              initialItems: [{ role: 'developer', text: voiceCallVoiceRules(teammate) }],
+              ...(voice === undefined ? {} : { voice })
+            })
         const answer = await answered
         call.answer = undefined
         call.failed = undefined

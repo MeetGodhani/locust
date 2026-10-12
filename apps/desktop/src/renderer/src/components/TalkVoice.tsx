@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 
 import { CHATGPT_VOICES, isChatGptVoice, voiceName, type ChatGptVoice, type VoiceCallApi } from '../../../shared/voice-call.js'
+import { VoicePlay } from './VoicePlay.js'
 
 /**
  * TALK'S VOICE (0.745): the nine ChatGPT's own app offers, under the names and words it gives them. Colin,
@@ -24,7 +25,7 @@ export function TalkVoice({ api = typeof window === 'undefined' ? undefined : wi
       <p className="lc-settings__lede">The voice ChatGPT speaks in when you press Talk. The next call uses it; a call already on keeps its voice.</p>
       {message && <p className="lc-settings__note" role="status">{message}</p>}
     </div>
-    <select
+    <span className="lc-voicepick"><select
       className="lc-control"
       aria-label="Talk’s voice"
       disabled={voice === undefined}
@@ -38,5 +39,7 @@ export function TalkVoice({ api = typeof window === 'undefined' ? undefined : wi
     >
       {CHATGPT_VOICES.map((entry) => <option key={entry.id} value={entry.id}>{voiceName(entry.id)} — {entry.about}</option>)}
     </select>
+    {/* Hear it before choosing it (0.751). */}
+    <VoicePlay voice={voice} api={api} /></span>
   </div></section>
 }

@@ -10,7 +10,7 @@ import { app, BrowserWindow, crashReporter, dialog, ipcMain, Menu, nativeImage, 
 import { createVoiceHost } from './voice-host.js'
 import { voicePermission } from './voice-permission.js'
 import { VOICE_READY, VOICE_DOWNLOAD, VOICE_TRANSCRIBE, VOICE_CANCEL, VOICE_PROGRESS, VOICE_SETTINGS_READ, VOICE_SETTINGS_SAVE, VOICE_OPENAI_CONSENT } from '../shared/voice.js'
-import { DEFAULT_CHATGPT_VOICE, VOICE_CALL_ANSWER, VOICE_CALL_AVAILABLE, VOICE_CALL_EVENT, VOICE_CALL_SET_VOICE, VOICE_CALL_START, VOICE_CALL_STOP, VOICE_CALL_TOOLS, VOICE_CALL_VOICES, isChatGptVoice, isVoiceCallOffer, isVoiceCallTarget, type ChatGptVoice, type VoiceAddOn, type VoiceCallTarget } from '../shared/voice-call.js'
+import { DEFAULT_CHATGPT_VOICE, VOICE_CALL_ANSWER, VOICE_CALL_AVAILABLE, VOICE_CALL_EVENT, VOICE_CALL_PREVIEW, VOICE_CALL_SET_VOICE, VOICE_CALL_START, VOICE_CALL_STOP, VOICE_CALL_TOOLS, VOICE_CALL_VOICES, VOICE_PREVIEW_SAVE, VOICE_PREVIEW_SAVED, VOICE_PREVIEW_TRIGGER, isChatGptVoice, isVoiceCallOffer, isVoiceCallTarget, type ChatGptVoice, type VoiceAddOn, type VoiceCallTarget } from '../shared/voice-call.js'
 import { createVoiceCalls } from './voice-call.js'
 import { createCallLog } from './call-log.js'
 import { CALLS_LIST, CALLS_SAVE } from '../shared/calls.js'
@@ -81,6 +81,7 @@ import { pathToFileURL } from 'node:url'
 import { macPath } from './mac-path.js'
 import { homedir, release } from 'node:os'
 import { execFile } from 'node:child_process'
+import { createVoicePreviews, speakHelloCommand } from './voice-preview.js'
 import { setTimeout as delay } from 'node:timers/promises'
 import { MAX_PROMPT_LENGTH, createCodexMissionService, resumableThreadOf, runtimeThreadIdOf } from './codex-mission.js'
 import { chosenLeaveOut, howTurnEnded } from './handoff.js'
@@ -3793,19 +3794,40 @@ if (!ownsSingleInstanceLock) {
     ipcMain.handle(VOICE_CALL_AVAILABLE, (event) => fromVoiceWindow(event) && process.platform === 'win32'
       ? voiceCalls.available()
       : { available: false, why: 'Voice calls are on Windows for now.' })
+    const callWindow = (event: Electron.IpcMainInvokeEvent): void => {
+      if (voiceCallWindow === event.sender) return
+      voiceCallWindow = event.sender
+      // A window that goes ends its call (once per window, not once per call) -- and so does one closed to
+      // the tray, which is hidden rather than destroyed: the microphone and the voice went on behind it
+      // (Sol's review of 0.737, #7).
+      event.sender.once('destroyed', () => { void voiceCalls.stop() })
+      BrowserWindow.fromWebContents(event.sender)?.on('hide', () => { void voiceCalls.stop() })
+    }
     ipcMain.handle(VOICE_CALL_START, (event, offer: unknown, target: unknown) => {
       if (!fromVoiceWindow(event) || process.platform !== 'win32') return voiceCallRefused
       if (!isVoiceCallOffer(offer)) return voiceCallRefused
-      if (voiceCallWindow !== event.sender) {
-        voiceCallWindow = event.sender
-        // A window that goes ends its call (once per window, not once per call) -- and so does one closed to
-        // the tray, which is hidden rather than destroyed: the microphone and the voice went on behind it
-        // (Sol's review of 0.737, #7).
-        event.sender.once('destroyed', () => { void voiceCalls.stop() })
-        BrowserWindow.fromWebContents(event.sender)?.on('hide', () => { void voiceCalls.stop() })
-      }
+      callWindow(event)
       return voiceCalls.start(offer, isVoiceCallTarget(target) ? target : undefined)
     })
+    /*
+     * HEARING A VOICE BEFORE CHOOSING IT (0.751): the first play is a short call with that voice alone, answering a
+     * spoken "Hello?" Windows' own speech makes once; the greeting the window records is kept, and plays after that.
+     */
+    const voicePreviews = createVoicePreviews({
+      root: join(app.getPath('userData'), 'voice-previews'),
+      speak: (wavPath) => new Promise<void>((resolve, reject) => {
+        execFile('powershell.exe', [...speakHelloCommand(wavPath)], { windowsHide: true, timeout: 20_000 }, (error) => { if (error) reject(error); else resolve() })
+      })
+    })
+    ipcMain.handle(VOICE_CALL_PREVIEW, (event, offer: unknown, voice: unknown) => {
+      if (!fromVoiceWindow(event) || process.platform !== 'win32') return voiceCallRefused
+      if (!isVoiceCallOffer(offer) || !isChatGptVoice(voice)) return voiceCallRefused
+      callWindow(event)
+      return voiceCalls.start(offer, undefined, voice)
+    })
+    ipcMain.handle(VOICE_PREVIEW_SAVED, (event, voice: unknown) => fromOwnWindow(event) ? voicePreviews.saved(voice) : undefined)
+    ipcMain.handle(VOICE_PREVIEW_SAVE, (event, voice: unknown, audio: unknown) => fromOwnWindow(event) ? voicePreviews.save(voice, audio) : false)
+    ipcMain.handle(VOICE_PREVIEW_TRIGGER, (event) => fromVoiceWindow(event) && process.platform === 'win32' ? voicePreviews.trigger() : undefined)
     ipcMain.handle(VOICE_CALL_STOP, (event) => fromVoiceWindow(event) ? voiceCalls.stop() : undefined)
     // What was said on each call with a teammate, kept with its conversation (0.747).
     const callLog = createCallLog(join(app.getPath('userData'), 'calls.json'))

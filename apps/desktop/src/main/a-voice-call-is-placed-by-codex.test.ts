@@ -1,7 +1,7 @@
 import type { AppServerRunProcess as AppServerProcess } from '@teammate/runtime-adapters'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
-import type { VoiceAddOn, VoiceCallEvent } from '../shared/voice-call.js'
+import { voicePreviewRules, type VoiceAddOn, type VoiceCallEvent } from '../shared/voice-call.js'
 import { createVoiceCalls, type VoiceCallDeps } from './voice-call.js'
 
 /*
@@ -453,5 +453,43 @@ describe('a voice call with a teammate', () => {
     expect(String(by(fake, 'thread/realtime/start').realtimeStartInstructions)).not.toContain('You are')
     await voice.stop()
     expect(targets.filter((target) => target !== undefined)).toEqual([])
+  })
+})
+
+/*
+ * HEARING A VOICE BEFORE CHOOSING IT (0.751): a preview is a call with that voice alone -- no add-on, no connector,
+ * no teammate and nothing of Codex's own start -- told only to greet. It never ends a call that is on.
+ */
+describe('a voice heard before it is chosen', () => {
+  it('is a call with that voice alone, told only to greet', async () => {
+    const fake = fakeCodex()
+    const open = vi.fn(async (): Promise<VoiceAddOn | undefined> => ({ command: 'locust.exe', args: ['bridge.mjs'], env: {} }))
+    const onTarget = vi.fn()
+    const teammate = vi.fn(async () => ({ teammateId: 'tm_ada', name: 'Ada', runtime: 'Claude Code', voice: 'ember' }))
+    const { voice } = calls(() => fake, { connectors: true, addOn: { open, close: async () => undefined }, onTarget, teammate })
+    expect(await voice.start('v=0\r\noffer', { teammateId: 'tm_ada' }, 'sol')).toEqual({ ok: true, answer: 'v=0\r\nanswer' })
+    expect(open).not.toHaveBeenCalled()
+    expect(teammate).not.toHaveBeenCalled()
+    expect(onTarget).not.toHaveBeenCalled()
+    expect(by(fake, 'thread/start').config).toEqual({ 'features.apps': false, 'features.plugins': false, 'features.hooks': false, notify: [], ...NO_TOOLS, 'mcp_servers.robinhood.enabled': false })
+    const started = by(fake, 'thread/realtime/start')
+    expect(started).toMatchObject({ outputModality: 'audio', version: 'v3', voice: 'sol', includeStartupContext: false })
+    expect(started).not.toHaveProperty('realtimeStartInstructions')
+    expect(started.initialItems).toEqual([{ role: 'developer', text: voicePreviewRules('sol') }])
+    expect(voicePreviewRules('sol')).toContain('Your voice is called Sol')
+    await voice.stop()
+  })
+
+  it('never ends a call that is on, and one preview may take the place of another', async () => {
+    const { voice, spawned } = calls(() => fakeCodex())
+    expect((await voice.start('v=0\r\noffer')).ok).toBe(true)
+    expect(await voice.start('v=0\r\noffer', undefined, 'sol')).toEqual({ ok: false, message: 'A call is on. End it to hear a voice.' })
+    expect(spawned).toHaveLength(1)
+    await voice.stop()
+    expect((await voice.start('v=0\r\noffer', undefined, 'sol')).ok).toBe(true)
+    expect((await voice.start('v=0\r\noffer', undefined, 'cove')).ok).toBe(true)
+    expect(spawned).toHaveLength(3)
+    expect(spawned[1]!.killed()).toBe(true)
+    await voice.stop()
   })
 })

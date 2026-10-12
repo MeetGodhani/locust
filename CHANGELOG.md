@@ -11,6 +11,16 @@ Settings shows this file as What's new. An entry may group its changes under
 about when they arrive on it carries `<!-- big -->` on the line under its
 heading: the home screen then shows it once, as a splash.
 
+## 0.751.0 - 2026-10-12
+
+### New
+
+- **Hear a voice before you pick it.** Hear it, beside Talk's voice in Settings and beside a teammate's voice, plays that voice saying hello. The first play takes a few seconds on your ChatGPT plan, and Locust keeps the greeting, so every play after that is instant.
+
+### Improved
+
+- **A ChatGPT app's question names the app.** On a call, a question from one of your ChatGPT apps reads "Gmail: send email" instead of "ChatGPT: gmail.send email".
+
 ## 0.750.0 - 2026-10-12
 
 ### Improved

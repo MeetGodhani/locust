@@ -40,7 +40,7 @@ export interface VoiceCallTimings {
 
 const TIMINGS: VoiceCallTimings = { gatherMs: 3_000, connectMs: 15_000, reconnectMs: 8_000 }
 
-function gathered(connection: RTCPeerConnection, ms: number): Promise<void> {
+export function gathered(connection: RTCPeerConnection, ms: number): Promise<void> {
   return new Promise((resolve) => {
     if (connection.iceGatheringState === 'complete') return resolve()
     const done = (): void => {
