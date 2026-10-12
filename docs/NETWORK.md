@@ -124,8 +124,9 @@ failed. That look sends nothing anywhere but GitHub. Only when it finds
 something new does Scout's model read it: one turn, in Ask mode, on the agent
 and model Scout is set to -- Space Bunny through OpenCode when Locust adds it,
 a free model whose provider may keep what it is sent -- carrying the new facts
-(pull request titles and numbers, check names, a waiting card's one-line
-summary, a failed turn's error and what it was asked) and your teammates'
+(pull request titles and numbers, check names, which teammate waits on you
+and for how long -- never what it waits to run -- a failed turn's error and
+what it was asked) and your teammates'
 names and roles. Change Scout's model like any teammate's, and its looks go
 there instead. Scout sends no message, merges, pushes or changes anything:
 every action on its cards is your press.

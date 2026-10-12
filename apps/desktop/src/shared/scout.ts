@@ -250,6 +250,11 @@ export interface WaitingCard {
   readonly requestedAt: string
 }
 
+/*
+ * Who waits, and how long -- never what for. A card's summary can be the exact command it would run, and a command can
+ * carry a secret: it stays on the card in the conversation, as it stays out of a notification (attention.ts), and
+ * never goes to Scout's model.
+ */
 export function waitingFacts(cards: readonly WaitingCard[], now: Date, waitMs = SCOUT_WAITING_MS): readonly ScoutFact[] {
   return cards.flatMap((card): ScoutFact[] => {
     const since = Date.parse(card.requestedAt)
@@ -259,7 +264,6 @@ export function waitingFacts(cards: readonly WaitingCard[], now: Date, waitMs = 
       key: `waiting:${card.approvalId}`,
       urgency: 'now',
       said: `${card.name ?? 'A teammate'} has waited ${String(minutes)} minutes for your OK.`,
-      detail: clip(card.summary, 300),
       chips: [{ text: 'waiting on you', tone: 'amber' }],
       open: { kind: 'conversation', missionId: card.missionId, label: 'Open it' },
       ...(card.teammateId === undefined ? {} : { teammateId: card.teammateId })

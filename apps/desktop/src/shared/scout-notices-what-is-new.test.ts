@@ -84,7 +84,10 @@ describe('teammates', () => {
   it('waiting on the person is news after ten minutes, and needs them now', () => {
     const card = { approvalId: 'ap_1', missionId: 'mis_1', teammateId: 'tm_atlas', name: 'Atlas', summary: 'Run pnpm test', requestedAt: '2026-10-12T05:00:00.000Z' }
     expect(waitingFacts([card], new Date('2026-10-12T05:09:00.000Z'))).toEqual([])
-    expect(waitingFacts([card], new Date('2026-10-12T05:25:00.000Z'))).toEqual([expect.objectContaining({ key: 'waiting:ap_1', urgency: 'now', said: 'Atlas has waited 25 minutes for your OK.', detail: 'Run pnpm test', open: { kind: 'conversation', missionId: 'mis_1', label: 'Open it' } })])
+    const [waiting] = waitingFacts([card], new Date('2026-10-12T05:25:00.000Z'))
+    expect(waiting).toMatchObject({ key: 'waiting:ap_1', urgency: 'now', said: 'Atlas has waited 25 minutes for your OK.', open: { kind: 'conversation', missionId: 'mis_1', label: 'Open it' } })
+    // What it waits to do can be a command with a secret in it: it never goes to Scout's model.
+    expect(JSON.stringify(waiting)).not.toContain('pnpm test')
   })
 
   it('a turn that failed says whose, and why in the runtime’s own words, with what was asked for the model', () => {
