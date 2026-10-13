@@ -11,6 +11,18 @@ Settings shows this file as What's new. An entry may group its changes under
 about when they arrive on it carries `<!-- big -->` on the line under its
 heading: the home screen then shows it once, as a splash.
 
+## 0.763.0 - 2026-10-12
+<!-- big -->
+
+### New
+
+- **Your own benchmark.** One run can be luck. Once a judge has scored a comparison, run it again, once or three times more, and see whether the scores hold. Each run asks the same models the same question, from the same commit when it changes files, and the same judge scores it on the same points. The runs go one after another and keep going with the window in the tray. Under the comparison, every run reads as one table, a row for each model: its score out of 100, the runs where it met every point, and its time and cost a task, with a chart of score against cost. One press sets a row's model as your teammate's own.
+
+### Fixed
+
+- **An OpenCode turn that never starts says so.** When another OpenCode on this computer had its storage busy, OpenCode could take a message and never begin on it, and the turn sat on "Starting" for good. After a minute with no sign of the model, Locust now asks OpenCode; if the message was dropped, the turn ends saying so, ready to send again.
+- **A cloud turn's edit says where it happened.** A file OpenCode rewrote on your cloud computer said "OpenCode did not report the change", right above the card that shows the change. It now says it changed on your cloud computer.
+
 ## 0.762.0 - 2026-10-12
 
 ### New
