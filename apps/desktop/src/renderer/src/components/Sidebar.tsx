@@ -233,6 +233,7 @@ export function Sidebar({
   onOpenBoard,
   cloudTasks,
   background,
+  benchmarks,
   onHome,
   compact = false
 }: {
@@ -351,6 +352,8 @@ export function Sidebar({
   readonly cloudTasks?: { readonly count: number; readonly onOpen: () => void }
   /** Background turns (W10): how many are still going, and the panel. */
   readonly background?: { readonly count: number; readonly onOpen: () => void }
+  /** Your benchmarks (0.764): comparisons run again, once there is one. */
+  readonly benchmarks?: { readonly count: number; readonly onOpen: () => void }
   /** Back to the home screen: nothing picked, nothing open. */
   readonly onHome: () => void
   /**
@@ -1130,6 +1133,16 @@ export function Sidebar({
             <Icon name="clock" size={14} />
             <span>In the background</span>
             <span className="lc-sidebar__count">{String(background.count)}</span>
+          </button>
+        </div>
+      )}
+      {/* Your benchmarks (0.764): only once a comparison has been run again -- an empty place is a nag. */}
+      {benchmarks !== undefined && (
+        <div className="lc-sidebar__nav lc-sidebar__places lc-sidebar__places--pinned">
+          <button type="button" onClick={() => { railClose(); benchmarks.onOpen() }} title="Benchmarks -- every comparison you ran again, and which model leads it">
+            <Icon name="target" size={14} />
+            <span>Benchmarks</span>
+            <span className="lc-sidebar__count">{String(benchmarks.count)}</span>
           </button>
         </div>
       )}

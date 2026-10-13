@@ -88,7 +88,7 @@ import { SkillsFromGitHub } from './SkillsFromGitHub.js'
 import { routineAwaitsReview } from '../../../shared/routine-recovery.js'
 import { SavedApprovalRules } from './SavedApprovalRules.js'
 
-export type Screen = 'workroom' | 'missions' | 'teammates' | 'settings' | 'rooms' | 'memory' | 'automations' | 'board'
+export type Screen = 'workroom' | 'missions' | 'teammates' | 'settings' | 'rooms' | 'memory' | 'automations' | 'board' | 'benchmarks'
 
 /**
  * THE header for a list screen. Exported since 2026-09-22 because Routines

@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import type { ReactElement } from 'react'
 
 import type { RerunProgress } from '../../../shared/compare.js'
@@ -35,6 +36,8 @@ export interface BenchmarkView {
   readonly onStop: () => void
   readonly onOpenRun: (compareId: string) => void
   readonly onUse?: (row: BenchmarkRow) => void
+  /** Opened for it -- from Benchmarks, or back from one of its runs (0.764): it is scrolled to, not left below the columns. */
+  readonly reveal?: boolean
 }
 
 const stepWords = (progress: RerunProgress): string =>
@@ -43,6 +46,11 @@ const stepWords = (progress: RerunProgress): string =>
 const sameStart = (base: string | undefined): string => (base === undefined ? '' : `, from commit ${base.slice(0, 7)}`)
 
 export function CompareBenchmark({ view }: { readonly view: BenchmarkView }): ReactElement {
+  const place = useRef<HTMLDivElement>(null)
+  // Once, as it opens: a person scrolling away from it afterwards is not pulled back.
+  useEffect(() => {
+    if (view.reveal === true) place.current?.scrollIntoView({ block: 'start' })
+  }, [])
   const running = view.progress !== undefined
   const reran = view.runs.length > 1
   const actions = view.refusal !== undefined ? (
@@ -64,7 +72,7 @@ export function CompareBenchmark({ view }: { readonly view: BenchmarkView }): Re
 
   if (!reran) {
     return (
-      <div className="lc-benchmark" aria-label="Your benchmark">
+      <div className="lc-benchmark" aria-label="Your benchmark" ref={place}>
         <span className="lc-compare__recordlabel lc-mono">YOUR BENCHMARK</span>
         <p className="lc-benchmark__lead">
           {`One run can be luck. Run this comparison again and see whether the scores hold: the same models, the same question${sameStart(view.base)}, scored by the same judge on the same points.`}
@@ -82,7 +90,7 @@ export function CompareBenchmark({ view }: { readonly view: BenchmarkView }): Re
   const scoredRuns = view.runs.filter((run) => run.state === 'scored').length
   const doneRuns = view.runs.filter((run) => run.done).length
   return (
-    <div className="lc-benchmark" aria-label="Your benchmark">
+    <div className="lc-benchmark" aria-label="Your benchmark" ref={place}>
       <div className="lc-benchmark__head">
         <span className="lc-compare__recordlabel lc-mono">{`YOUR BENCHMARK · ${String(view.runs.length)} RUNS`}</span>
         {actions}

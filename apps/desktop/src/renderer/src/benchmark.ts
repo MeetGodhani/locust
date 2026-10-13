@@ -117,6 +117,17 @@ export function benchmarkRows(runs: readonly BenchmarkRunInput[]): readonly Benc
   return rows.sort((left, right) => (right.score ?? -1) - (left.score ?? -1) || (left.spanMs ?? Infinity) - (right.spanMs ?? Infinity))
 }
 
+/**
+ * Who leads a benchmark (0.764, the Benchmarks screen): the best score, and every model at it, so a tie is said as a
+ * tie. Undefined until the judge has scored one.
+ */
+export function benchmarkLeader(rows: readonly BenchmarkRow[]): { readonly names: readonly string[]; readonly score: number } | undefined {
+  const scored = rows.filter((row) => row.score !== undefined)
+  if (scored.length === 0) return undefined
+  const score = Math.max(...scored.map((row) => row.score!))
+  return { names: scored.filter((row) => row.score === score).map((row) => row.name), score }
+}
+
 /** What a dollar figure there is for a row: its average, or nothing when its runtime does not price its runs. */
 const dollarsOf = (row: BenchmarkRow): number | undefined => (row.cost?.usd !== undefined ? row.cost.usd : undefined)
 

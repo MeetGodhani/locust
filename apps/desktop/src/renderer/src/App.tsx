@@ -76,6 +76,7 @@ import type { RoutineInput, RoutineValues } from '../../shared/routine-inputs.js
 import type { RoutineImportPreview, RoutineFlaggedPath, RoutineTemplateInfo } from '../../shared/ipc.js'
 import { RoutineTemplateDialog } from './components/RoutineTemplates.js'
 import { AutomationsScreen } from './components/AutomationsScreen.js'
+import { BenchmarksScreen, type BenchmarkEntry } from './components/BenchmarksScreen.js'
 import { TIDY_PROMPT } from '../../shared/memory-tidy.js'
 import { needsYou, needsYouLabel, waitingByTeammate } from './needsYou.js'
 import { withNote } from './diffNotes.js'
@@ -131,7 +132,7 @@ import type { CompareColumnView } from './components/CompareView.js'
 import { blindName, changesLine, compareMembership, compareRecord, compareNeedsCopy, compareRefusalOf, judgeMissionIds, judgePickOf, MAX_COMPARE_SLOTS, MIN_COMPARE_SLOTS, rerunMissionIds, rerunRefusalOf } from '../../shared/compare.js'
 import { criteriaLines, parseScorecard, scoreOf, withoutScorecard } from '../../shared/compare-score.js'
 import type { Scorecard } from '../../shared/compare-score.js'
-import type { CompareSlotId, PublicCompare, RerunProgress } from '../../shared/compare.js'
+import type { CompareRoute, CompareSlotId, PublicCompare, RerunProgress } from '../../shared/compare.js'
 import { benchmarkChart, benchmarkRows, type BenchmarkRow, type BenchmarkRunInput } from './benchmark.js'
 import type { BenchmarkView } from './components/CompareBenchmark.js'
 import { folderLabels } from '../../shared/folder-sections.js'
@@ -1820,6 +1821,14 @@ export default function App(): ReactElement {
    */
   const [compares, setCompares] = useState<readonly PublicCompare[]>([])
   const [comparingId, setComparingId] = useState<string>()
+  /** The comparison on screen was opened from Benchmarks (0.764): its Back goes there. */
+  const [backToBenchmarks, setBackToBenchmarks] = useState(false)
+  /** The comparison whose benchmark is scrolled to as it opens: opened from Benchmarks, or back from one of its runs. */
+  const [revealBenchmarkOf, setRevealBenchmarkOf] = useState<string>()
+  useEffect(() => {
+    if (comparingId === undefined) setBackToBenchmarks(false)
+    if (comparingId !== revealBenchmarkOf) setRevealBenchmarkOf(undefined)
+  }, [comparingId])
   const [compareOn, setCompareOn] = useState(false)
   /** The next comparison edits: each model changes its own copy (0.445). */
   const [compareChanges, setCompareChanges] = useState(false)
@@ -4689,6 +4698,41 @@ export default function App(): ReactElement {
       onOpenRun: (compareId: string) => setComparingId(compareId),
       ...(teammate === undefined ? {} : { onUse: (row: BenchmarkRow) => void useBenchmarkModel(teammate, row) })
     }
+  }
+
+  /** YOUR BENCHMARKS (0.764, BenchmarksScreen.tsx): every comparison run again, a row each. */
+  const listBenchmarks = (): readonly BenchmarkEntry[] => compares.flatMap((origin) => {
+    if (origin.rerunOf !== undefined || (origin.reruns ?? []).length === 0) return []
+    const view = benchmarkOf(origin)
+    if (view === undefined) return []
+    const nameOf = (route: CompareRoute): string => route.label ?? routeModelName(route.runtime as MissionRuntimeId, route.model, resolvedModels.get(`${route.runtime}:${route.model}`))
+    const runsOfIt = [origin, ...(origin.reruns ?? []).flatMap((id) => compares.filter((one) => one.compareId === id))]
+    const lastAt = runsOfIt.map((run) => run.createdAt).reduce((newest, at) => (Date.parse(at) > Date.parse(newest) ? at : newest))
+    const owner = origin.teammateId === undefined ? undefined : teammates.find((one) => one.teammateId === origin.teammateId)
+    return [{
+      compareId: origin.compareId,
+      question: origin.prompt,
+      ...(owner === undefined ? {} : { owner }),
+      models: origin.slots.map((slot) => nameOf(slot.route)),
+      runs: view.runs.length,
+      ...(origin.judge === undefined ? {} : { judgeName: nameOf(origin.judge.route) }),
+      lastAt,
+      rows: view.rows,
+      ...(view.progress === undefined ? {} : { progress: view.progress }),
+      changes: origin.changes === true
+    }]
+  })
+  /** A benchmark opened from its list: in its teammate's conversation, as the sidebar opens a comparison's row. */
+  const openBenchmark = (compareId: string): void => {
+    const origin = compares.find((one) => one.compareId === compareId)
+    if (origin === undefined) return
+    const kept = origin.kept === undefined ? undefined : origin.slots.find((slot) => slot.slot === origin.kept!.slot)
+    const missionId = kept?.missionIds.at(-1) ?? origin.slots.find((slot) => slot.missionIds.length > 0)?.missionIds[0]
+    if (missionId !== undefined) openMission(missionId)
+    else setScreen('workroom')
+    setComparingId(compareId)
+    setBackToBenchmarks(true)
+    setRevealBenchmarkOf(compareId)
   }
 
   /** The columns, from the live runs where they are going and the record where they are done. */
@@ -7955,6 +7999,8 @@ export default function App(): ReactElement {
           recentlyReceived: recentlyReceived.includes(missionOwner.teammateId)
         })
 
+  // Here, once every helper it reads is defined: computed above them it read one before its line had run.
+  const benchmarkEntries = listBenchmarks()
   /*
    * `has-inspector` is what insets the workroom so the drawer does not cover
    * the composer -- which cost a release to get right at 1120x720 (0.187.0).
@@ -7992,6 +8038,7 @@ export default function App(): ReactElement {
           onOpenAutomations={() => setScreen('automations')}
           onOpenBoard={() => setScreen('board')}
           {...(cloudTasks.length > 0 ? { cloudTasks: { count: cloudTasks.length, onOpen: () => { setScreen('workroom'); setCloudPanel(true) } } } : {})}
+          {...(benchmarkEntries.length > 0 ? { benchmarks: { count: benchmarkEntries.length, onOpen: () => setScreen('benchmarks') } } : {})}
           {...(backgroundRuns.length > 0
             ? { background: { count: backgroundRuns.filter((run) => run.state === 'working' || run.state === 'blocked' || run.state === 'unknown').length, onOpen: () => { setScreen('workroom'); setCloudPanel(false); setBackgroundPanel(true) } } }
             : {})}
@@ -8210,6 +8257,8 @@ export default function App(): ReactElement {
               noticeWaits={memoryNoticeWaits}
               onDismissNotice={() => setMemoryNotice(undefined)}
             />
+          ) : screen === 'benchmarks' ? (
+            <BenchmarksScreen entries={benchmarkEntries} onOpen={openBenchmark} />
           ) : screen === 'automations' ? (
             <AutomationsScreen
               onOpenMission={openMission}
@@ -8442,11 +8491,13 @@ export default function App(): ReactElement {
                   decidingIds={decidingIds}
                   onDecide={decideApproval}
                   onAnswer={answerQuestion}
-                  onBack={comparing.rerunOf !== undefined ? () => setComparingId(comparing.rerunOf) : comparing.kept === undefined ? undefined : () => setComparingId(undefined)}
-                  {...(comparing.rerunOf === undefined ? {} : { backLabel: 'Back to the benchmark' })}
+                  onBack={comparing.rerunOf !== undefined ? () => { setRevealBenchmarkOf(comparing.rerunOf); setComparingId(comparing.rerunOf) }
+                    : backToBenchmarks ? () => { setComparingId(undefined); setScreen('benchmarks') }
+                    : comparing.kept === undefined ? undefined : () => setComparingId(undefined)}
+                  {...(comparing.rerunOf !== undefined ? { backLabel: 'Back to the benchmark' } : backToBenchmarks ? { backLabel: 'Back to Benchmarks' } : {})}
                   {...(() => {
                     const benchmark = benchmarkOf(comparing)
-                    return benchmark === undefined ? {} : { benchmark }
+                    return benchmark === undefined ? {} : { benchmark: revealBenchmarkOf === comparing.compareId ? { ...benchmark, reveal: true } : benchmark }
                   })()}
                   // A judge's view, and the models one can be (0.520, after Optima).
                   {...(() => {
