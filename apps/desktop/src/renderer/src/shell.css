@@ -13463,6 +13463,157 @@ textarea.lc-compare__judgecriteria {
   color: var(--lc-green-text);
 }
 
+/*
+ * Your own benchmark (0.763, CompareBenchmark.tsx): under the judge's view, in the record's column. Its table reads
+ * like the scorecard's; the chart is drawn in the page's own greys, its points and their names the only ink, and the
+ * best score green only when it stands alone, as the scorecard marks it.
+ */
+.lc-benchmark {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lc-space-3);
+  max-width: 720px;
+  padding: 0 calc(var(--lc-space-5) * 2) var(--lc-space-5);
+}
+
+.lc-benchmark__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--lc-space-2) var(--lc-space-4);
+}
+
+.lc-benchmark__lead {
+  margin: 0;
+  color: var(--lc-text-secondary);
+  font-size: var(--lc-text-description);
+  line-height: 1.5;
+  text-wrap: pretty;
+}
+
+.lc-benchmark__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--lc-space-2);
+}
+
+.lc-benchmark__progress {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--lc-text-secondary);
+  font-size: var(--lc-text-description);
+}
+
+.lc-benchmark__model {
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.lc-benchmark__missed {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--lc-text-muted);
+}
+
+.lc-benchmark__score {
+  font-weight: 600;
+}
+
+.lc-benchmark__score.is-best {
+  color: var(--lc-green-text);
+}
+
+.lc-benchmark__use {
+  text-align: right;
+}
+
+.lc-benchmark__current {
+  color: var(--lc-text-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.lc-benchmark__chart {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lc-space-1);
+  margin: 0;
+}
+
+.lc-benchmark__chart svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.lc-benchmark__grid {
+  stroke: var(--lc-border-hairline);
+  stroke-width: 1;
+}
+
+.lc-benchmark__axis {
+  stroke: var(--lc-border-control);
+  stroke-width: 1;
+}
+
+.lc-benchmark__tick {
+  fill: var(--lc-text-muted);
+  font-family: var(--lc-font-mono);
+  font-size: 11px;
+}
+
+.lc-benchmark__corner {
+  fill: var(--lc-text-muted);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+
+.lc-benchmark__point {
+  fill: var(--lc-text-primary);
+}
+
+.lc-benchmark__label {
+  fill: var(--lc-text-secondary);
+  font-size: 12px;
+}
+
+.lc-benchmark__runs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--lc-space-2);
+}
+
+.lc-benchmark__run {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  border: 1px solid var(--lc-border-control);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--lc-text-secondary);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: border-color var(--lc-motion-hover) var(--lc-ease), color var(--lc-motion-hover) var(--lc-ease);
+}
+
+.lc-benchmark__run:hover {
+  border-color: var(--lc-border-strong);
+  color: var(--lc-text-primary);
+}
+
+.lc-benchmark__runstate {
+  color: var(--lc-text-muted);
+  font-size: var(--lc-text-mono-caption);
+}
+
 .lc-compare__head,
 .lc-compare__cell,
 .lc-compare__foot {

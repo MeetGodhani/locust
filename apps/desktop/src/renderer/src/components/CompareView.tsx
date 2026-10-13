@@ -15,6 +15,8 @@ import { RuntimeMark } from './RuntimeMark.js'
 import { ThreadItems } from './Thread.js'
 import { WorkingSpark } from './WorkingSpark.js'
 import type { CompareRecordRow } from '../compareRecord.js'
+import type { RunCost } from '../cost.js'
+import { CompareBenchmark, type BenchmarkView } from './CompareBenchmark.js'
 import { scoreOf } from '../../../shared/compare-score.js'
 import type { Scorecard } from '../../../shared/compare-score.js'
 import { keptSentence } from '../status.js'
@@ -53,8 +55,12 @@ export interface CompareColumnView {
   readonly state: string
   /** "41s", summed over its turns, when known. */
   readonly span?: string
+  /** The same, in milliseconds, for a benchmark's time a task (0.763). */
+  readonly spanMs?: number
   /** What it cost, as its runtime reported it. */
   readonly cost?: string
+  /** The same, as the receipt has it, for a benchmark's cost a task (0.763). */
+  readonly runCost?: RunCost
   /**
    * What its run is waiting on the person for (0.451). The 0.450 three-way
    * comparison sat twenty minutes on "Using a tool..." while four approvals
@@ -115,7 +121,9 @@ export function CompareView({
   onJudge,
   addChoices = [],
   adding = false,
-  onAddModel
+  onAddModel,
+  benchmark,
+  backLabel = 'Back to the conversation'
 }: {
   readonly compare: PublicCompare
   /** In a comparison that edits (0.445): what each column has changed, "+12 -3 in 2 files". */
@@ -155,6 +163,10 @@ export function CompareView({
   readonly addChoices?: readonly ModelChoice[]
   readonly adding?: boolean
   readonly onAddModel?: (choiceKey: string) => void
+  /** Your own benchmark (0.763): this comparison's runs again, read as one table. */
+  readonly benchmark?: BenchmarkView
+  /** What the back button says: a run again goes back to the comparison it runs again (0.763). */
+  readonly backLabel?: string
 }): ReactElement {
   const kept = compare.kept?.slot
   // A blind comparison hides what would name the model -- its mark, its runtime, its cost -- until one is kept (0.449).
@@ -242,7 +254,7 @@ export function CompareView({
       <div className="lc-compare__bar">
         <span>
           {kept === undefined
-            ? `Comparing ${columns.map((column) => column.name).join(columns.length === 2 ? ' and ' : ', ')}${veiled ? ', names hidden until you keep one' : ''}. ${
+            ? `${compare.rerunOf === undefined ? 'Comparing' : 'A run of your benchmark, comparing'} ${columns.map((column) => column.name).join(columns.length === 2 ? ' and ' : ', ')}${veiled ? ', names hidden until you keep one' : ''}. ${
                 compare.changes !== true
                   ? 'They answer without changing files.'
                   : compare.changesIn === 'folder'
@@ -257,7 +269,7 @@ export function CompareView({
         {problem !== undefined && <span className="lc-compare__problem" role="status">{problem}</span>}
         {onBack !== undefined && (
           <button type="button" className="lc-button" onClick={onBack}>
-            Back to the conversation
+            {backLabel}
           </button>
         )}
       </div>
@@ -424,10 +436,12 @@ export function CompareView({
             <p className="lc-compare__judgenote">It read the answers as Answer A, Answer B and so on, not by model. Its view, not a decision: you keep the answer.</p>
           </div>
         )}
-        {onJudge !== undefined && judgeChoices.length > 0 && judge?.running !== true && columns.filter((column) => column.keepable).length >= 2 && !columns.some((column) => column.running) && (
+        {/* Your own benchmark (0.763): under the judge's view, once it has scored the answers. */}
+        {benchmark !== undefined && <CompareBenchmark view={benchmark} />}
+        {onJudge !== undefined && compare.rerunOf === undefined && (compare.reruns ?? []).length === 0 && judgeChoices.length > 0 && judge?.running !== true && columns.filter((column) => column.keepable).length >= 2 && !columns.some((column) => column.running) && (
           <JudgeAsk choices={judgeChoices} again={judge !== undefined} busy={judging} onJudge={onJudge} />
         )}
-        {onAddModel !== undefined && addChoices.length > 0 && columns.length < 3 && compare.changes !== true && !columns.some((column) => column.running) && columns.every((column) => column.turns.length <= 1) && (
+        {onAddModel !== undefined && compare.rerunOf === undefined && addChoices.length > 0 && columns.length < 3 && compare.changes !== true && !columns.some((column) => column.running) && columns.every((column) => column.turns.length <= 1) && (
           <AddModelAsk choices={addChoices} busy={adding} onAdd={onAddModel} />
         )}
         {/*
@@ -436,7 +450,7 @@ export function CompareView({
           * column is asked the first question only, so after a follow-up it
           * would be answering a different conversation.
           */}
-        {onAddModel !== undefined && addChoices.length > 0 && columns.length < 3 && compare.changes !== true && !columns.some((column) => column.running) && columns.some((column) => column.turns.length > 1) && (
+        {onAddModel !== undefined && compare.rerunOf === undefined && addChoices.length > 0 && columns.length < 3 && compare.changes !== true && !columns.some((column) => column.running) && columns.some((column) => column.turns.length > 1) && (
           <p className="lc-compare__judgenote">Another model can join only before the first follow-up: it would be asked the first question and miss the turns since. Start a new comparison to add one.</p>
         )}
         {record !== undefined && record.length > 0 && (
@@ -487,7 +501,8 @@ export function CompareView({
                   .map((part) => <span key={part} className="lc-compare__part">{part}</span>)}
               </span>
             )}
-            {railed(column.slot) ? null : kept === undefined && column.retryable ? (
+            {/* A run of a benchmark is a measurement (0.763): nothing in it is tried again or kept. */}
+            {railed(column.slot) || compare.rerunOf !== undefined ? null : kept === undefined && column.retryable ? (
               <button
                 type="button"
                 className="lc-button"

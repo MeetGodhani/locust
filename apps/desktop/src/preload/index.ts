@@ -20,7 +20,7 @@ import {
 } from '../shared/background.js'
 import { QUEUED_MESSAGES_READ_CHANNEL, QUEUED_MESSAGES_WRITE_CHANNEL } from '../shared/queued-messages.js'
 import type { QueuedMessagesResponse, SavedQueuedMessage } from '../shared/queued-messages.js'
-import type { CompareSlotId } from '../shared/compare.js'
+import type { CompareSlotId, RerunProgress } from '../shared/compare.js'
 import type { UsageRange } from '../shared/usage.js'
 import { CONNECTOR_ADD_CHANNEL, CONNECTOR_REMOVE_CHANNEL } from '../shared/connector-add.js'
 import type { ConnectorAddRequest, ConnectorAddResponse, ConnectorAgent } from '../shared/connector-add.js'
@@ -167,6 +167,9 @@ import {
   COMPARE_RETRY_CHANNEL,
   COMPARE_JUDGE_CHANNEL,
   COMPARE_ADD_MODEL_CHANNEL,
+  COMPARE_RERUN_CHANNEL,
+  COMPARE_RERUN_STOP_CHANNEL,
+  COMPARE_RERUNS_CHANNEL,
   COMPARE_CHANGES_CHANNEL,
   COMPARE_CHANGES_REFUSAL_CHANNEL,
   COMPARE_IN_PLACE_CHANNEL,
@@ -313,6 +316,7 @@ import type {
   TagTeammatesResponse,
   CompareStartRequest,
   CompareResponse,
+  CompareRerunResponse,
   CompareJudgeRequest,
   CompareAddModelRequest,
   CompareChangesResponse,
@@ -766,6 +770,9 @@ const desktopApi: DesktopApi = {
   keepCompare: (compareId: string, slot: CompareSlotId) => ipcRenderer.invoke(COMPARE_KEEP_CHANNEL, compareId, slot) as Promise<CompareResponse>,
   retryCompare: (compareId: string, slot: CompareSlotId) => ipcRenderer.invoke(COMPARE_RETRY_CHANNEL, compareId, slot) as Promise<CompareResponse>,
   judgeCompare: (request: CompareJudgeRequest) => ipcRenderer.invoke(COMPARE_JUDGE_CHANNEL, request) as Promise<CompareResponse>,
+  rerunCompare: (compareId: string, times: number) => ipcRenderer.invoke(COMPARE_RERUN_CHANNEL, compareId, times) as Promise<CompareRerunResponse>,
+  stopCompareRerun: (compareId: string) => ipcRenderer.invoke(COMPARE_RERUN_STOP_CHANNEL, compareId) as Promise<void>,
+  compareReruns: () => ipcRenderer.invoke(COMPARE_RERUNS_CHANNEL) as Promise<readonly RerunProgress[]>,
   addCompareModel: (request: CompareAddModelRequest) => ipcRenderer.invoke(COMPARE_ADD_MODEL_CHANNEL, request) as Promise<CompareResponse>,
   compareChanges: (compareId: string) => ipcRenderer.invoke(COMPARE_CHANGES_CHANNEL, compareId) as Promise<CompareChangesResponse>,
   compareChangesRefusal: () => ipcRenderer.invoke(COMPARE_CHANGES_REFUSAL_CHANNEL) as Promise<string | undefined>,

@@ -128,10 +128,12 @@ import type { ComparePick, ComparePicking, RouteChoice } from './components/Rout
 import { CompareView } from './components/CompareView.js'
 import { comparisonOf, foldComparisons } from './compareRows.js'
 import type { CompareColumnView } from './components/CompareView.js'
-import { blindName, changesLine, compareMembership, compareRecord, compareNeedsCopy, compareRefusalOf, judgeMissionIds, judgePickOf, MAX_COMPARE_SLOTS, MIN_COMPARE_SLOTS } from '../../shared/compare.js'
-import { criteriaLines, parseScorecard, withoutScorecard } from '../../shared/compare-score.js'
+import { blindName, changesLine, compareMembership, compareRecord, compareNeedsCopy, compareRefusalOf, judgeMissionIds, judgePickOf, MAX_COMPARE_SLOTS, MIN_COMPARE_SLOTS, rerunMissionIds, rerunRefusalOf } from '../../shared/compare.js'
+import { criteriaLines, parseScorecard, scoreOf, withoutScorecard } from '../../shared/compare-score.js'
 import type { Scorecard } from '../../shared/compare-score.js'
-import type { CompareSlotId, PublicCompare } from '../../shared/compare.js'
+import type { CompareSlotId, PublicCompare, RerunProgress } from '../../shared/compare.js'
+import { benchmarkChart, benchmarkRows, type BenchmarkRow, type BenchmarkRunInput } from './benchmark.js'
+import type { BenchmarkView } from './components/CompareBenchmark.js'
 import { folderLabels } from '../../shared/folder-sections.js'
 import { nestedUnder } from '../../shared/nested-conversations.js'
 import { defaultComparePicks } from './compareDefaults.js'
@@ -440,6 +442,8 @@ function applyMissionUpdate(run: LiveRunState, update: CodexMissionUpdate): Live
   if (update.kind === 'start-phase') return live
   // The cloud computer's turn cards and its setting up are kept beside the runs (0.761).
   if (update.kind === 'cloud-turn' || update.kind === 'cloud-setup') return live
+  // A comparison run again (0.763) is the comparisons' business.
+  if (update.kind === 'compare-reruns') return live
   // A hop being started belongs to a teammate, not to any one run.
   if (update.kind === 'relay-starting' || update.kind === 'relay-start-settled') return live
   // A room's board moving is the room's business, not this run's.
@@ -1839,16 +1843,27 @@ export default function App(): ReactElement {
   const [judgingCompare, setJudgingCompare] = useState(false)
   // Another model being added to a comparison (0.523).
   const [addingCompareModel, setAddingCompareModel] = useState(false)
+  // Your own benchmark (0.763): where each comparison's runs again are, a run again being asked for, a model being set.
+  const [rerunProgress, setRerunProgress] = useState<readonly RerunProgress[]>([])
+  const [startingRerun, setStartingRerun] = useState(false)
+  const [usingBenchmarkRow, setUsingBenchmarkRow] = useState<string>()
+  const [benchmarkProblem, setBenchmarkProblem] = useState<string>()
+  useEffect(() => {
+    void window.desktop?.compareReruns?.().then(setRerunProgress).catch(() => undefined)
+  }, [])
   // Every judge's run, drawn in its comparison (0.520), and every look of Scout's, whose answer is cards on Home
   // (0.756): never listed as a conversation.
   const scout = useScoutState()
   const scoutLookKey = (scout?.lookIds ?? []).join(' ')
+  // A comparison's runs again (0.763) too: the comparison they run again shows them, as its benchmark.
   const hiddenRunIds = useMemo(
-    () => new Set([...judgeMissionIds(compares), ...(scoutLookKey.length === 0 ? [] : scoutLookKey.split(' '))]),
+    () => new Set([...judgeMissionIds(compares), ...rerunMissionIds(compares), ...(scoutLookKey.length === 0 ? [] : scoutLookKey.split(' '))]),
     [compares, scoutLookKey]
   )
+  const rerunCompareIds = useMemo(() => new Set(compares.flatMap((compare) => (compare.rerunOf === undefined ? [] : [compare.compareId]))), [compares])
   const isHiddenRun = (startedBy: { readonly kind: string } | undefined, missionId: string | undefined): boolean =>
-    startedBy?.kind === 'judge' || startedBy?.kind === 'scout' || (missionId !== undefined && hiddenRunIds.has(missionId))
+    startedBy?.kind === 'judge' || startedBy?.kind === 'scout' || (missionId !== undefined && hiddenRunIds.has(missionId)) ||
+    (startedBy?.kind === 'compare' && rerunCompareIds.has((startedBy as { readonly compareId?: string }).compareId ?? ''))
   const [compareProblem, setCompareProblem] = useState<string>()
   /** Home's Compare models opens the composer's picker (0.442). */
   const [pickerRequest, setPickerRequest] = useState(0)
@@ -2801,6 +2816,11 @@ export default function App(): ReactElement {
       if (update.kind === 'start-phase') setRuns((current) => withStartPhase(current, update))
       if (update.kind === 'cloud-turn') setCloudTurns((current) => new Map(current).set(update.turn.missionId, update.turn))
       if (update.kind === 'cloud-setup') setCloudSetup((current) => (current?.phase === 'working' ? { ...current, step: update.step } : current))
+      // Your own benchmark (0.763): the comparisons its runs again changed, and where each batch is.
+      if (update.kind === 'compare-reruns') {
+        if (update.compares.length > 0) setCompares((current) => [...current.filter((one) => !update.compares.some((next) => next.compareId === one.compareId)), ...update.compares])
+        setRerunProgress(update.progress)
+      }
       // A3.3: kept by mission, apart from the run state -- a finished run is
       // rebuilt from its record, which holds no check, and a result that
       // landed first was wiped by that rebuild (drive, 2026-09-25).
@@ -3665,7 +3685,9 @@ export default function App(): ReactElement {
   useEffect(() => {
     const bridge = window.desktop
     if (comparing === undefined || bridge?.readMission === undefined) return
-    const ids = [...comparing.slots.flatMap((slot) => slot.missionIds), ...(comparing.judge?.missionIds ?? [])]
+    // A benchmark's runs again too (0.763): their answers and their judges' are read for its table.
+    const runsOfIt = (comparing.reruns ?? []).flatMap((id) => compares.filter((one) => one.compareId === id))
+    const ids = [comparing, ...runsOfIt].flatMap((one) => [...one.slots.flatMap((slot) => slot.missionIds), ...(one.judge?.missionIds ?? [])])
     const missing = missingTranscripts(ids, historyByIdRef.current).filter((id) => !comparedReads.current.has(id))
     if (missing.length === 0) return
     for (const id of missing) comparedReads.current.add(id)
@@ -3677,7 +3699,7 @@ export default function App(): ReactElement {
       for (const id of missing) if (!read.has(id)) comparedReads.current.delete(id)
       if (read.size > 0) setHistory((current) => current.map((entry) => read.get(entry.missionId) ?? entry))
     })
-  }, [comparing, history])
+  }, [comparing, history, compares])
   const compareMembers = useMemo(() => compareMembership(compares).byMission, [compares])
   /*
    * What each column of a comparison that edits has changed (0.445), read
@@ -4550,6 +4572,125 @@ export default function App(): ReactElement {
     }
   }
 
+  /** A comparison run again, once or three times more (0.763): what went wrong, said in its block. */
+  const rerunCompare = async (origin: PublicCompare, times: number): Promise<void> => {
+    const bridge = window.desktop
+    if (bridge === undefined) return
+    setStartingRerun(true)
+    setBenchmarkProblem(undefined)
+    try {
+      const answer = await bridge.rerunCompare(origin.compareId, times).catch(() => undefined)
+      if (answer === undefined) setBenchmarkProblem('Locust could not start the runs. Nothing was started.')
+      else if (!answer.ok) setBenchmarkProblem(answer.message)
+    } finally {
+      setStartingRerun(false)
+    }
+  }
+  /** A row's model, set as its teammate's own (0.763): every other part of the teammate kept as it is. */
+  const useBenchmarkModel = async (teammate: PublicTeammate, row: BenchmarkRow): Promise<void> => {
+    const bridge = window.desktop
+    if (bridge === undefined) return
+    setUsingBenchmarkRow(row.key)
+    setBenchmarkProblem(undefined)
+    try {
+      const answer = await bridge.updateTeammate({
+        teammateId: teammate.teammateId,
+        name: teammate.name,
+        hue: teammate.hue,
+        role: teammate.role,
+        ...(teammate.roleTitle === undefined ? {} : { roleTitle: teammate.roleTitle }),
+        ...(teammate.worktree === undefined ? {} : { worktree: teammate.worktree }),
+        avatar: teammate.avatar,
+        route: { runtime: row.runtime, model: row.model, mode: teammate.route?.mode ?? 'accept-edits', ...(row.effort === undefined ? {} : { effort: row.effort }) }
+      }).catch(() => undefined)
+      if (answer === undefined || !answer.ok) {
+        setBenchmarkProblem(answer?.ok === false ? answer.error.message : `${teammate.name}'s model could not be set. Nothing was changed.`)
+        return
+      }
+      const listed = await bridge.listTeammates().catch(() => undefined)
+      if (listed?.ok === true) {
+        setTeammates(listed.data.teammates)
+        setMissionOwners(listed.data.missionOwners)
+        rememberRosterNames(listed.data)
+      }
+    } finally {
+      setUsingBenchmarkRow(undefined)
+    }
+  }
+  /**
+   * YOUR OWN BENCHMARK (0.763, benchmark.ts): a comparison its judge has scored, and its runs again, read as one table
+   * and a chart. Undefined before its judge has scored it, and for a run again itself: the comparison it runs again
+   * shows it.
+   */
+  const benchmarkOf = (origin: PublicCompare): BenchmarkView | undefined => {
+    if (origin.rerunOf !== undefined || origin.judge === undefined) return undefined
+    const first = judgeViewOf(origin)
+    if ((first?.scorecard === undefined || first.running) && (origin.reruns ?? []).length === 0) return undefined
+    const runsOfIt = [origin, ...(origin.reruns ?? []).flatMap((id) => compares.filter((one) => one.compareId === id))]
+    const inputs: BenchmarkRunInput[] = []
+    const runList: { readonly compareId: string; readonly state: string; readonly done: boolean }[] = []
+    for (const run of runsOfIt) {
+      const { columns } = compareColumnsFor(run)
+      const judge = judgeViewOf(run)
+      const scorecard = judge === undefined || judge.running ? undefined : judge.scorecard
+      inputs.push({
+        compareId: run.compareId,
+        answers: run.slots.map((slot, index) => {
+          const column = columns[index]
+          const verdicts = scorecard?.verdicts[slot.slot]
+          const score = verdicts === undefined ? undefined : scoreOf(verdicts)
+          const key = `${slot.route.runtime}:${slot.route.model}`
+          return {
+            key,
+            runtime: slot.route.runtime as MissionRuntimeId,
+            model: slot.route.model,
+            ...(slot.route.effort === undefined ? {} : { effort: slot.route.effort }),
+            name: slot.route.label ?? routeModelName(slot.route.runtime as MissionRuntimeId, slot.route.model, resolvedModels.get(key)),
+            answered: column?.keepable === true,
+            ...(score === undefined ? {} : { met: score.met, of: score.of }),
+            ...(column?.spanMs === undefined ? {} : { spanMs: column.spanMs }),
+            ...(column?.runCost === undefined ? {} : { cost: column.runCost })
+          }
+        })
+      })
+      // Not scored, said with why (0.763): a judge reads two finished answers or none, and one may give no scores.
+      const answeredHere = columns.filter((column) => column.keepable).length
+      const over = run.rerunOf === undefined || run.settled === true
+      runList.push({
+        compareId: run.compareId,
+        state: columns.some((column) => column.running) ? 'answering…'
+          : judge?.running === true ? 'judging…'
+          : scorecard !== undefined ? 'scored'
+          : !over ? 'waiting'
+          : answeredHere < 2 ? `not scored · ${String(answeredHere)} of ${String(columns.length)} answered`
+          : judge !== undefined ? 'not scored · the judge gave no scores'
+          : 'not scored',
+        done: over && !columns.some((column) => column.running) && judge?.running !== true
+      })
+    }
+    const rows = benchmarkRows(inputs)
+    const chart = benchmarkChart(rows)
+    const progress = rerunProgress.find((one) => one.originId === origin.compareId)
+    const teammate = origin.teammateId === undefined ? undefined : teammates.find((one) => one.teammateId === origin.teammateId)
+    const refusal = rerunRefusalOf(origin)
+    return {
+      ...(refusal === undefined ? {} : { refusal }),
+      rows,
+      ...(chart === undefined ? {} : { chart }),
+      runs: runList,
+      ...(progress === undefined ? {} : { progress }),
+      ...(origin.base === undefined ? {} : { base: origin.base }),
+      ...(teammate === undefined ? {} : { teammateName: teammate.name, ...(teammate.route === undefined ? {} : { teammateKey: `${teammate.route.runtime}:${teammate.route.model}` }) }),
+      busy: startingRerun,
+      ...(usingBenchmarkRow === undefined ? {} : { using: usingBenchmarkRow }),
+      ...(benchmarkProblem === undefined ? {} : { problem: benchmarkProblem }),
+      onRun: (times: number) => void rerunCompare(origin, times),
+      onStop: () => void window.desktop?.stopCompareRerun(origin.compareId).catch(() => undefined),
+      onOpenRun: (compareId: string) => setComparingId(compareId),
+      ...(teammate === undefined ? {} : { onUse: (row: BenchmarkRow) => void useBenchmarkModel(teammate, row) })
+    }
+  }
+
   /** The columns, from the live runs where they are going and the record where they are done. */
   /** The judge's view of a comparison, from its newest run (0.520). */
   const judgeViewOf = (compare: PublicCompare): { readonly name: string; readonly running: boolean; readonly answer: string; readonly items: readonly ThreadItem[]; readonly pick?: CompareSlotId; readonly failed?: string; readonly scorecard?: Scorecard } | undefined => {
@@ -4627,7 +4768,8 @@ export default function App(): ReactElement {
       const running = cells.some((cell) => cell.running)
       const last = cells.at(-1)
       const spanMs = cells.reduce((total, cell) => total + (runSpanMs(cell.events) ?? 0), 0)
-      const cost = costLine(sumCosts(cells.map((cell) => runCostOf(cell.events))))
+      const runCost = sumCosts(cells.map((cell) => runCostOf(cell.events)))
+      const cost = costLine(runCost)
       const state =
         cells.length === 0 ? (column.refused === undefined ? 'waiting' : 'could not start')
         : running ? 'working'
@@ -4657,8 +4799,9 @@ export default function App(): ReactElement {
           .flatMap((item) => (item.type === 'agent-message' && item.text.trim().length > 0 ? [item.text.trim()] : []))
           .join('\n\n'),
         state,
-        ...(spanMs > 0 ? { span: durationText(spanMs) } : {}),
-        ...(cost === undefined ? {} : { cost })
+        ...(spanMs > 0 ? { span: durationText(spanMs), spanMs } : {}),
+        ...(cost === undefined ? {} : { cost }),
+        ...(runCost === undefined ? {} : { runCost })
       }
     })
     // Each ask once, from the column that has taken the most of them.
@@ -8299,7 +8442,12 @@ export default function App(): ReactElement {
                   decidingIds={decidingIds}
                   onDecide={decideApproval}
                   onAnswer={answerQuestion}
-                  onBack={comparing.kept === undefined ? undefined : () => setComparingId(undefined)}
+                  onBack={comparing.rerunOf !== undefined ? () => setComparingId(comparing.rerunOf) : comparing.kept === undefined ? undefined : () => setComparingId(undefined)}
+                  {...(comparing.rerunOf === undefined ? {} : { backLabel: 'Back to the benchmark' })}
+                  {...(() => {
+                    const benchmark = benchmarkOf(comparing)
+                    return benchmark === undefined ? {} : { benchmark }
+                  })()}
                   // A judge's view, and the models one can be (0.520, after Optima).
                   {...(() => {
                     const judge = judgeViewOf(comparing)

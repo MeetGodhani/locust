@@ -46,8 +46,9 @@ import type { Runner } from './cloud-tasks.js'
 import type { ReverseChange } from '../shared/reverse-diff.js'
 import { bringInCopy, compareRoot, copyLineChanges, copyRefusal, makeCompareCopy, removeCompareCopies } from './compare-copies.js'
 import { comparePagePath } from './compare-page-path.js'
-import type { CompareSlotId, PublicCompare, PublicCompareSlot } from '../shared/compare.js'
+import type { CompareRoute, CompareSlotId, PublicCompare, PublicCompareSlot } from '../shared/compare.js'
 import { createCompareStore } from './compare-store.js'
+import { createCompareReruns } from './compare-reruns.js'
 import { createApprovalRuleStore } from './approval-rule-store.js'
 import { createFileArrivals, POLL_MS } from './routine-file-watch.js'
 import { enforcedAnswer, ruleCandidateOf, ruledActionOf, ruleRefusalFor, ruleSentence } from '../shared/approval-rules.js'
@@ -411,6 +412,9 @@ import {
   COMPARE_KEEP_CHANNEL,
   COMPARE_RETRY_CHANNEL,
   COMPARE_JUDGE_CHANNEL,
+  COMPARE_RERUN_CHANNEL,
+  COMPARE_RERUN_STOP_CHANNEL,
+  COMPARE_RERUNS_CHANNEL,
   COMPARE_ADD_MODEL_CHANNEL,
   COMPARE_CHANGES_CHANNEL,
   COMPARE_CHANGES_REFUSAL_CHANNEL,
@@ -6291,7 +6295,8 @@ if (!ownsSingleInstanceLock) {
         tree = workspacePath
       } else if (compare.changes === true) {
         try {
-          tree = await compareTrees().ensure({ teammateId: compareTreeId(compare.compareId, column.slot), name: `compare ${compare.compareId} ${column.slot}` })
+          // From the commit the comparison started on (0.763): a run of it again starts there too.
+          tree = await compareTrees().ensure({ teammateId: compareTreeId(compare.compareId, column.slot), name: `compare ${compare.compareId} ${column.slot}`, ...(compare.base === undefined ? {} : { from: compare.base }) })
         } catch (error) {
           return error instanceof Error ? error.message : 'A copy of the project could not be made for it.'
         }
@@ -6326,6 +6331,7 @@ if (!ownsSingleInstanceLock) {
         { key: compareSlotKey(compare.teammateId, compare.compareId, column.slot), ...(copy === undefined ? {} : { cwd: copy }) }
       )
       if (!response.ok) return response.error.code === 'RUN_ALREADY_ACTIVE' ? 'This column is still answering. Ask again when it has finished.' : response.error.message
+      if (compare.rerunOf !== undefined) rerunRunIds.set(response.data.missionId, response.data.runId)
       if (compare.teammateId !== undefined) await assignOwner(compare.teammateId, response.data.missionId)
       await (retrying ? compares.retry(compare.compareId, column.slot, response.data.missionId) : compares.addTurn(compare.compareId, column.slot, response.data.missionId))
       sendToWindow({
@@ -6392,8 +6398,10 @@ if (!ownsSingleInstanceLock) {
        * where 0.457 refused and sent the person back to Ask.
        */
       const changesIn = changes && !(await compareTrees().probe()).repository ? ((await copyRefusal(workspacePath)) === undefined ? ('copy' as const) : ('folder' as const)) : undefined
+      // In a git project, the commit every column's copy is cut from (0.763): a run of it again starts there too.
+      const base = changes && changesIn === undefined ? (await defaultRunGit(['rev-parse', 'HEAD'], workspacePath).catch(() => '')).trim() : ''
       try {
-        return await askEveryColumn(await compares.create({ ...(teammateId === undefined ? {} : { teammateId }), prompt, routes, changes, blind, ...(changesIn === undefined ? {} : { changesIn }) }), prompt, false)
+        return await askEveryColumn(await compares.create({ ...(teammateId === undefined ? {} : { teammateId }), prompt, routes, changes, blind, ...(changesIn === undefined ? {} : { changesIn }), ...(/^[0-9a-f]{40}$/.test(base) ? { base } : {}) }), prompt, false)
       } catch (error) {
         return compareRefused(error instanceof Error ? error.message : 'The comparison could not be started.')
       }
@@ -6403,6 +6411,7 @@ if (!ownsSingleInstanceLock) {
       const compare = await compares.get(compareId).catch(() => undefined)
       if (compare === undefined) return compareRefused('That comparison is no longer here.')
       if (compare.kept !== undefined) return compareRefused('You kept one already; this conversation carries on with it.')
+      if (compare.rerunOf !== undefined) return compareRefused('A run of your benchmark is a measurement: nothing in it is asked again, kept or added to. Use the comparison it runs again.')
       const text = typeof prompt === 'string' ? prompt.trim() : ''
       if (text.length === 0) return compareRefused('There is nothing to ask.')
       return askEveryColumn(compare, text, true)
@@ -6413,6 +6422,7 @@ if (!ownsSingleInstanceLock) {
       try {
         const compare = await compares.get(compareId)
         if (compare === undefined) return compareRefused('That comparison is no longer here.')
+        if (compare.rerunOf !== undefined) return compareRefused('A run of your benchmark is a measurement: nothing in it is asked again, kept or added to. Use the comparison it runs again.')
         let brought: readonly string[] | undefined
         if (compare.changes === true && compare.kept === undefined && compare.changesIn !== 'folder') {
           const result = await (compare.changesIn === 'copy'
@@ -6448,6 +6458,7 @@ if (!ownsSingleInstanceLock) {
       const compare = await compares.get(compareId).catch(() => undefined)
       if (compare === undefined) return compareRefused('That comparison is no longer here.')
       if (compare.kept !== undefined) return compareRefused('You kept one already; this conversation carries on with it.')
+      if (compare.rerunOf !== undefined) return compareRefused('A run of your benchmark is a measurement: nothing in it is asked again, kept or added to. Use the comparison it runs again.')
       const column = compare.slots.find((one) => one.slot === slot)
       if (column === undefined) return compareRefused('That comparison has no such column.')
       const newest = column.missionIds.at(-1)
@@ -6481,6 +6492,7 @@ if (!ownsSingleInstanceLock) {
       const input = (typeof request === 'object' && request !== null ? request : {}) as Record<string, unknown>
       const compare = await compares.get(input.compareId).catch(() => undefined)
       if (compare === undefined) return compareRefused('That comparison is no longer here.')
+      if (compare.rerunOf !== undefined) return compareRefused('A run of your benchmark is a measurement: nothing in it is asked again, kept or added to. Use the comparison it runs again.')
       if (compare.changes === true) return compareRefused('A comparison that changes files cannot take another model after it starts. Start a new comparison instead.')
       if (compare.slots.some((column) => column.missionIds.length > 1)) return compareRefused('This comparison went on past its first question, so another model cannot be asked the same thing. Start a new comparison instead.')
       const route = (typeof input.route === 'object' && input.route !== null ? input.route : {}) as Record<string, unknown>
@@ -6505,16 +6517,19 @@ if (!ownsSingleInstanceLock) {
       }
       return { ok: true, data: { compare: (await compares.get(compare.compareId)) ?? added, refused: [] } } as const
     })
-    ipcMain.handle(COMPARE_JUDGE_CHANNEL, async (event, request: unknown) => {
-      if (!fromOwnWindow(event)) return compareRefused('The request was rejected.')
-      const input = (typeof request === 'object' && request !== null ? request : {}) as Record<string, unknown>
-      const compare = await compares.get(input.compareId).catch(() => undefined)
-      if (compare === undefined) return compareRefused('That comparison is no longer here.')
-      const route = (typeof input.route === 'object' && input.route !== null ? input.route : {}) as Record<string, unknown>
-      if (!isMissionRuntime(route.runtime) || typeof route.model !== 'string' || route.model.length === 0 || route.model.length > 200) return compareRefused('Pick a model to judge.')
+    /**
+     * A judge asked to read a comparison's answers (0.520), as the person asks one and as a run again does (0.763):
+     * its run started and recorded as the comparison's, or why it was not.
+     */
+    const judgeCompare = async (
+      compare: PublicCompare,
+      route: CompareRoute,
+      criteria: string | undefined
+    ): Promise<{ readonly ok: true; readonly compare: PublicCompare } | { readonly ok: false; readonly message: string }> => {
+      const refused = (message: string) => ({ ok: false as const, message })
+      if (!isMissionRuntime(route.runtime) || route.model.length === 0 || route.model.length > 200) return refused('Pick a model to judge.')
       const cannot = compareRefusalOf(route.runtime, antigravityProbe.cliPath() !== undefined)
-      if (cannot !== undefined) return compareRefused(cannot.replace('a comparison', 'a judge'))
-      const criteria = typeof input.criteria === 'string' ? input.criteria.trim().slice(0, MAX_JUDGE_CRITERIA) : undefined
+      if (cannot !== undefined) return refused(cannot.replace('a comparison', 'a judge'))
       const answers: JudgedAnswer[] = []
       for (const column of compare.slots) {
         const newest = column.missionIds.at(-1)
@@ -6526,7 +6541,7 @@ if (!ownsSingleInstanceLock) {
         const said = tracker.latestFinal?.trim()
         if (said !== undefined && said.length > 0) answers.push({ letter: column.slot.toUpperCase(), text: said })
       }
-      if (answers.length < 2) return compareRefused('A judge needs at least two finished answers to read.')
+      if (answers.length < 2) return refused('A judge needs at least two finished answers to read.')
       const newestAsk = compare.slots.flatMap((column) => column.missionIds.slice(-1))[0]
       const ask = newestAsk === undefined ? compare.prompt : ((await missionLedger.getMission(newestAsk).catch(() => undefined))?.metadata.prompt ?? compare.prompt)
       const runtime = route.runtime
@@ -6546,7 +6561,7 @@ if (!ownsSingleInstanceLock) {
           await keepOutOfGit(workspacePath)
           brief = judgePrompt({ ...asked, answers: filed })
         } catch {
-          return compareRefused('The answers are too long to hand a judge, and they could not be written for it to read.')
+          return refused('The answers are too long to hand a judge, and they could not be written for it to read.')
         }
       }
       const response = await codexMissions.start(
@@ -6563,7 +6578,8 @@ if (!ownsSingleInstanceLock) {
         undefined,
         { key: `judge:${compare.compareId}` }
       )
-      if (!response.ok) return compareRefused(response.error.code === 'RUN_ALREADY_ACTIVE' ? 'The judge is still reading. Ask again when it has finished.' : response.error.message)
+      if (!response.ok) return refused(response.error.code === 'RUN_ALREADY_ACTIVE' ? 'The judge is still reading. Ask again when it has finished.' : response.error.message)
+      if (compare.rerunOf !== undefined) rerunRunIds.set(response.data.missionId, response.data.runId)
       const judged = await compares.judge(
         compare.compareId,
         { runtime, model, ...(typeof route.effort === 'string' ? { effort: route.effort } : {}), ...(typeof route.label === 'string' && route.label.trim().length > 0 ? { label: route.label.trim() } : {}) },
@@ -6578,8 +6594,72 @@ if (!ownsSingleInstanceLock) {
         data: response.data,
         startedBy: { kind: 'judge', compareId: compare.compareId }
       })
-      return { ok: true, data: { compare: judged, refused: [] } } as const
+      return { ok: true, compare: judged }
+    }
+    ipcMain.handle(COMPARE_JUDGE_CHANNEL, async (event, request: unknown) => {
+      if (!fromOwnWindow(event)) return compareRefused('The request was rejected.')
+      const input = (typeof request === 'object' && request !== null ? request : {}) as Record<string, unknown>
+      const compare = await compares.get(input.compareId).catch(() => undefined)
+      if (compare === undefined) return compareRefused('That comparison is no longer here.')
+      if (compare.rerunOf !== undefined) return compareRefused('A run of your benchmark is a measurement: nothing in it is asked again, kept or added to. Use the comparison it runs again.')
+      const route = (typeof input.route === 'object' && input.route !== null ? input.route : {}) as Record<string, unknown>
+      if (!isMissionRuntime(route.runtime) || typeof route.model !== 'string' || route.model.length === 0 || route.model.length > 200) return compareRefused('Pick a model to judge.')
+      const criteria = typeof input.criteria === 'string' ? input.criteria.trim().slice(0, MAX_JUDGE_CRITERIA) : undefined
+      const judged = await judgeCompare(
+        compare,
+        {
+          runtime: route.runtime,
+          model: route.model,
+          ...(typeof route.effort === 'string' ? { effort: route.effort } : {}),
+          ...(typeof route.label === 'string' && route.label.trim().length > 0 ? { label: route.label.trim() } : {})
+        },
+        criteria
+      )
+      return judged.ok ? ({ ok: true, data: { compare: judged.compare, refused: [] } } as const) : compareRefused(judged.message)
     })
+    /*
+     * YOUR OWN BENCHMARK (0.763, compare-reruns.ts): a comparison the judge has scored, run again once or three times
+     * more, unattended -- the same models, the same question, from the same commit, scored by the same judge on the
+     * same points. The runs are the comparison's, never conversations of their own.
+     */
+    const rerunRunIds = new Map<string, string>()
+    const compareReruns = createCompareReruns({
+      compares,
+      begin: async (compare) => {
+        await askEveryColumn(compare, compare.prompt, false)
+      },
+      judge: async (compare, route, criteria) => {
+        const judged = await judgeCompare(compare, route, criteria)
+        return judged.ok ? undefined : judged.message
+      },
+      live: (missionId) => codexMissions.hasMission(missionId),
+      phaseOf: async (missionId) => (await missionLedger.getMission(missionId).catch(() => undefined))?.phase,
+      retry: async (compare, slot) => {
+        const column = compare.slots.find((one) => one.slot === slot)
+        return column === undefined ? 'That comparison has no such column.' : startCompareColumn(compare, column, compare.prompt, undefined, true)
+      },
+      stopMission: (missionId) => {
+        const runId = rerunRunIds.get(missionId)
+        if (runId !== undefined) codexMissions.cancel(runId)
+      },
+      tidy: async (compare) => {
+        await discardCompareTrees(compare)
+        await removeCompareCopies(compare.compareId).catch(() => undefined)
+        for (const missionId of [...compare.slots.flatMap((column) => column.missionIds), ...(compare.judge?.missionIds ?? [])]) rerunRunIds.delete(missionId)
+      },
+      tell: (update) => sendToWindow({ kind: 'compare-reruns', compares: update.compares, progress: update.progress })
+    })
+    ipcMain.handle(COMPARE_RERUN_CHANNEL, async (event, compareId: unknown, times: unknown) => {
+      if (!fromOwnWindow(event)) return { ok: false, message: 'The request was rejected.' }
+      if (typeof compareId !== 'string' || typeof times !== 'number') return { ok: false, message: 'That comparison cannot be run again.' }
+      const noFolder = noWorkspaceRefusal()
+      if (noFolder !== undefined) return { ok: false, message: noFolder.error.message }
+      return compareReruns.start(compareId, times)
+    })
+    ipcMain.handle(COMPARE_RERUN_STOP_CHANNEL, async (event, compareId: unknown) => {
+      if (fromOwnWindow(event) && typeof compareId === 'string') compareReruns.stop(compareId)
+    })
+    ipcMain.handle(COMPARE_RERUNS_CHANNEL, async (event) => (fromOwnWindow(event) ? compareReruns.progress() : []))
     // Nothing refuses a comparison that edits now (0.555): a folder too big to copy works in place.
     ipcMain.handle(COMPARE_CHANGES_REFUSAL_CHANNEL, () => undefined)
     // ...but said before it starts (0.675): Auto's line promised each model its own copy where there would be none.

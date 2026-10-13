@@ -28,6 +28,9 @@ const MAX_BROUGHT = 200
 /** Judges a comparison remembers; older ones' runs stay the comparison's, unlisted. */
 const MAX_JUDGES = 20
 const UNREADABLE = 'The saved comparisons could not be read. Nothing was changed.'
+/** Runs again a comparison remembers (0.763); older ones are still comparisons, just not counted. */
+const MAX_RERUNS = 30
+const COMMIT = /^[0-9a-f]{40}$/
 
 interface StoredFile {
   readonly schemaVersion: typeof SCHEMA_VERSION
@@ -39,7 +42,18 @@ export interface CompareStore {
   list(): Promise<readonly PublicCompare[]>
   get(compareId: unknown): Promise<PublicCompare | undefined>
   /** A new comparison, its columns named in order; the oldest past `MAX_COMPARES` is forgotten. */
-  create(input: { readonly teammateId?: string; readonly prompt: string; readonly routes: readonly CompareRoute[]; readonly changes?: boolean; readonly changesIn?: 'copy' | 'folder'; readonly blind?: boolean }): Promise<PublicCompare>
+  create(input: {
+    readonly teammateId?: string
+    readonly prompt: string
+    readonly routes: readonly CompareRoute[]
+    readonly changes?: boolean
+    readonly changesIn?: 'copy' | 'folder'
+    readonly blind?: boolean
+    /** The commit its copies are cut from (0.763). */
+    readonly base?: string
+    /** It runs another comparison again (0.763). */
+    readonly rerunOf?: string
+  }): Promise<PublicCompare>
   /** A column's next turn started. */
   addTurn(compareId: string, slot: CompareSlotId, missionId: string): Promise<PublicCompare>
   /**
@@ -55,6 +69,10 @@ export interface CompareStore {
   addColumn(compareId: string, route: CompareRoute): Promise<PublicCompare>
   /** A judge was asked (0.520): its run, newest last, on this route and with these words. */
   judge(compareId: string, route: CompareRoute, missionId: string, criteria?: string): Promise<PublicCompare>
+  /** A run of it again began (0.763): that comparison's id, newest last. */
+  addRerun(compareId: string, rerunId: string): Promise<PublicCompare>
+  /** A run again is over (0.763): its models and judge have finished, and its copies are gone. */
+  settle(compareId: string): Promise<PublicCompare>
   remove(compareId: unknown): Promise<void>
 }
 
@@ -103,6 +121,10 @@ function parsedCompare(value: unknown): PublicCompare | undefined {
   const judge = judgeRoute === undefined || judgeRoute.missionIds.length === 0
     ? undefined
     : { route: judgeRoute.route, missionIds: judgeRoute.missionIds.slice(-MAX_JUDGES), ...(judgeCriteria === undefined ? {} : { criteria: judgeCriteria }) }
+  // Your own benchmark (0.763): the commit it started from, the comparison it runs again, its own runs again.
+  const base = typeof record.base === 'string' && COMMIT.test(record.base) ? record.base : undefined
+  const rerunOf = text(record.rerunOf, 80)
+  const reruns = Array.isArray(record.reruns) ? record.reruns.filter((id): id is string => typeof id === 'string' && id.length > 0 && id.length <= 80).slice(-MAX_RERUNS) : []
   const keptSlot = kept !== undefined && isSlot(kept.slot) && keptAt !== undefined && slots.some((slot) => slot.slot === kept.slot)
     ? { slot: kept.slot, at: keptAt, ...(brought === undefined ? {} : { brought }) }
     : undefined
@@ -116,7 +138,11 @@ function parsedCompare(value: unknown): PublicCompare | undefined {
     ...(record.changes === true && (record.changesIn === 'copy' || record.changesIn === 'folder') ? { changesIn: record.changesIn } : {}),
     ...(record.blind === true ? { blind: true as const } : {}),
     ...(keptSlot === undefined ? {} : { kept: keptSlot }),
-    ...(judge === undefined ? {} : { judge })
+    ...(judge === undefined ? {} : { judge }),
+    ...(base === undefined ? {} : { base }),
+    ...(rerunOf === undefined ? {} : { rerunOf }),
+    ...(reruns.length === 0 ? {} : { reruns }),
+    ...(record.settled === true ? { settled: true as const } : {})
   }
 }
 
@@ -231,6 +257,8 @@ export function createCompareStore(options: {
           ...(input.changes === true ? { changes: true as const } : {}),
           ...(input.changes === true && (input.changesIn === 'copy' || input.changesIn === 'folder') ? { changesIn: input.changesIn } : {}),
           ...(input.blind === true ? { blind: true as const } : {}),
+          ...(input.base !== undefined && COMMIT.test(input.base) ? { base: input.base } : {}),
+          ...(input.rerunOf === undefined ? {} : { rerunOf: input.rerunOf }),
           slots: input.routes.map((route, index) => ({
             slot: COMPARE_SLOTS[index]!,
             route: {
@@ -299,6 +327,11 @@ export function createCompareStore(options: {
         }
       })),
 
+    addRerun: (compareId, rerunId) =>
+      change(compareId, (compare) => ({ ...compare, reruns: [...(compare.reruns ?? []).filter((id) => id !== rerunId), rerunId].slice(-MAX_RERUNS) })),
+
+    settle: (compareId) => change(compareId, (compare) => ({ ...compare, settled: true as const })),
+
     remove: (compareId) =>
       serialize(async () => {
         const file = await read()
@@ -321,7 +354,9 @@ export function createCompareStore(options: {
     refuse: async (...args) => shown(await inner.refuse(...args)),
     keep: async (...args) => shown(await inner.keep(...args)),
     addColumn: async (...args) => shown(await inner.addColumn(...args)),
-    judge: async (...args) => shown(await inner.judge(...args))
+    judge: async (...args) => shown(await inner.judge(...args)),
+    addRerun: async (...args) => shown(await inner.addRerun(...args)),
+    settle: async (...args) => shown(await inner.settle(...args))
   }
 }
 
@@ -334,6 +369,7 @@ export function createCompareStore(options: {
  * the folder and the copies are gone.
  */
 export function withColumnFolders(compare: PublicCompare, copyRoot: string): PublicCompare {
-  if (compare.changes !== true || compare.changesIn === 'folder' || compare.kept !== undefined) return compare
+  // A run again that is over has no copies left (0.763): its files are read nowhere, as a kept comparison's others are.
+  if (compare.changes !== true || compare.changesIn === 'folder' || compare.kept !== undefined || compare.settled === true) return compare
   return { ...compare, slots: compare.slots.map((column) => ({ ...column, folder: join(copyRoot, compareTreeId(compare.compareId, column.slot)) })) }
 }

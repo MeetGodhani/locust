@@ -94,6 +94,55 @@ export interface PublicCompare {
    * shown; every one is the comparison's, never a conversation of its own.
    */
   readonly judge?: { readonly route: CompareRoute; readonly missionIds: readonly string[]; readonly criteria?: string }
+  /**
+   * The commit a comparison that changes files started from, in a git project (0.763): every column's copy is cut
+   * from it, and so is every column of a run of it again -- the same start for every model, every time.
+   */
+  readonly base?: string
+  /** A run of another comparison again (0.763, your own benchmark): that comparison's id. Never a conversation of its own. */
+  readonly rerunOf?: string
+  /** This comparison's runs again, oldest first (0.763): together with it, a benchmark of your own task. */
+  readonly reruns?: readonly string[]
+  /** A run again whose models and judge have finished, its copies of the project gone (0.763). */
+  readonly settled?: true
+}
+
+/** How many more times a comparison can be run again at once (0.763): one, or three -- one run can be luck. */
+export const RERUN_TIMES = [1, 3] as const
+
+/** Where a comparison's runs again are, while they run (main/compare-reruns.ts). */
+export interface RerunProgress {
+  readonly originId: string
+  /** Which run of this batch, from 1. */
+  readonly run: number
+  readonly of: number
+  /** Its models are answering, or its judge is reading them. */
+  readonly step: 'answering' | 'judging'
+  /** The run under way. */
+  readonly compareId?: string
+}
+
+/**
+ * Every mission of a comparison run again (0.763): its columns' and its judge's. None is a conversation of its own --
+ * the comparison it runs again shows them, as a benchmark.
+ */
+export function rerunMissionIds(compares: readonly PublicCompare[]): ReadonlySet<string> {
+  return new Set(compares.filter((compare) => compare.rerunOf !== undefined).flatMap((compare) => [
+    ...compare.slots.flatMap((column) => [...column.missionIds, ...(column.retried ?? [])]),
+    ...(compare.judge?.missionIds ?? [])
+  ]))
+}
+
+/** Why a comparison cannot be run again as it is, or undefined when it can (0.763). */
+export function rerunRefusalOf(compare: PublicCompare): string | undefined {
+  if (compare.rerunOf !== undefined) return 'This is a run of another comparison. Run that one again instead.'
+  if (compare.judge === undefined) return 'Ask a judge first: each run again is scored by the same judge, on the same points.'
+  // Blind until one is kept (0.449): a benchmark names every model, so it waits for that.
+  if (compare.blind === true && compare.kept === undefined) return 'Keep one first: the names stay hidden until you do, and a benchmark shows them.'
+  if (compare.slots.some((column) => column.missionIds.length > 1)) return 'This comparison went on past its first question, so it cannot be run again as one task. Start a new comparison with the question you want to measure.'
+  // A copy of a folder that is not git, or the folder itself, is not the same start twice.
+  if (compare.changes === true && compare.base === undefined) return 'A comparison that changes files can be run again only in a git project, from the commit it started on.'
+  return undefined
 }
 
 /** How long "what a good answer does" may be, as the person writes it for a judge. */

@@ -25,7 +25,7 @@ import type { CloudFolderState, CloudSetupStep, PublicCloudComputer, PublicCloud
 import type { OfficeDocument } from './office-document.js'
 import type { Workbook } from './sheet.js'
 import type { AboutYouSuggestion } from './about-you.js'
-import type { CompareSlotId, PublicCompare } from './compare.js'
+import type { CompareSlotId, PublicCompare, RerunProgress } from './compare.js'
 
 /**
  * How a teammate's memory is treated: kept at once and shown (the Claude
@@ -1271,6 +1271,10 @@ export const COMPARE_LIST_CHANNEL = 'compare:list'
 export const COMPARE_JUDGE_CHANNEL = 'compare:judge'
 /** Put a comparison's question to one more model, as a new column (0.523). */
 export const COMPARE_ADD_MODEL_CHANNEL = 'compare:add-model'
+/** Your own benchmark (0.763): a comparison run again, its runs stopped, and where every batch is. */
+export const COMPARE_RERUN_CHANNEL = 'compare:rerun'
+export const COMPARE_RERUN_STOP_CHANNEL = 'compare:rerun-stop'
+export const COMPARE_RERUNS_CHANNEL = 'compare:reruns'
 export interface CompareAddModelRequest {
   readonly compareId: string
   readonly route: { readonly runtime: MissionRuntimeId; readonly model: string; readonly effort?: string; readonly label?: string }
@@ -1291,6 +1295,8 @@ export interface CompareStartRequest {
   /** The names hidden until one is kept (0.449). */
   readonly blind?: boolean
 }
+/** A comparison set running again (0.763), or why it was not. */
+export type CompareRerunResponse = { readonly ok: true; readonly compare: PublicCompare } | { readonly ok: false; readonly message: string }
 export type CompareResponse =
   | { readonly ok: true; readonly data: { readonly compare: PublicCompare; readonly refused: readonly { readonly slot: CompareSlotId; readonly message: string }[] } }
   | { readonly ok: false; readonly error: { readonly code: 'COMPARE_REFUSED'; readonly message: string } }
@@ -3149,6 +3155,12 @@ export type CodexMissionUpdate =
       readonly step: CloudSetupStep
     }
   | {
+      /** A comparison run again (0.763, your own benchmark): the comparisons that changed, and where each batch is. */
+      readonly kind: 'compare-reruns'
+      readonly compares: readonly PublicCompare[]
+      readonly progress: readonly RerunProgress[]
+    }
+  | {
       /** The start's phase (0.602), sent while the window's run is still "starting" and before it knows its ids. */
       readonly kind: 'start-phase'
       readonly runtime: MissionRuntimeId
@@ -3899,6 +3911,10 @@ export interface DesktopApi {
   judgeCompare(request: CompareJudgeRequest): Promise<CompareResponse>
   /** Put the comparison's question to one more model (0.523). */
   addCompareModel(request: CompareAddModelRequest): Promise<CompareResponse>
+  /** Your own benchmark (0.763): it runs again once or three times more, unattended, each run scored by its judge. */
+  rerunCompare(compareId: string, times: number): Promise<CompareRerunResponse>
+  stopCompareRerun(compareId: string): Promise<void>
+  compareReruns(): Promise<readonly RerunProgress[]>
   compareChanges(compareId: string): Promise<CompareChangesResponse>
   compareChangesRefusal(): Promise<string | undefined>
   compareWorksInPlace(): Promise<boolean>

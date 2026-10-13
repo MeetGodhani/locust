@@ -86,8 +86,11 @@ export interface WorktreeProbe {
 export interface WorktreeManager {
   /** Whether worktrees can be made in this folder at all, and why not. */
   probe(): Promise<WorktreeProbe>
-  /** The teammate's worktree path, creating it (and its branch) the first time. */
-  ensure(teammate: { readonly teammateId: string; readonly name: string }): Promise<string>
+  /**
+   * The teammate's worktree path, creating it (and its branch) the first time. `from`: the commit a new branch starts
+   * at (0.763, a comparison run again); HEAD when absent.
+   */
+  ensure(teammate: { readonly teammateId: string; readonly name: string; readonly from?: string }): Promise<string>
   /** Every Locust-made worktree git still knows about. */
   list(): Promise<readonly WorktreeInfo[]>
   /**
@@ -385,10 +388,14 @@ export interface WorktreeManagerOptions {
   readonly note?: (detail: string) => void
 }
 
-/** Per add only: never changes the person's Git configuration. */
-export function worktreeAddArgs(path: string, branch: string, branchExists: boolean, platform: NodeJS.Platform = process.platform): readonly string[] {
+/**
+ * Per add only: never changes the person's Git configuration. A new branch starts at `from` when one is given -- a
+ * comparison run again starts where the first run did (0.763) -- and otherwise at HEAD.
+ */
+export function worktreeAddArgs(path: string, branch: string, branchExists: boolean, platform: NodeJS.Platform = process.platform, from = 'HEAD'): readonly string[] {
+  if (from !== 'HEAD' && !/^[0-9a-f]{40}$/.test(from)) throw new Error('That is not a commit Locust recorded.')
   return [...(platform === 'win32' ? ['-c', 'core.longpaths=true'] : []), 'worktree', 'add',
-    ...(branchExists ? [path, branch] : ['-b', branch, path, 'HEAD'])]
+    ...(branchExists ? [path, branch] : ['-b', branch, path, from])]
 }
 
 /**
@@ -612,7 +619,7 @@ export function createWorktreeManager(options: WorktreeManagerOptions): Worktree
       // is not copied, and the card says so.
       making.add(path)
       try {
-        await runGit(worktreeAddArgs(path, branch, branchExists), root, WORKTREE_CHECKOUT_TIMEOUT_MS)
+        await runGit(worktreeAddArgs(path, branch, branchExists, process.platform, teammate.from ?? 'HEAD'), root, WORKTREE_CHECKOUT_TIMEOUT_MS)
       } catch (error) {
         // Do not retry an add: a post-checkout hook can fail AFTER Git finishes
         // making the tree. Accept only Git's recorded path/branch and a usable
