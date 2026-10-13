@@ -1,6 +1,6 @@
 // An arena round on the five paid models, as round 4 ran it (drive-arena-round-4.mjs), for any prompt.
 //
-//   node _tools/drive-arena-round.mjs --round portrait|worst|trails --set trio|pair|fable --packaged <exe> --prompt <file> [--kit <dir> --lock <LOCKED.md>]
+//   node _tools/drive-arena-round.mjs --round portrait|worst|trails|voxel --set trio|pair|fable|claude|muse-sol|astra --packaged <exe> --prompt <file> [--effort high|max] [--kit <dir> --lock <LOCKED.md>]
 //   LOCUST_SPEND=1 node _tools/drive-arena-round.mjs ... --send          one run, no re-rolls
 //
 // Colin approved these rounds on 2026-10-09 (in the site session, Beta/Promo: "yes sounds good"), which gave the
@@ -10,6 +10,10 @@
 // Auto, Blind, each column its own fresh copy under the drive's profile, sent once. A limit or an error STOPS
 // it: no retry. Any question is DENIED. Every column is copied out byte for byte, and Locust's own record kept,
 // before Keep and before anything opens a page.
+//
+// voxel (2026-10-13, Colin: "yeah we can run those areana runs"; the lineup and prompt from Beta/Promo): six models
+// at Max -- claude = Opus 5.5, Sonnet 5.5, Fable 5.1; muse-sol = Muse Wonder 1.0 (Muse Code) + GPT-6.1-Sol; astra =
+// GPT-6-Astra beside Muse Spark Free, the filler a Blind compare needs, whose work is NOT counted. Run with --effort max.
 //
 // trails (the bot tournament): the folder every column starts from is a fresh copy of the kit's files, no git,
 // each checked against LOCKED.md first; the other rounds start from an empty folder.
@@ -27,16 +31,22 @@ const packaged = arg('--packaged')
 const SEND = process.argv.includes('--send')
 const SET = arg('--set')
 const ROUND = arg('--round')
-if (SET !== 'trio' && SET !== 'pair' && SET !== 'fable') throw new Error('--set trio, pair or fable')
+const SETS = ['trio', 'pair', 'fable', 'claude', 'muse-sol', 'astra']
+if (!SETS.includes(SET ?? '')) throw new Error(`--set ${SETS.join(', ')}`)
+/** The effort every column is set to: High, as the earlier rounds ran, or Max. */
+const EFFORT = arg('--effort') ?? 'high'
+if (EFFORT !== 'high' && EFFORT !== 'max') throw new Error('--effort high or max')
+const EFFORT_WORD = EFFORT === 'max' ? 'Max' : 'High'
 /** Each round's prompt opens with these words and ends with the same sentence: the wrong file stops it. */
 const OPENS = {
   portrait: 'Make a self-portrait in a single self-contained file, index.html.',
   worst: 'Make the most annoying volume control you can, in a single self-contained file, index.html.',
-  trails: 'Write a bot for Trails, a light-cycle game.'
+  trails: 'Write a bot for Trails, a light-cycle game.',
+  voxel: 'Build a voxel art scene of a space station, in a single file, index.html'
 }
-if (!Object.hasOwn(OPENS, ROUND ?? '')) throw new Error('--round portrait, worst or trails')
+if (!Object.hasOwn(OPENS, ROUND ?? '')) throw new Error('--round portrait, worst, trails or voxel')
 const promptPath = requiredPathArgument('--prompt')
-const OUT = join(recordRoot(`arena-${ROUND}-2026-10-10`), `${SEND ? 'run' : 'look'}-${SET}`)
+const OUT = join(recordRoot(`arena-${ROUND}-${ROUND === 'voxel' ? '2026-10-13' : '2026-10-10'}`), `${SEND ? 'run' : 'look'}-${SET}`)
 await mkdir(OUT, { recursive: true })
 const PROMPT = (await readFile(promptPath, 'utf8')).replace(/\r\n/g, '\n').trim()
 if (!PROMPT.startsWith(OPENS[ROUND]) || !PROMPT.endsWith('You decide everything else.')) throw new Error(`could not read the ${ROUND} prompt`)
@@ -52,10 +62,26 @@ const WANT = SET === 'trio'
         { search: 'fable', row: /^Fable 5\.1$/i, runtime: /^Claude Code/i },
         { search: 'astra', row: /^GPT-6-Astra$/i, runtime: /^Codex/i }
       ]
-    : [
-        { search: 'fable', row: /^Fable 5\.1$/i, runtime: /^Claude Code/i },
-        { search: 'muse spark', row: /^Muse Spark 1\.3 Contributor Free$/i, runtime: /^OpenCode/i }
-      ]
+    : SET === 'fable'
+      ? [
+          { search: 'fable', row: /^Fable 5\.1$/i, runtime: /^Claude Code/i },
+          { search: 'muse spark', row: /^Muse Spark 1\.3 Contributor Free$/i, runtime: /^OpenCode/i }
+        ]
+      : SET === 'claude'
+        ? [
+            { search: 'opus', row: /^Opus 5\.5$/i, runtime: /^Claude Code/i },
+            { search: 'sonnet', row: /^Sonnet 5\.5$/i, runtime: /^Claude Code/i },
+            { search: 'fable', row: /^Fable 5\.1$/i, runtime: /^Claude Code/i }
+          ]
+        : SET === 'muse-sol'
+          ? [
+              { search: 'muse wonder', row: /^Muse Wonder 1\.0$/i, runtime: /^Muse/i },
+              { search: 'sol', row: /^GPT-6\.1-Sol$/i, runtime: /^Codex/i }
+            ]
+          : [
+              { search: 'astra', row: /^GPT-6-Astra$/i, runtime: /^Codex/i },
+              { search: 'muse spark', row: /^Muse Spark 1\.3 Contributor Free$/i, runtime: /^OpenCode/i }
+            ]
 
 const notes = []
 const note = (line) => { notes.push(line); say(`  ${line}`) }
@@ -148,7 +174,7 @@ try {
     }
     pending = still
   }
-  // High on each column, from its own effort control.
+  // High (or Max) on each column, from its own effort control.
   for (const [index] of WANT.entries()) {
     const set = String(await drive.evaluate(`(async () => {
       const group = document.querySelectorAll('.lc-slotgroup')[${String(index)}]
@@ -165,7 +191,7 @@ try {
         await new Promise((r) => setTimeout(r, 200))
         const now = document.querySelector('.lc-compare-slots .lc-effortpanel__now')?.innerText.trim() ?? ''
         seen.push(now)
-        if (/^high$/i.test(now)) break
+        if (now.toLowerCase() === ${JSON.stringify(EFFORT)}) break
       }
       document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))
       await new Promise((r) => setTimeout(r, 300))
@@ -194,7 +220,7 @@ try {
   note(`columns as set: ${JSON.stringify(columns)}`)
   await shot('set-up.png')
   // Nothing is spent unless every column is exactly what was asked, and no limit is used up.
-  const ok = columns.length === WANT.length && WANT.every((want, at) => want.row.test(columns[at]?.model ?? '') && want.runtime.test(columns[at]?.title ?? '') && (/: High$/.test(columns[at]?.effort ?? '') || (want.runtime.test('OpenCode') && (columns[at]?.effort ?? '') === ''))) && /^Auto/.test(JSON.parse(mode).mode) && /Blind/.test(JSON.parse(mode).chat)
+  const ok = columns.length === WANT.length && WANT.every((want, at) => want.row.test(columns[at]?.model ?? '') && want.runtime.test(columns[at]?.title ?? '') && (new RegExp(`: ${EFFORT_WORD}$`).test(columns[at]?.effort ?? '') || (want.runtime.test('OpenCode') && (columns[at]?.effort ?? '') === ''))) && /^Auto/.test(JSON.parse(mode).mode) && /Blind/.test(JSON.parse(mode).chat)
   const spent = columns.some((column) => /limit is used up/i.test(column.title))
   note(ok ? 'SET UP AS ASKED' : 'NOT SET UP AS ASKED: nothing sent')
   if (spent) note('A LIMIT IS USED UP: nothing sent')
@@ -298,5 +324,5 @@ try {
   note(`drive failed: ${error instanceof Error ? error.message : String(error)}`)
 } finally {
   await writeFile(join(OUT, 'notes.txt'), notes.join('\n') + '\n', 'utf8')
-  await drive.finish({ intro: `Build: ${packaged ?? 'out/'}. Arena ${ROUND}, ${SET} set, ${SEND ? 'run' : 'set up only'}.`, extra: notes.join('\n') })
+  await drive.finish({ intro: `Build: ${packaged ?? 'out/'}. Arena ${ROUND}, ${SET} set, ${EFFORT_WORD}, ${SEND ? 'run' : 'set up only'}.`, extra: notes.join('\n') })
 }
