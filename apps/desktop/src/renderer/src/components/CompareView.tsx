@@ -632,9 +632,10 @@ function JudgeAsk({ choices, compared = [], again, busy, onJudge }: {
   const others = judges.slice(1)
   const pointsWritten = criteria.split(/\r?\n/).some((line) => line.trim().length > 0)
   const ready = choice.length > 0 && (!three || (others.length === 2 && pointsWritten))
-  const pickerOf = (index: number, value: string, onPick: (key: string) => void, label: string): ReactElement => (
+  // Each label written out where it is used: the harness check reads labels from the attribute itself.
+  const pickerOf = (index: number, value: string, onPick: (key: string) => void): ReactElement => (
     <span className="lc-compare__select" key={`judge:${String(index)}`}>
-      <select className="lc-input lc-compare__judgepick" aria-label={label} value={value} onChange={(event) => onPick(event.target.value)}>
+      <select className="lc-input lc-compare__judgepick" aria-label={index === 0 ? (three ? 'The first judge' : 'The model that judges') : index === 1 ? 'The second judge' : 'The third judge'} value={value} onChange={(event) => onPick(event.target.value)}>
         <ModelOptions choices={choices.filter((one) => one.key === value || !judges.includes(one.key))} />
       </select>
       <ChevronGlyph />
@@ -644,7 +645,7 @@ function JudgeAsk({ choices, compared = [], again, busy, onJudge }: {
     <div className="lc-compare__judgeask">
       <span className="lc-compare__recordlabel lc-mono">{three ? (again ? 'ASK THREE OTHER JUDGES' : 'ASK THREE JUDGES') : again ? 'ASK ANOTHER JUDGE' : 'ASK A JUDGE'}</span>
       <div className="lc-compare__judgerow">
-        {pickerOf(0, choice, setChoice, three ? 'The first judge' : 'The model that judges')}
+        {pickerOf(0, choice, setChoice)}
         {/* One point a line, each a row of the judge's scorecard (0.759); it grows with them. */}
         <textarea
           className="lc-input lc-compare__judgecriteria"
@@ -662,7 +663,7 @@ function JudgeAsk({ choices, compared = [], again, busy, onJudge }: {
       {three && (
         <div className="lc-compare__judgerow">
           <span className="lc-compare__panelword">with</span>
-          {others.map((key, index) => pickerOf(index + 1, key, (next) => setOthers((current) => current.map((one, at) => (at === index ? next : one))), index === 0 ? 'The second judge' : 'The third judge'))}
+          {others.map((key, index) => pickerOf(index + 1, key, (next) => setOthers((current) => current.map((one, at) => (at === index ? next : one)))))}
           <button type="button" className="lc-linkbutton" onClick={() => setThree(false)}>One judge</button>
         </div>
       )}
