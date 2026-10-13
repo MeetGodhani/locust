@@ -11,6 +11,18 @@ Settings shows this file as What's new. An entry may group its changes under
 about when they arrive on it carries `<!-- big -->` on the line under its
 heading: the home screen then shows it once, as a splash.
 
+## 0.768.0 - 2026-10-13
+<!-- big -->
+
+### New
+
+- **Claude Code and Codex on your cloud computer.** For a Claude Code or Codex teammate, the chat-type menu now offers Cloud computer beside its maker's own cloud. The turn runs on your own GitHub Codespace, with Claude Code or Codex there, on the model in the box. It streams here like any turn, carries the conversation on, and its change waits there until you apply it here or send it to a pull request.
+- **Signed in with one click, and no code to copy.** The first time, Locust puts the agent on the computer and opens its maker's own sign-in page in your browser. You click Authorize, as on this PC, and it is signed in there. Settings > Cloud computers shows which agents are signed in on each computer, with Sign in and Sign out. The sign-in stays on that computer and goes when it is deleted.
+
+### Improved
+
+- **Scout says it is keeping watch.** When nothing needs you, Home now shows one quiet line instead of nothing: Scout keeps watch, when it last looked, and Look now. A Scout that is watching no longer looks like one that is off. Settings says when it last looked too.
+
 ## 0.767.0 - 2026-10-13
 
 ### New
