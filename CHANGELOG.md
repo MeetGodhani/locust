@@ -11,6 +11,12 @@ Settings shows this file as What's new. An entry may group its changes under
 about when they arrive on it carries `<!-- big -->` on the line under its
 heading: the home screen then shows it once, as a splash.
 
+## 0.767.0 - 2026-10-13
+
+### New
+
+- **A point can count more.** End a point with ×2 (or x2, up to x5) and it counts that many times in the score. The judges score it like any other point, and the scorecard shows its weight beside it. Every score, a comparison's and a benchmark's, adds up the points met by their weight.
+
 ## 0.766.0 - 2026-10-12
 
 ### New
