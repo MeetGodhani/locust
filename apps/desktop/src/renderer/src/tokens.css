@@ -272,6 +272,10 @@
   --lc-amber-text: #efc969;
   --lc-amber-tint: rgba(233, 185, 73, 0.12);
   --lc-amber-border: rgba(233, 185, 73, 0.32);
+  /* Find in a conversation (0.769): each match under amber, the one it is on in solid amber with dark letters. */
+  --lc-find-hit: rgba(233, 185, 73, 0.3);
+  --lc-find-now: #e9b949;
+  --lc-find-now-text: #15171a;
 
   --lc-red: #e4685d;
   --lc-red-text: #ee9188;

@@ -1934,6 +1934,8 @@ export default function App(): ReactElement {
   const [cloudOn, setCloudOn] = useState(false)
   /** Claude Code or Codex on the person's own cloud computer (0.768), instead of its maker's cloud. */
   const [computerOn, setComputerOn] = useState(false)
+  /** Ctrl+F, counted (0.769): the conversation on screen opens its find bar on each new number. */
+  const [findRequest, setFindRequest] = useState(0)
   // YOUR CLOUD COMPUTER (0.761): the turns that ran there, by mission, and the first-time dialog.
   const [cloudTurns, setCloudTurns] = useState<ReadonlyMap<string, PublicCloudTurn>>(() => new Map())
   const [cloudSetup, setCloudSetup] = useState<CloudSetupState>()
@@ -3643,6 +3645,12 @@ export default function App(): ReactElement {
   useEffect(() => {
     const onKey = (event: globalThis.KeyboardEvent): void => {
       const accel = event.ctrlKey || event.metaKey
+      // Find in the conversation on screen (0.769): Electron gives a window no find of its own.
+      if (accel && !event.shiftKey && !event.altKey && event.key.toLowerCase() === 'f') {
+        event.preventDefault()
+        setFindRequest((count) => count + 1)
+        return
+      }
       if (accel && event.key.toLowerCase() === 'k') {
         event.preventDefault()
         setPaletteOpen((open) => !open)
@@ -9152,6 +9160,7 @@ export default function App(): ReactElement {
               })()}
               <DiffNotesContext.Provider value={diffNotesPlace}>
               <Thread
+                findRequest={findRequest}
                 backgroundTurns={backgroundTurnIds}
                 onOpenFile={openFileInViewer}
                 // A status chip changed in a teammate's tracker writes its ask into the box (0.733).

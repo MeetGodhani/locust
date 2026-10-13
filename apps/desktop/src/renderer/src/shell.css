@@ -6548,6 +6548,27 @@ textarea {
 .lc-scout__head { display: flex; align-items: center; gap: var(--lc-space-3); min-height: 24px; }
 .lc-scout__heading { display: inline-flex; align-items: center; gap: var(--lc-space-2); flex: 1 1 auto; font-family: var(--lc-font-mono); font-size: var(--lc-text-mono-label); letter-spacing: var(--lc-tracking-label); text-transform: uppercase; color: var(--lc-text-muted); white-space: nowrap; }
 .lc-scout__said { margin: 0; font-size: var(--lc-text-mono-caption); color: var(--lc-text-muted); }
+/* Find in a conversation (0.769, ThreadFind.tsx): a bar that stays at the conversation's top right while it scrolls,
+   over the turns rather than pushing them down; its matches are drawn by the CSS Highlight API. */
+.lc-threadfind { position: sticky; top: 0; z-index: 6; height: 0; display: flex; justify-content: flex-end; padding: 0 var(--lc-space-4); pointer-events: none; }
+.lc-threadfind__box { display: flex; flex-direction: column; align-items: flex-end; gap: var(--lc-space-2); margin-top: var(--lc-space-3); pointer-events: auto; }
+.lc-threadfind__bar { display: flex; align-items: center; gap: var(--lc-space-2); padding: var(--lc-space-1) var(--lc-space-1) var(--lc-space-1) var(--lc-space-3); border: 1px solid var(--lc-border-card); border-radius: var(--lc-radius-card); background: var(--lc-bg-raised); box-shadow: var(--lc-shadow-menu); color: var(--lc-text-muted); }
+.lc-threadfind__input { width: 180px; min-width: 0; border: 0; outline: none; background: transparent; color: var(--lc-text-primary); font: inherit; font-size: var(--lc-text-body); }
+.lc-threadfind__input::placeholder { color: var(--lc-text-faint); }
+/* The ring belongs on the bar a person sees, as the search field's and the palette's do: tokens.css's square ring on
+   every input:focus-visible would draw a box inside it. */
+.lc-threadfind__input:focus-visible { outline: none; }
+.lc-threadfind__bar:focus-within { border-color: var(--lc-focus-edge); box-shadow: var(--lc-shadow-menu), 0 0 0 3px var(--lc-focus-glow); }
+.lc-threadfind__count { min-width: 64px; text-align: right; font-size: var(--lc-text-mono-caption); color: var(--lc-text-muted); white-space: nowrap; }
+.lc-threadfind__step { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; border: 0; border-radius: var(--lc-radius-control); background: transparent; color: var(--lc-text-secondary); cursor: pointer; }
+.lc-threadfind__step:hover:not(:disabled) { background: var(--lc-bg-control); color: var(--lc-text-primary); }
+.lc-threadfind__step:focus-visible { outline: 2px solid var(--lc-focus-ring); outline-offset: 1px; }
+.lc-threadfind__step:disabled { opacity: 0.4; cursor: default; }
+.lc-threadfind__step--up svg { transform: rotate(180deg); }
+.lc-threadfind__earlier { padding: var(--lc-space-1) var(--lc-space-3); border: 1px solid var(--lc-border-card); border-radius: var(--lc-radius-control); background: var(--lc-bg-raised); color: var(--lc-text-secondary); font: inherit; font-size: var(--lc-text-description); cursor: pointer; }
+.lc-threadfind__earlier:hover { color: var(--lc-text-primary); }
+::highlight(lc-find) { background-color: var(--lc-find-hit); }
+::highlight(lc-find-now) { background-color: var(--lc-find-now); color: var(--lc-find-now-text); }
 /* Keeping watch with nothing to say (0.768): the heading, when it last looked, and Look now, on one quiet line. */
 .lc-scout--watching .lc-scout__heading { flex: 0 0 auto; }
 .lc-scout__looked { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--lc-text-mono-caption); color: var(--lc-text-muted); }

@@ -23,6 +23,7 @@ import { parseAgentText } from '../agentText.js'
 import { folderName, ranOnLine } from '../ranOn.js'
 import { useFollowBottom } from '../useFollowBottom.js'
 import { JumpToBottom } from './JumpToBottom.js'
+import { ThreadFind } from './ThreadFind.js'
 import { CopyButton } from './CopyButton.js'
 import { PublishedCards } from './PublishedCards.js'
 import { TurnUndo } from './TurnUndo.js'
@@ -826,6 +827,11 @@ export interface ThreadProps {
   readonly onOpenFile?: (path: string) => void
   /** Words for the box, for the person to send (0.733). */
   readonly onDraft?: (text: string) => void
+  /**
+   * FIND (0.769, ThreadFind.tsx): Ctrl+F, counted -- each new number opens this conversation's find bar. Only the
+   * conversation on screen is given it, so a thread in a side panel never opens a second bar.
+   */
+  readonly findRequest?: number
   readonly onOpenPeerRun: (messageId: string) => (() => void) | undefined
   /**
    * Earlier turns of the same conversation, oldest first, each with the words
@@ -1047,6 +1053,7 @@ export function firstEarlierTurnShown(sizes: readonly number[], budget: number =
 
 export function Thread({
   prompt,
+  findRequest,
   editCheck,
   onSendEditCheck,
   stoppedByPerson = false,
@@ -1513,6 +1520,8 @@ onResume,
   // the same behaviour and had none of it (Colin, 2026-09-13: "lets have all
   // chats auto scroll the same way").
   const follow = useFollowBottom()
+  /** The turns themselves, which find searches -- never its own bar, which sits outside them. */
+  const column = useRef<HTMLDivElement>(null)
 
   // A mission the person just opened starts at its newest line, wherever the
   // previous one had been left. Opening a conversation JUMPS -- walking would
@@ -1540,6 +1549,12 @@ onResume,
     if (box !== null) keepFromBottom.current = box.scrollHeight - box.scrollTop
     showEarlier()
   }
+  /** Every earlier turn on the page at once, for a find that should reach them all (0.769). */
+  const showAllEarlier = (): void => {
+    const box = follow.ref.current
+    if (box !== null) keepFromBottom.current = box.scrollHeight - box.scrollTop
+    setEarlierBudget({ identity: shownIdentity, rows: Number.MAX_SAFE_INTEGER })
+  }
   useLayoutEffect(() => {
     const box = follow.ref.current
     const kept = keepFromBottom.current
@@ -1565,7 +1580,8 @@ onResume,
 
   return (
     <div className="lc-thread" ref={follow.ref} onScroll={follow.onScroll}>
-      <div className="lc-thread__column">
+      {findRequest !== undefined && <ThreadFind request={findRequest} root={column} scroller={follow.ref} earlier={{ count: firstShown, onShowAll: showAllEarlier }} />}
+      <div className="lc-thread__column" ref={column}>
         {/*
           * The mission id is PROVENANCE, and provenance lives on the workroom
           * header band where the 0.20 pass put it -- the header already reads
