@@ -484,8 +484,10 @@ import { decideRoutineRecovery } from './routine-recovery-ipc.js'
 import { parsedMissionMode } from './mission-mode.js'
 import { createPdfReadings, isPdfPath } from './pdf-reading.js'
 import { createViewPdfReader } from './pdf-window.js'
-import { createCommitDraftRuns } from './commit-draft-runs.js'
-import { COMMIT_DRAFT_CHANNEL, COMMIT_DRAFT_RUNS_CHANNEL, commitDraftPrompt, draftedCommitMessage, type CommitDraftResponse } from '../shared/commit-draft.js'
+import { createPanelRuns } from './panel-runs.js'
+import { PANEL_RUNS_CHANNEL } from '../shared/panel-runs.js'
+import { COMMIT_DRAFT_CHANNEL, commitDraftPrompt, draftedCommitMessage, type CommitDraftResponse } from '../shared/commit-draft.js'
+import { WALKTHROUGH_CHANNEL, changedPaths, readWalkthrough, walkthroughPrompt, type WalkthroughResponse } from '../shared/walkthrough.js'
 import { createViewDiagramDrawer, diagramViewOn } from './diagram-view.js'
 import { keptDiagrams } from './diagrams.js'
 import { DIAGRAM_DRAW_CHANNEL } from '../shared/diagram.js'
@@ -2789,11 +2791,11 @@ if (!ownsSingleInstanceLock) {
     /*
      * A COMMIT MESSAGE WRITTEN FROM THE CHANGES (0.771, shared/commit-draft.ts): one short read-only run on the route
      * of the conversation's latest turn -- the teammate that made the changes -- given what a commit would take,
-     * in a slot of its own, never a conversation (commit-draft-runs.ts). Answered once it is done, with the message
+     * in a slot of its own, never a conversation (panel-runs.ts). Answered once it is done, with the message
      * for the box; the commit is still the person's press.
      */
-    const commitDraftRuns = createCommitDraftRuns(join(app.getPath('userData'), 'commit-draft-runs.json'))
-    ipcMain.handle(COMMIT_DRAFT_RUNS_CHANNEL, async (event) => (fromOwnWindow(event) ? commitDraftRuns.list().catch(() => []) : []))
+    const panelRuns = createPanelRuns(join(app.getPath('userData'), 'panel-runs.json'))
+    ipcMain.handle(PANEL_RUNS_CHANNEL, async (event) => (fromOwnWindow(event) ? panelRuns.list().catch(() => []) : []))
     ipcMain.handle(COMMIT_DRAFT_CHANNEL, async (event, of: unknown, asks: unknown): Promise<CommitDraftResponse> => {
       const kept = 'The message you had is still in the box.'
       const no = (why: string): CommitDraftResponse => ({ ok: false, message: `${why} ${kept}` })
@@ -2822,7 +2824,7 @@ if (!ownsSingleInstanceLock) {
       if (!response.ok) return no(response.error.code === 'RUN_ALREADY_ACTIVE' ? 'A message is being written already.' : response.error.message)
       const { missionId, runId } = response.data
       // Kept before it is drawn anywhere, so the window never lists it among the conversations.
-      await commitDraftRuns.add(missionId).catch(() => undefined)
+      await panelRuns.add(missionId).catch(() => undefined)
       sendToWindow({ kind: 'mission-started', runId, missionId, prompt: 'Write the commit message', data: response.data, startedBy: { kind: 'commit-draft' } })
       for (let waited = 0; waited < 180 && codexMissions.hasMission(missionId); waited += 1) await new Promise((done) => setTimeout(done, 1_000))
       if (codexMissions.hasMission(missionId)) {
@@ -2834,6 +2836,56 @@ if (!ownsSingleInstanceLock) {
       tracker.track(recorded?.events ?? [])
       const message = draftedCommitMessage(tracker.latestFinal ?? '')
       return message === undefined ? no('It did not answer with a message.') : { ok: true, message }
+    })
+    /*
+     * WALK ME THROUGH THIS CHANGE (0.771, shared/walkthrough.ts): one short read-only run on the route of the
+     * conversation's latest turn, given the change the Changes panel shows -- all of it, or one commit -- with what was
+     * asked and what the teammate said when it finished, never a conversation (panel-runs.ts). Answered once it is
+     * done, for the panel to show; it changes nothing.
+     */
+    ipcMain.handle(WALKTHROUGH_CHANNEL, async (event, of: unknown, asks: unknown, sha: unknown): Promise<WalkthroughResponse> => {
+      const no = (why: string): WalkthroughResponse => ({ ok: false, message: `${why} The changes are as they were.` })
+      if (!fromOwnWindow(event)) return no('That request was not from this window.')
+      const ofId = typeof of === 'string' ? of : undefined
+      const turn = ofId === undefined ? undefined : await missionLedger.getMission(ofId).catch(() => undefined)
+      if (ofId === undefined || turn === undefined) return no('That conversation is not in the record.')
+      const one = typeof sha === 'string' && /^[0-9a-f]{40,64}$/.test(sha) ? sha : undefined
+      const change = await folderCommits.diff(workspacePath, one).catch(() => undefined)
+      const paths = change?.kind === 'diff' ? changedPaths(change.text) : []
+      if (change === undefined || change.kind !== 'diff' || paths.length === 0) return no('There is no change here to walk through.')
+      const said = createTranscriptTracker()
+      said.track(turn.events)
+      const words = Array.isArray(asks) ? asks.filter((ask): ask is string => typeof ask === 'string').slice(-5) : []
+      const effort = (turn.metadata as { readonly effort?: unknown }).effort
+      const response = await codexMissions.start(
+        walkthroughPrompt({ diff: change.text, cut: change.truncated, paths, asks: words, ...(said.latestFinal === undefined ? {} : { said: said.latestFinal }) }),
+        turn.metadata.runtime,
+        'ask',
+        { ...(turn.metadata.model === 'account-default' ? {} : { model: turn.metadata.model }), ...(typeof effort === 'string' ? { effort } : {}) },
+        sendToWindow,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        { key: `walkthrough:${ofId}` }
+      )
+      if (!response.ok) return no(response.error.code === 'RUN_ALREADY_ACTIVE' ? 'It is being walked through already.' : response.error.message)
+      const { missionId, runId } = response.data
+      // Kept before it is drawn anywhere, so the window never lists it among the conversations.
+      await panelRuns.add(missionId).catch(() => undefined)
+      sendToWindow({ kind: 'mission-started', runId, missionId, prompt: 'Walk me through this change', data: response.data, startedBy: { kind: 'walkthrough' } })
+      for (let waited = 0; waited < 240 && codexMissions.hasMission(missionId); waited += 1) await new Promise((done) => setTimeout(done, 1_000))
+      if (codexMissions.hasMission(missionId)) {
+        codexMissions.cancel(runId)
+        return no('It took too long.')
+      }
+      const recorded = await missionLedger.getMission(missionId).catch(() => undefined)
+      const reader = createTranscriptTracker()
+      reader.track(recorded?.events ?? [])
+      const walkthrough = readWalkthrough(reader.latestFinal ?? '', paths)
+      return walkthrough === undefined ? no('It did not answer with a walkthrough.') : { ok: true, walkthrough }
     })
     ipcMain.handle(FOLDER_CHANGES_CHANNEL, (event) =>
       fromOwnWindow(event)

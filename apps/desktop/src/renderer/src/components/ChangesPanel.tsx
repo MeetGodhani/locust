@@ -2,11 +2,13 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactElement } from 'react'
 
 import type { FolderDiff } from '../../../shared/folder-diff.js'
+import type { Walkthrough } from '../../../shared/walkthrough.js'
 import { parseUnifiedDiff } from '../diff.js'
 import type { DiffFile } from '../diff.js'
 import { agoLabel } from '../teammateWork.js'
 import { DiffView } from './DiffView.js'
 import { Icon } from './Icon.js'
+import { InlineProse } from './ThreadItems.js'
 
 /**
  * THE FOLDER'S CHANGES, IN ONE PANEL (0.732, shared/folder-diff.ts), laid out as Claude Code's own (claude.ai/code,
@@ -14,7 +16,18 @@ import { Icon } from './Icon.js'
  * scroll, each under a header that folds it; the branch's commits under the tree, any one of which can be looked
  * at alone. Reads only.
  */
-export function ChangesPanel({ workspacePath, running, onClose }: { readonly workspacePath?: string; readonly running: boolean; readonly onClose: () => void }): ReactElement {
+/**
+ * WALK ME THROUGH IT (0.771, shared/walkthrough.ts): `walkWith` is the conversation on screen. Its teammate goes
+ * through the change shown as its author would in a review -- the summary over the files, the files in the order to
+ * read them, a note on each -- and the panel shows it so until it is closed, another commit is picked, or the
+ * change is read again.
+ */
+type Walk =
+  | { readonly phase: 'asking' }
+  | { readonly phase: 'shown'; readonly walkthrough: Walkthrough }
+  | { readonly phase: 'failed'; readonly message: string }
+
+export function ChangesPanel({ workspacePath, running, onClose, walkWith }: { readonly workspacePath?: string; readonly running: boolean; readonly onClose: () => void; readonly walkWith?: { readonly of: string; readonly teammate: string; readonly asks: readonly string[] } }): ReactElement {
   const [diff, setDiff] = useState<FolderDiff>()
   const [showing, setShowing] = useState<'all' | string>('all')
   // The tree beside the diffs where there is room for both; in a small window, one press away.
@@ -23,6 +36,22 @@ export function ChangesPanel({ workspacePath, running, onClose }: { readonly wor
   const [menuOpen, setMenuOpen] = useState(false)
   const [asked, setAsked] = useState(0)
   const scroller = useRef<HTMLDivElement>(null)
+  const [walk, setWalk] = useState<Walk>()
+  // A walk is of the change it was asked about: another commit picked, the change read again, or a turn that may
+  // change it, ends it.
+  useEffect(() => {
+    setWalk(undefined)
+  }, [showing, asked, running])
+  const walkThrough = async (): Promise<void> => {
+    const bridge = window.desktop
+    if (walkWith === undefined || bridge?.walkThroughChange === undefined) return
+    setWalk({ phase: 'asking' })
+    const answer = await bridge
+      .walkThroughChange(walkWith.of, walkWith.asks, showing === 'all' ? undefined : showing)
+      .catch(() => ({ ok: false as const, message: 'Locust could not ask for it. The changes are as they were.' }))
+    setWalk(answer.ok ? { phase: 'shown', walkthrough: answer.walkthrough } : { phase: 'failed', message: answer.message })
+    scroller.current?.scrollTo({ top: 0 })
+  }
 
   // Read when opened, when a turn ends (it may have changed files), and on Refresh.
   useEffect(() => {
@@ -44,7 +73,16 @@ export function ChangesPanel({ workspacePath, running, onClose }: { readonly wor
     }
   }, [showing, running, asked])
 
-  const files = useMemo(() => (diff?.kind === 'diff' ? parseUnifiedDiff(diff.text) : []), [diff])
+  const read = useMemo(() => (diff?.kind === 'diff' ? parseUnifiedDiff(diff.text) : []), [diff])
+  // Walked through, each file has its note and its place in the reading; one it did not mention keeps git's place after.
+  const notes = useMemo(
+    () => (walk?.phase === 'shown' ? new Map(walk.walkthrough.files.map((file, index) => [file.path, { ...file, order: index + 1 }])) : undefined),
+    [walk]
+  )
+  const files = useMemo(
+    () => (notes === undefined ? read : read.map((file, index) => ({ file, rank: notes.get(file.path)?.order ?? 10_000 + index })).sort((a, b) => a.rank - b.rank).map(({ file }) => file)),
+    [read, notes]
+  )
   const totals = useMemo(() => files.reduce((sum, file) => ({ added: sum.added + countOf(file).added, removed: sum.removed + countOf(file).removed }), { added: 0, removed: 0 }), [files])
   const jump = (path: string): void => {
     setFolded((current) => {
@@ -84,6 +122,12 @@ export function ChangesPanel({ workspacePath, running, onClose }: { readonly wor
           </span>
         )}
         <span className="lc-viewer__spacer" />
+        {walkWith !== undefined && read.length > 0 && (walk === undefined || walk.phase === 'failed') && (
+          <button type="button" className="lc-changes__walk" title={`${walkWith.teammate} goes through the change as its author would in a review`} onClick={() => void walkThrough()}>
+            <Icon name="message" size={12} />
+            Walk me through it
+          </button>
+        )}
         <span className="lc-changes__menuwrap">
           <button type="button" className="lc-viewer__action" aria-label="More" aria-expanded={menuOpen} title="More" onClick={() => setMenuOpen(!menuOpen)}>
             <Icon name="dots" size={13} />
@@ -162,11 +206,31 @@ export function ChangesPanel({ workspacePath, running, onClose }: { readonly wor
               </nav>
             )}
             <div className="lc-changes__diffs" ref={scroller}>
+              {walk !== undefined && (
+                <div className="lc-changes__walkthrough" role="status" aria-live="polite" aria-label="Walkthrough">
+                  {walk.phase === 'asking' ? (
+                    <p className="lc-changes__walksaid">{`${walkWith?.teammate ?? 'Your teammate'} is walking through the change…`}</p>
+                  ) : walk.phase === 'failed' ? (
+                    <p className="lc-changes__walksaid">{walk.message}</p>
+                  ) : (
+                    <>
+                      <div className="lc-changes__walkhead">
+                        <span className="lc-changes__walkwho">{`${walkWith?.teammate ?? 'Your teammate'}’s walkthrough`}</span>
+                        <button type="button" className="lc-viewer__action" aria-label="Close the walkthrough" title="Close the walkthrough" onClick={() => setWalk(undefined)}>
+                          <Icon name="close" size={12} />
+                        </button>
+                      </div>
+                      <p className="lc-changes__walksummary"><InlineProse text={walk.walkthrough.summary} /></p>
+                    </>
+                  )}
+                </div>
+              )}
               {files.length === 0 && <p className="lc-changes__note">This commit changes no files Locust can show.</p>}
               {files.map((file) => {
                 const open = !folded.has(file.path)
                 const { added, removed } = countOf(file)
                 const at = file.path.lastIndexOf('/')
+                const note = notes?.get(file.path)
                 return (
                   <section className="lc-changes__file" key={file.path} data-path={file.path}>
                     <button
@@ -189,6 +253,20 @@ export function ChangesPanel({ workspacePath, running, onClose }: { readonly wor
                         <span className="lc-diff__addmark">+{added}</span> <span className="lc-diff__delmark">−{removed}</span>
                       </span>
                     </button>
+                    {note !== undefined && (
+                      <div className="lc-changes__why">
+                        <span className="lc-changes__order lc-mono" aria-label={`Read it ${String(note.order)} of ${String(notes?.size ?? 0)}`}>{note.order}</span>
+                        <div className="lc-changes__whytext">
+                          <p><InlineProse text={note.why} /></p>
+                          {note.check !== undefined && (
+                            <p className="lc-changes__check">
+                              <span className="lc-changes__checklabel">Check</span>
+                              <InlineProse text={note.check} />
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    )}
                     {open && <DiffView file={file} truncated={false} reported={undefined} workspacePath={workspacePath} />}
                   </section>
                 )

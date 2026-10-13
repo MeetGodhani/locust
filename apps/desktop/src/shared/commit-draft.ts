@@ -8,8 +8,6 @@
  * description. It fills the box; nothing is committed until the person presses Commit.
  */
 export const COMMIT_DRAFT_CHANNEL = 'folder:commit-draft'
-/** The runs that wrote drafts: the window never lists them among the conversations. */
-export const COMMIT_DRAFT_RUNS_CHANNEL = 'folder:commit-draft-runs'
 
 /** How much of the diff the model reads: a big change is described by its files and its first 40,000 characters. */
 export const MAX_DRAFT_DIFF_CHARS = 40_000

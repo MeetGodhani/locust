@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { commitDraftPrompt, draftedCommitMessage, MAX_SUBJECT_CHARS, type PendingChanges } from '../shared/commit-draft.js'
-import { createCommitDraftRuns } from './commit-draft-runs.js'
+import { createPanelRuns } from './panel-runs.js'
 
 /*
  * A COMMIT MESSAGE WRITTEN FROM THE CHANGES (0.771). The teammate that made them is given the diff, the files and
@@ -54,7 +54,7 @@ describe('the message in the answer', () => {
   })
 })
 
-describe('the runs that wrote drafts', () => {
+describe('the runs that wrote drafts, kept with the other panels\' runs', () => {
   let folder: string
   beforeEach(async () => {
     folder = await mkdtemp(join(tmpdir(), 'locust-commit-drafts-'))
@@ -64,19 +64,19 @@ describe('the runs that wrote drafts', () => {
   })
 
   it('are kept across a restart, each once, the oldest going first past the limit', async () => {
-    const file = join(folder, 'commit-draft-runs.json')
-    const runs = createCommitDraftRuns(file, 3)
+    const file = join(folder, 'panel-runs.json')
+    const runs = createPanelRuns(file, 3)
     await Promise.all([runs.add('mission_a'), runs.add('mission_b'), runs.add('mission_a')])
     expect(await runs.list()).toEqual(['mission_b', 'mission_a'])
     await runs.add('mission_c')
     await runs.add('mission_d')
-    expect(await createCommitDraftRuns(file, 3).list()).toEqual(['mission_a', 'mission_c', 'mission_d'])
+    expect(await createPanelRuns(file, 3).list()).toEqual(['mission_a', 'mission_c', 'mission_d'])
     expect(JSON.parse(await readFile(file, 'utf8'))).toEqual({ missionIds: ['mission_a', 'mission_c', 'mission_d'] })
   })
 
   it('reads a file it cannot use as none', async () => {
-    const file = join(folder, 'commit-draft-runs.json')
+    const file = join(folder, 'panel-runs.json')
     await writeFile(file, 'not json', 'utf8')
-    expect(await createCommitDraftRuns(file).list()).toEqual([])
+    expect(await createPanelRuns(file).list()).toEqual([])
   })
 })

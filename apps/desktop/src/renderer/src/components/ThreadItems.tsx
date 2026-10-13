@@ -171,6 +171,11 @@ function nested(text: string): ReactElement | string {
   return spans.length === 1 && spans[0]?.kind === 'plain' && hexColourOf(text) === undefined ? text : inline(text)
 }
 
+/** A line of prose a model wrote, drawn as a reply draws it: inline code, links, colours (0.771: a walkthrough's notes). */
+export function InlineProse({ text }: { readonly text: string }): ReactElement {
+  return inline(text)
+}
+
 /** One run of prose, with inline code and link labels drawn. */
 function inline(text: string): ReactElement {
   /*

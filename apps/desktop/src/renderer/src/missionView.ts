@@ -5773,6 +5773,8 @@ export type LiveStarter =
   | { readonly kind: 'scout' }
   // A commit message written from the changes (0.771): its answer fills the Commit box, never a conversation.
   | { readonly kind: 'commit-draft' }
+  // A walk through a change (0.771): its answer is the Changes panel's, never a conversation.
+  | { readonly kind: 'walkthrough' }
 
 /**
  * What the person ASKED FOR, when a button sent a brief in their name (A1.2).

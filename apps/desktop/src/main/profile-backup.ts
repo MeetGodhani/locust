@@ -54,8 +54,9 @@ export const BACKED_UP_FILES = [
   'calls.json',
   // Scout, on or off, and which teammate it is (0.756): without it a restored Scout would be met again as a stranger.
   'scout.json',
-  // The runs that wrote commit messages (0.771): the ledger carries them, and without this list each would come back as a conversation.
-  'commit-draft-runs.json'
+  // The runs whose answer belongs to a panel (0.771): a commit message, a walkthrough. The ledger carries them, and
+  // without this list each would come back as a conversation.
+  'panel-runs.json'
 ] as const
 
 /**

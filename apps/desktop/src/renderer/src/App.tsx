@@ -58,6 +58,7 @@ import type {
   PublicConnector
 } from '../../shared/ipc.js'
 import { roleLabelOf } from '../../shared/ipc.js'
+import { isPanelRunKind } from '../../shared/panel-runs.js'
 import { withSuggestion } from '../../shared/about-you.js'
 import { aboutYouSecretRefusal, secretIn } from '../../shared/secrets.js'
 import type { AboutYouSuggestion } from '../../shared/about-you.js'
@@ -1864,18 +1865,18 @@ export default function App(): ReactElement {
   const scout = useScoutState()
   const scoutLookKey = (scout?.lookIds ?? []).join(' ')
   // A comparison's runs again (0.763) too: the comparison they run again shows them, as its benchmark.
-  // And the runs that wrote commit messages (0.771): their answer is the Commit box's.
-  const [commitDraftIds, setCommitDraftIds] = useState<readonly string[]>([])
+  // And the runs whose answer belongs to a panel (0.771): a commit message, a walk through a change.
+  const [panelRunIds, setPanelRunIds] = useState<readonly string[]>([])
   useEffect(() => {
-    void window.desktop?.commitDraftRuns?.().then(setCommitDraftIds).catch(() => undefined)
+    void window.desktop?.panelRuns?.().then(setPanelRunIds).catch(() => undefined)
   }, [])
   const hiddenRunIds = useMemo(
-    () => new Set([...judgeMissionIds(compares), ...rerunMissionIds(compares), ...(scoutLookKey.length === 0 ? [] : scoutLookKey.split(' ')), ...commitDraftIds]),
-    [compares, scoutLookKey, commitDraftIds]
+    () => new Set([...judgeMissionIds(compares), ...rerunMissionIds(compares), ...(scoutLookKey.length === 0 ? [] : scoutLookKey.split(' ')), ...panelRunIds]),
+    [compares, scoutLookKey, panelRunIds]
   )
   const rerunCompareIds = useMemo(() => new Set(compares.flatMap((compare) => (compare.rerunOf === undefined ? [] : [compare.compareId]))), [compares])
   const isHiddenRun = (startedBy: { readonly kind: string } | undefined, missionId: string | undefined): boolean =>
-    startedBy?.kind === 'judge' || startedBy?.kind === 'scout' || startedBy?.kind === 'commit-draft' || (missionId !== undefined && hiddenRunIds.has(missionId)) ||
+    startedBy?.kind === 'judge' || startedBy?.kind === 'scout' || isPanelRunKind(startedBy?.kind) || (missionId !== undefined && hiddenRunIds.has(missionId)) ||
     (startedBy?.kind === 'compare' && rerunCompareIds.has((startedBy as { readonly compareId?: string }).compareId ?? ''))
   const [compareProblem, setCompareProblem] = useState<string>()
   /** Home's Compare models opens the composer's picker (0.442). */
@@ -3022,10 +3023,10 @@ export default function App(): ReactElement {
         // A routine that started on its own: the Team card's run count and
         // next run moved on disk, and nobody pressed anything to refresh them.
         if (update.startedBy?.kind === 'routine') void reloadRoutines()
-        // A commit message being written (0.771): hidden from this moment, and once it is in the record.
-        if (update.startedBy?.kind === 'commit-draft') {
-          const drafted = update.missionId
-          setCommitDraftIds((ids) => (ids.includes(drafted) ? ids : [...ids, drafted]))
+        // A panel's run (0.771: a commit message, a walkthrough): hidden from this moment, and once it is in the record.
+        if (isPanelRunKind(update.startedBy?.kind)) {
+          const asked = update.missionId
+          setPanelRunIds((ids) => (ids.includes(asked) ? ids : [...ids, asked]))
         }
         /*
          * A room start, so re-read the rooms NOW.
@@ -9907,7 +9908,20 @@ export default function App(): ReactElement {
             onClose={() => setBesideId(undefined)}
           />
         ) : changesOpen && reviewing === undefined && screen === 'workroom' ? (
-          <ChangesPanel workspacePath={workspacePath} running={running} onClose={() => setChangesOpen(false)} />
+          <ChangesPanel
+            workspacePath={workspacePath}
+            running={running}
+            onClose={() => setChangesOpen(false)}
+            {...((liveRun?.data?.missionId ?? liveRun?.restoredMission?.missionId) === undefined || liveRun === undefined
+              ? {}
+              : {
+                  walkWith: {
+                    of: (liveRun.data?.missionId ?? liveRun.restoredMission?.missionId)!,
+                    teammate: pickedTeammate?.name ?? 'Your teammate',
+                    asks: [...(liveRun.earlierTurns ?? []).map((turn) => turn.prompt), liveRun.prompt].map((prompt) => splitAttachments(prompt).text).slice(-5)
+                  }
+                })}
+          />
         ) : reviewing !== undefined && screen === 'workroom' ? (
           <ReviewChanges
             key={reviewing.teammateId}

@@ -2,16 +2,17 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 
 /**
- * THE RUNS THAT WROTE COMMIT MESSAGES (0.771, shared/commit-draft.ts). Each is in the record like any run, and kept
- * here so the window never lists one among the conversations: a draft belongs to the Commit dialog, as a judge's run
- * belongs to its comparison. Thousands fit in a few hundred kilobytes; past that the oldest go first.
+ * THE RUNS WHOSE ANSWER BELONGS TO A PANEL (0.771, shared/panel-runs.ts): a commit message written from the changes
+ * (shared/commit-draft.ts), a walk through a change (shared/walkthrough.ts). Each is in the record like any run, and
+ * kept here so the window never lists one among the conversations, as a judge's run belongs to its comparison.
+ * Thousands fit in a few hundred kilobytes; past that the oldest go first.
  */
-export interface CommitDraftRuns {
+export interface PanelRuns {
   list(): Promise<readonly string[]>
   add(missionId: string): Promise<void>
 }
 
-export function createCommitDraftRuns(file: string, keep = 5_000): CommitDraftRuns {
+export function createPanelRuns(file: string, keep = 5_000): PanelRuns {
   let held: readonly string[] | undefined
   let writing: Promise<void> = Promise.resolve()
   const read = async (): Promise<readonly string[]> => {

@@ -3310,6 +3310,8 @@ export type CodexMissionUpdate =
         | { readonly kind: 'scout' }
         /** A commit message written from the changes (0.771): its answer fills the Commit box, never a conversation. */
         | { readonly kind: 'commit-draft' }
+        /** A walk through a change (0.771): its answer is the Changes panel's, never a conversation. */
+        | { readonly kind: 'walkthrough' }
       /**
        * Present when this run is the newest turn of the teammate's hub (see
        * `PublicTeammate.hubMissionId`), so the roster on screen learns it
@@ -3885,8 +3887,10 @@ export interface DesktopApi {
   replyPageUrl(html: string): Promise<WorkspacePageResponse>
   /** A commit message written from the changes by the teammate of conversation `of` (0.771, shared/commit-draft.ts). */
   draftCommitMessage(of: string, asks: readonly string[]): Promise<import('./commit-draft.js').CommitDraftResponse>
-  /** The runs that wrote commit messages: never listed as conversations. */
-  commitDraftRuns(): Promise<readonly string[]>
+  /** A walk through the change the Changes panel shows, by the teammate of conversation `of` (0.771, shared/walkthrough.ts). */
+  walkThroughChange(of: string, asks: readonly string[], sha?: string): Promise<import('./walkthrough.js').WalkthroughResponse>
+  /** The runs whose answer belongs to a panel (0.771): never listed as conversations. */
+  panelRuns(): Promise<readonly string[]>
   /** A reply's Mermaid diagram as a picture, drawn in a view no one sees (0.770, shared/diagram.ts). */
   drawDiagram(source: string): Promise<DiagramResponse>
   /** Each runtime's own slash commands, as its CLI last listed them (0.426). */
