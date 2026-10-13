@@ -11,6 +11,16 @@ Settings shows this file as What's new. An entry may group its changes under
 about when they arrive on it carries `<!-- big -->` on the line under its
 heading: the home screen then shows it once, as a splash.
 
+## 0.766.0 - 2026-10-12
+
+### New
+
+- **Draft the points.** Under a comparison, while the box for what a good answer does is empty, Draft the points asks the judge you picked to write three to five checkable points from your question, without answering it. They land in the box for you to edit before the judges read. Three judges vote on the points you write, so this gets you there in one press.
+
+### Improved
+
+- **A tall box of points keeps its row tidy.** The judge's model and Judge now line up with the top of the box instead of floating to its middle.
+
 ## 0.765.0 - 2026-10-12
 
 ### New
