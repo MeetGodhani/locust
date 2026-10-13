@@ -1,9 +1,12 @@
+import { EventEmitter } from 'node:events'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { PassThrough } from 'node:stream'
 
 import type { MissionLedger, Workroom } from '@teammate/mission-store'
-import type { AppServerRunProcess, RuntimeDiscovery } from '@teammate/runtime-adapters'
+import { createNodeRuntimeProcessRunner } from '@teammate/runtime-adapters'
+import type { AppServerRunProcess, RuntimeDiscovery, RuntimeSpawnOptions, SpawnedRuntimeProcess } from '@teammate/runtime-adapters'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { StartPhase } from '../shared/ipc.js'
@@ -35,10 +38,12 @@ describe('a turn sent with Cloud', () => {
     await rm(folder, { recursive: true, force: true })
   })
 
-  const discovered = (id: 'opencode' | 'codex'): RuntimeDiscovery => ({
+  type Runtime = 'opencode' | 'codex' | 'claude' | 'cursor'
+  const NAMES: Readonly<Record<Runtime, string>> = { opencode: 'OpenCode', codex: 'Codex CLI', claude: 'Claude Code', cursor: 'Cursor Agent' }
+  const discovered = (id: Runtime): RuntimeDiscovery => ({
     id,
     kind: 'agent-runtime',
-    displayName: id === 'opencode' ? 'OpenCode' : 'Codex CLI',
+    displayName: NAMES[id],
     optional: false,
     availability: 'available',
     readiness: 'ready',
@@ -69,7 +74,25 @@ describe('a turn sent with Cloud', () => {
     return { write: () => undefined, kill: () => undefined, onData: () => undefined, onExit: (listener) => exits.push(listener) }
   }
 
-  const setUp = (runtime: 'opencode' | 'codex', prepared: CloudPrepared | 'cloud-spawn') => {
+  /** The ssh process a Claude Code turn there is, as the runner sees it: what it was started with, and its end. */
+  const spawned: { readonly path: string; readonly args: readonly string[]; readonly cwd: string | undefined }[] = []
+  const sshProcess = (path: string, args: readonly string[], options: RuntimeSpawnOptions): SpawnedRuntimeProcess => {
+    spawned.push({ path, args, cwd: options.cwd })
+    const events = new EventEmitter()
+    const stdout = new PassThrough()
+    const stderr = new PassThrough()
+    setImmediate(() => {
+      stdout.end()
+      stderr.end()
+      setImmediate(() => events.emit('close', 0, null))
+    })
+    return { stdin: new PassThrough(), stdout, stderr, once: (event: string, listener: (...args: unknown[]) => void) => events.once(event, listener) } as unknown as SpawnedRuntimeProcess
+  }
+  beforeEach(() => {
+    spawned.length = 0
+  })
+
+  const setUp = (runtime: Runtime, prepared: CloudPrepared | 'cloud-spawn') => {
     const recorded: string[] = []
     const ledger = {
       createMission: async (metadata: { prompt: string }) => {
@@ -95,9 +118,14 @@ describe('a turn sent with Cloud', () => {
     const cloudServe = vi.fn((_path: string, _args: readonly string[]): AppServerRunProcess => exitingAtOnce())
     const guard = vi.fn(async () => 'C:\\guard\\opencode-guard.js')
     const phases: StartPhase[] = []
+    const localAppServer = vi.fn((): AppServerRunProcess => exitingAtOnce())
+    const cloudAppServer = vi.fn((_path: string, _args: readonly string[]): AppServerRunProcess => exitingAtOnce())
+    const cloudTargets: unknown[] = []
+    const claudeGuard = vi.fn(async () => 'C:\\guard\\claude-guard.json')
+    const codexGuard = vi.fn(async () => undefined)
     const prepare = vi.fn(async (input: { readonly folder: string; readonly openCodeVersion: string | undefined; readonly say: (phase: StartPhase) => void }): Promise<CloudPrepared> => {
       input.say('cloud-bringing')
-      return prepared === 'cloud-spawn' ? { ok: true, spawn: cloudServe, dir: CLOUD_DIR } : prepared
+      return prepared === 'cloud-spawn' ? { ok: true, spawn: cloudServe, dir: CLOUD_DIR, codespace: 'locust-hearth-x7q9' } : prepared
     })
     const settled = vi.fn(async () => undefined)
     const carry = vi.fn(async (_missionId: string, _folder: string, _files: readonly string[]) => undefined)
@@ -118,7 +146,19 @@ describe('a turn sent with Cloud', () => {
       briefSessions: createBriefSessions({ rootDirectory: folder }),
       opencodeServeSpawn: localServe,
       openCodeCommandGuard: guard,
+      appServerSpawn: localAppServer,
+      // This computer's own guards, which a turn there must not be given: they name files on this computer.
+      commandGuard: claudeGuard,
+      codexCommandGuard: codexGuard,
       cloud: { of: async () => undefined, prepare, settled, carry },
+      cloudProcessRunner: (target) => {
+        cloudTargets.push(target)
+        return createNodeRuntimeProcessRunner({ spawnProcess: sshProcess })
+      },
+      cloudAppServerSpawn: (target) => {
+        cloudTargets.push(target)
+        return cloudAppServer
+      },
       memory,
       createId: (() => {
         let next = 0
@@ -132,16 +172,60 @@ describe('a turn sent with Cloud', () => {
     }
     const start = (model = 'opencode/space-bunny-free', prompt = 'Add a greeting file.') =>
       service.start(prompt, runtime, 'accept-edits', { model }, emit as never, undefined, PEER, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, { setUp: false })
-    return { start, recorded, localServe, cloudServe, guard, prepare, settled, phases, hints, carry }
+    return { start, recorded, localServe, cloudServe, guard, prepare, settled, phases, hints, carry, localAppServer, cloudAppServer, cloudTargets, claudeGuard, codexGuard }
   }
 
-  it('is refused in words on a runtime other than OpenCode, before anything', async () => {
-    const { start, prepare, recorded } = setUp('codex', 'cloud-spawn')
-    const answer = await start('gpt-6-sol')
+  it('is refused in words on a runtime it does not run there, before anything', async () => {
+    const { start, prepare, recorded } = setUp('cursor', 'cloud-spawn')
+    const answer = await start('composer-2')
     expect(answer).toMatchObject({ ok: false, error: { code: 'RUNTIME_START_FAILED' } })
-    expect(answer.ok ? '' : answer.error.message).toMatch(/runs OpenCode teammates for now/)
+    expect(answer.ok ? '' : answer.error.message).toMatch(/runs OpenCode, Claude Code and Codex teammates for now/)
     expect(prepare).not.toHaveBeenCalled()
     expect(recorded).toEqual([])
+  })
+
+  /*
+   * CLAUDE CODE AND CODEX THERE (0.768): each the copy Locust put there, in the conversation's copy there, signed in
+   * there by the person -- and given nothing that only this computer has: its guards and its connector bridge name
+   * files here, and the person's connectors are this computer's.
+   */
+  it('runs a Claude Code turn there: its own copy, in the copy there, with nothing of this computer\'s', async () => {
+    const { start, prepare, settled, cloudTargets, recorded, claudeGuard } = setUp('claude', { ok: true, dir: CLOUD_DIR, codespace: 'locust-hearth-x7q9', bin: '/home/codespace/.locust/npm/bin/claude' })
+    const answer = await start('claude-haiku-4-5')
+    expect(answer.ok, JSON.stringify(answer)).toBe(true)
+    expect(prepare).toHaveBeenCalledWith(expect.objectContaining({ agent: { runtime: 'claude', version: '1.18.27' } }))
+    expect(cloudTargets).toEqual([{ codespace: 'locust-hearth-x7q9', dir: CLOUD_DIR }])
+    expect(spawned).toHaveLength(1)
+    expect(spawned[0]).toMatchObject({ path: '/home/codespace/.locust/npm/bin/claude', cwd: CLOUD_DIR })
+    expect(spawned[0]!.args).toEqual(expect.arrayContaining(['--print', '--model', 'claude-haiku-4-5']))
+    for (const local of ['--settings', '--mcp-config', '--permission-prompt-tool', '--plugin-dir', '--allowedTools']) expect(spawned[0]!.args).not.toContain(local)
+    expect(claudeGuard).not.toHaveBeenCalled()
+    expect(recorded).toEqual(['Add a greeting file.'])
+    // What it changed there is read once it ends.
+    await vi.waitFor(() => expect(settled).toHaveBeenCalledTimes(1))
+  })
+
+  it('runs a Codex turn there on its app server, over the connection, never the one here', async () => {
+    const { start, prepare, localAppServer, cloudAppServer, cloudTargets, settled, codexGuard } = setUp('codex', { ok: true, dir: CLOUD_DIR, codespace: 'locust-hearth-x7q9', bin: '/home/codespace/.locust/npm/bin/codex' })
+    const answer = await start('gpt-6-sol')
+    expect(answer.ok, JSON.stringify(answer)).toBe(true)
+    expect(prepare).toHaveBeenCalledWith(expect.objectContaining({ agent: { runtime: 'codex', version: '1.18.27' } }))
+    expect(cloudTargets).toEqual([{ codespace: 'locust-hearth-x7q9', dir: CLOUD_DIR }])
+    expect(cloudAppServer).toHaveBeenCalledTimes(1)
+    expect(cloudAppServer.mock.calls[0]?.[0]).toBe('/home/codespace/.locust/npm/bin/codex')
+    expect(cloudAppServer.mock.calls[0]?.[1]).toEqual(expect.arrayContaining(['app-server']))
+    expect(localAppServer).not.toHaveBeenCalled()
+    expect(codexGuard).not.toHaveBeenCalled()
+    await vi.waitFor(() => expect(settled).toHaveBeenCalledTimes(1))
+  })
+
+  it('hands the words back and offers the sign-in when the agent is not signed in there', async () => {
+    const signIn = { computer: 'locust-hearth-x7q9', repo: 'acme/hearth', agent: 'claude' as const }
+    const { start, recorded, cloudTargets } = setUp('claude', { ok: false, message: 'Claude Code is not signed in on your cloud computer yet.', signIn })
+    const answer = await start('claude-haiku-4-5')
+    expect(answer).toEqual({ ok: false, error: { code: 'CLOUD_SIGN_IN_NEEDED', message: 'Claude Code is not signed in on your cloud computer yet.', cloudSignIn: signIn } })
+    expect(recorded).toEqual([])
+    expect(cloudTargets).toEqual([])
   })
 
   it("runs OpenCode's server on the cloud computer, readied first and said on the live line", async () => {

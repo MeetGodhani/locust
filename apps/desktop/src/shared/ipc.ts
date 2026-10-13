@@ -21,7 +21,7 @@ import type { ConnectorAddRequest, ConnectorAddResponse, ConnectorAgent } from '
 import type { GithubAccount, GithubCliVersions, GithubInstallResult, GithubSignInCode, GithubSignInResult } from './github-account.js'
 import type { FolderPullRequest, PullRequestNews } from './pull-request.js'
 import type { FolderDiff } from './folder-diff.js'
-import type { CloudFolderState, CloudSetupStep, PublicCloudComputer, PublicCloudTurn } from './cloud-computer.js'
+import type { CloudAgent, CloudFolderState, CloudSetupStep, CloudSignInStep, PublicCloudComputer, PublicCloudTurn } from './cloud-computer.js'
 import type { OfficeDocument } from './office-document.js'
 import type { Workbook } from './sheet.js'
 import type { AboutYouSuggestion } from './about-you.js'
@@ -851,6 +851,10 @@ export const CLOUD_COMPUTER_TERMINAL_CHANNEL = 'cloud-computer:terminal'
 export const CLOUD_COMPUTER_ALLOW_CHANNEL = 'cloud-computer:allow'
 export const CLOUD_COMPUTER_FOLDER_CHANNEL = 'cloud-computer:folder'
 export const CLOUD_COMPUTER_SETUP_CHANNEL = 'cloud-computer:set-up'
+/** Claude Code or Codex signed in on a cloud computer, in the person's own browser (0.768); stopped; signed out. */
+export const CLOUD_COMPUTER_SIGN_IN_CHANNEL = 'cloud-computer:sign-in'
+export const CLOUD_COMPUTER_SIGN_IN_STOP_CHANNEL = 'cloud-computer:sign-in-stop'
+export const CLOUD_COMPUTER_SIGN_OUT_CHANNEL = 'cloud-computer:sign-out'
 /**
  * CLAUDE'S CLOUD (0.538, main/claude-cloud.ts): a task handed to a Claude Code
  * cloud session, in a window of its own; listed here so it can be found on
@@ -933,6 +937,9 @@ export interface PublicCloudTask {
 /** Where this folder stands for a cloud task: a GitHub repository, its branch, what GitHub lacks. */
 export type CloudTurnResponse = { readonly ok: true; readonly turn: PublicCloudTurn } | { readonly ok: false; readonly message: string }
 export type CloudPullRequestResponse = { readonly ok: true; readonly turn: PublicCloudTurn; readonly added: boolean } | { readonly ok: false; readonly message: string }
+/** An agent's sign-in on a cloud computer (0.768): `permission` when GitHub's own permission is what is missing. */
+export type CloudSignInResponse = { readonly ok: true } | { readonly ok: false; readonly message: string; readonly permission?: true }
+
 export type CloudComputersResponse =
   | { readonly ok: true; readonly computers: readonly PublicCloudComputer[] }
   | { readonly ok: false; readonly message: string; readonly permission?: true }
@@ -2401,6 +2408,11 @@ export type CodexMissionErrorCode =
    * one (0.761). Nothing was started; the window asks the person, with what it costs.
    */
   | 'CLOUD_SETUP_NEEDED'
+  /**
+   * The turn was sent to the cloud computer for a Claude Code or Codex teammate, and that agent is not signed in
+   * there yet (0.768). Nothing was started; the window offers the one-click sign-in.
+   */
+  | 'CLOUD_SIGN_IN_NEEDED'
 
 export interface CodexMissionError {
   readonly code: CodexMissionErrorCode
@@ -2415,6 +2427,8 @@ export interface CodexMissionError {
   readonly busy?: 'pool'
   /** On CLOUD_SETUP_NEEDED only: which repository, and whether GitHub's permission is what is missing. */
   readonly cloudSetup?: { readonly repo: string; readonly branch?: string; readonly permission?: true }
+  /** On CLOUD_SIGN_IN_NEEDED only: which cloud computer, and which agent on it. */
+  readonly cloudSignIn?: { readonly computer: string; readonly repo: string; readonly agent: CloudAgent }
   /**
    * On HANDOFF_REFUSED only: the refusal came before anything was stopped,
    * so the mission is still running where it was (M9). Without it the window
@@ -3155,9 +3169,17 @@ export type CodexMissionUpdate =
       readonly turn: PublicCloudTurn
     }
   | {
-      /** Setting up the cloud computer, step by step, for the dialog (0.761). */
+      /** Setting up the cloud computer, step by step, for the dialog (0.761); `waiting`: a sign-in's page is open (0.768). */
       readonly kind: 'cloud-setup'
       readonly step: CloudSetupStep
+      readonly waiting?: true
+    }
+  | {
+      /** An agent being signed in on a cloud computer, step by step (0.768). */
+      readonly kind: 'cloud-sign-in'
+      readonly name: string
+      readonly agent: CloudAgent
+      readonly step: CloudSignInStep
     }
   | {
       /** A comparison run again (0.763, your own benchmark): the comparisons that changed, and where each batch is. */
@@ -3815,8 +3837,16 @@ export interface DesktopApi {
   allowCloudComputers(): Promise<OpenInTerminalResponse>
   /** This folder's repository and its cloud computer, if it has one. */
   cloudComputerForFolder(): Promise<CloudFolderState>
-  /** Made and readied for this folder's repository, each step said as a 'cloud-setup' update. */
-  setUpCloudComputer(): Promise<CloudFolderState>
+  /**
+   * Made and readied for this folder's repository, each step said as a 'cloud-setup' update; for a Claude Code or
+   * Codex teammate (0.768), that agent on it, signed in in the person's own browser.
+   */
+  setUpCloudComputer(agent?: CloudAgent): Promise<CloudFolderState>
+  /** Claude Code or Codex signed in on that cloud computer, in the person's own browser (0.768): 'cloud-sign-in' updates. */
+  signInCloudAgent(name: string, agent: CloudAgent): Promise<CloudSignInResponse>
+  /** The sign-in under way, stopped. */
+  stopCloudSignIn(): Promise<void>
+  signOutCloudAgent(name: string, agent: CloudAgent): Promise<{ readonly ok: true } | { readonly ok: false; readonly message: string }>
   /** Claude's cloud (0.538): a window of Claude Code with the task given; the list; `--teleport` to bring one home. */
   /** `choice`: the box's Claude model and effort, which the session runs on (0.557). */
   startClaudeCloud(prompt: string, teammateId?: string, choice?: { readonly model?: string; readonly effort?: string; readonly environment?: string }): Promise<ClaudeCloudStartResponse>

@@ -15,7 +15,7 @@ import { basename, dirname, join } from 'node:path'
 import type { AppServerRunProcess } from '@teammate/runtime-adapters'
 
 import type { StartPhase } from '../shared/ipc.js'
-import { cloudStateOf, cloudTaskDir, CLOUD_TASK_ID, type CloudChangeFile, type CloudFolderState, type CloudPullRequest, type CloudSetupStep, type PublicCloudComputer, type PublicCloudTurn } from '../shared/cloud-computer.js'
+import { CLOUD_AGENT_NAMES, cloudStateOf, cloudTaskDir, CLOUD_TASK_ID, type CloudAgent, type CloudAgentState, type CloudChangeFile, type CloudFolderState, type CloudPullRequest, type CloudSetupStep, type CloudSignInStep, type PublicCloudComputer, type PublicCloudTurn } from '../shared/cloud-computer.js'
 import { applyHere, carriedPath, cloudServeSpawn, CloudComputerError, freePort, runGit, SAFE_BRANCH_NAME, type CloudComputers, type GitRun } from './cloud-computer.js'
 import { folderOnGitHub, type Runner } from './cloud-tasks.js'
 import { branchFromSubject } from './folder-commit.js'
@@ -30,10 +30,21 @@ export interface CloudSetup {
   readonly permission?: true
 }
 
+/** An agent there that is not signed in yet (0.768): which computer, so the person can sign it in with one click. */
+export interface CloudSignIn {
+  readonly computer: string
+  readonly repo: string
+  readonly agent: CloudAgent
+}
+
 export type CloudPrepared =
-  /** `dir`: the conversation's copy there, where the agent stands -- never this folder, which the brief must not name. */
-  | { readonly ok: true; readonly spawn: ServeSpawn; readonly dir: string }
-  | { readonly ok: false; readonly message: string; readonly setup?: CloudSetup }
+  /**
+   * `dir`: the conversation's copy there, where the agent stands -- never this folder, which the brief must not name.
+   * `spawn` is OpenCode's server there; Claude Code and Codex are started there from `codespace`, `dir` and `bin`,
+   * the agent's whole path there.
+   */
+  | { readonly ok: true; readonly spawn?: ServeSpawn; readonly dir: string; readonly codespace: string; readonly bin?: string }
+  | { readonly ok: false; readonly message: string; readonly setup?: CloudSetup; readonly signIn?: CloudSignIn }
 
 interface CloudTask {
   readonly taskId: string
@@ -62,6 +73,8 @@ interface CloudTurn {
 interface CloudStore {
   readonly tasks: Readonly<Record<string, CloudTask>>
   readonly turns: Readonly<Record<string, CloudTurn>>
+  /** Each agent's sign-in on each cloud computer, by its name, as last known (0.768). */
+  readonly agents: Readonly<Record<string, Readonly<Partial<Record<CloudAgent, CloudAgentState>>>>>
 }
 
 /** How many turns the store keeps; the oldest go first. */
@@ -74,8 +87,19 @@ const VERSION = /^\d+\.\d+\.\d+$/
 export interface CloudTurns {
   /** This folder's repository, and its cloud computer if it has one. */
   forFolder(folder: string): Promise<CloudFolderState>
-  /** The repository's cloud computer made (when there is none) and readied, OpenCode on it: each step said. */
-  setUp(input: { readonly folder: string; readonly openCodeVersion: string | undefined; readonly step: (step: CloudSetupStep) => void }): Promise<CloudFolderState>
+  /**
+   * The repository's cloud computer made (when there is none) and readied, OpenCode on it: each step said. For a
+   * Claude Code or Codex teammate (0.768), that agent instead -- and signed in there, in the person's own browser,
+   * unless it already is; `waiting` once its page is open and the rest is the person's.
+   */
+  setUp(input: {
+    readonly folder: string
+    readonly openCodeVersion: string | undefined
+    readonly agent?: { readonly runtime: CloudAgent; readonly version: string | undefined }
+    readonly open?: (url: string) => Promise<void> | void
+    readonly signal?: AbortSignal
+    readonly step: (step: CloudSetupStep, waiting?: true) => void
+  }): Promise<CloudFolderState>
   /** The conversation's copy there, when the turn named ran on the cloud computer. */
   of(missionId: string): Promise<{ readonly taskId: string; readonly codespace: string } | undefined>
   /**
@@ -87,6 +111,8 @@ export interface CloudTurns {
     readonly folder: string
     readonly follows?: string
     readonly openCodeVersion: string | undefined
+    /** A Claude Code or Codex turn (0.768): that agent there, at this computer's version, and signed in. */
+    readonly agent?: { readonly runtime: CloudAgent; readonly version: string | undefined }
     /** The person pressed Set it up: a repository's first cloud computer may be made. */
     readonly setUp?: boolean
     readonly say: (phase: StartPhase) => void
@@ -112,6 +138,20 @@ export interface CloudTurns {
   computers(): Promise<{ readonly ok: true; readonly computers: readonly PublicCloudComputer[] } | { readonly ok: false; readonly message: string; readonly permission?: true }>
   stop(name: string): Promise<{ readonly ok: true } | { readonly ok: false; readonly message: string }>
   remove(name: string): Promise<{ readonly ok: true } | { readonly ok: false; readonly message: string }>
+  /**
+   * An agent signed in on a cloud computer (0.768), by the person, in their own browser: the computer woken, the agent
+   * put on it at this computer's version, then its own sign-in -- each step said. One already signed in there is
+   * not signed in again.
+   */
+  signIn(input: {
+    readonly name: string
+    readonly agent: CloudAgent
+    readonly version: string | undefined
+    readonly open: (url: string) => Promise<void> | void
+    readonly step: (step: CloudSignInStep) => void
+    readonly signal?: AbortSignal
+  }): Promise<{ readonly ok: true } | { readonly ok: false; readonly message: string; readonly permission?: true }>
+  signOut(name: string, agent: CloudAgent): Promise<{ readonly ok: true } | { readonly ok: false; readonly message: string }>
 }
 
 export function createCloudTurns(options: {
@@ -127,15 +167,15 @@ export function createCloudTurns(options: {
 }): CloudTurns {
   const now = options.now ?? (() => new Date())
   const computers = options.computers
-  const ready = new Map<string, { readonly version: string; readonly at: number }>()
+  const ready = new Map<string, { readonly version: string; readonly at: number; readonly bin?: string }>()
   let queue: Promise<unknown> = Promise.resolve()
 
   const read = async (): Promise<CloudStore> => {
     try {
       const parsed = JSON.parse(await readFile(options.file, 'utf8')) as Partial<CloudStore>
-      return { tasks: parsed.tasks ?? {}, turns: parsed.turns ?? {} }
+      return { tasks: parsed.tasks ?? {}, turns: parsed.turns ?? {}, agents: parsed.agents ?? {} }
     } catch {
-      return { tasks: {}, turns: {} }
+      return { tasks: {}, turns: {}, agents: {} }
     }
   }
   const write = async (store: CloudStore): Promise<void> => {
@@ -144,7 +184,7 @@ export function createCloudTurns(options: {
     const tasks = Object.fromEntries(Object.entries(store.tasks).filter(([taskId]) => kept.has(taskId)))
     await mkdir(dirname(options.file), { recursive: true })
     const scratch = `${options.file}.${randomBytes(4).toString('hex')}.tmp`
-    await writeFile(scratch, JSON.stringify({ tasks, turns: Object.fromEntries(turns.map((turn) => [turn.missionId, turn])) }, null, 2), 'utf8')
+    await writeFile(scratch, JSON.stringify({ tasks, turns: Object.fromEntries(turns.map((turn) => [turn.missionId, turn])), agents: store.agents }, null, 2), 'utf8')
     await rename(scratch, options.file)
   }
   /** One change to the store at a time. */
@@ -207,12 +247,26 @@ export function createCloudTurns(options: {
     error instanceof CloudComputerError && error.kind === 'permission'
       ? { ok: false, permission: true, message: error.message }
       : { ok: false, message: sayWhy(error, fallback) }
-  const shownComputer = (space: { readonly name: string; readonly repository: string; readonly state: string; readonly lastUsedAt?: string }): PublicCloudComputer => ({
-    name: space.name,
-    repo: space.repository,
-    state: cloudStateOf(space.state),
-    ...(space.lastUsedAt === undefined ? {} : { lastUsedAt: space.lastUsedAt })
-  })
+  const shownComputer = (space: { readonly name: string; readonly repository: string; readonly state: string; readonly lastUsedAt?: string }, known?: CloudStore['agents']): PublicCloudComputer => {
+    const agents = known?.[space.name]
+    return {
+      name: space.name,
+      repo: space.repository,
+      state: cloudStateOf(space.state),
+      ...(space.lastUsedAt === undefined ? {} : { lastUsedAt: space.lastUsedAt }),
+      ...(agents === undefined || Object.keys(agents).length === 0 ? {} : { agents })
+    }
+  }
+  /** What an agent there was last seen to be (0.768): kept, so Settings says it without waking the computer. */
+  const remember = (name: string, agent: CloudAgent, state: CloudAgentState): Promise<void> =>
+    change((store) => ({ store: { ...store, agents: { ...store.agents, [name]: { ...store.agents[name], [agent]: state } } }, value: undefined }))
+  /** OpenCode's readiness is the computer's; an agent's is its own there, installed and signed in. */
+  const readyKey = (name: string, agent?: CloudAgent): string => (agent === undefined ? name : `${name}/${agent}`)
+  const forget = (name: string): void => {
+    for (const key of [...ready.keys()]) if (key === name || key.startsWith(`${name}/`)) ready.delete(key)
+  }
+  const unknownVersion = (agent: CloudAgent | undefined): string =>
+    `Locust could not tell which ${agent === undefined ? 'OpenCode' : CLOUD_AGENT_NAMES[agent]} is installed here, so it cannot put the same one on your cloud computer.`
 
   return {
     forFolder: async (folder) => {
@@ -220,16 +274,16 @@ export function createCloudTurns(options: {
       if (where.repo === undefined) return notOnGitHub(folder)
       try {
         const space = await computers.find(where.repo)
-        return { ok: true, repo: where.repo, ...(where.branch === undefined ? {} : { branch: where.branch }), ...(space === undefined ? {} : { computer: shownComputer(space) }) }
+        const known = space === undefined ? undefined : (await read()).agents
+        return { ok: true, repo: where.repo, ...(where.branch === undefined ? {} : { branch: where.branch }), ...(space === undefined ? {} : { computer: shownComputer(space, known) }) }
       } catch (error) {
         return failed(error, 'GitHub did not say whether this repository has a cloud computer.')
       }
     },
 
-    setUp: async ({ folder, openCodeVersion, step }) => {
-      if (openCodeVersion === undefined || !VERSION.test(openCodeVersion)) {
-        return { ok: false, message: 'Locust could not tell which OpenCode is installed here, so it cannot put the same one on your cloud computer.' }
-      }
+    setUp: async ({ folder, openCodeVersion, agent, open, signal, step }) => {
+      const version = agent === undefined ? openCodeVersion : agent.version
+      if (version === undefined || !VERSION.test(version)) return { ok: false, message: unknownVersion(agent?.runtime) }
       const where = await folderOnGitHub(folder, options.git)
       if (where.repo === undefined) return notOnGitHub(folder)
       try {
@@ -242,10 +296,24 @@ export function createCloudTurns(options: {
         step('readying')
         await computers.whenReady(space.name)
         step('installing')
-        await computers.ensureOpenCode(space.name, openCodeVersion)
-        ready.set(space.name, { version: openCodeVersion, at: Date.now() })
+        if (agent === undefined) {
+          await computers.ensureOpenCode(space.name, version)
+        } else {
+          const who = CLOUD_AGENT_NAMES[agent.runtime]
+          const { bin } = await computers.ensureAgent(space.name, agent.runtime, version)
+          ready.set(readyKey(space.name, agent.runtime), { version, at: Date.now(), bin })
+          // Signed in already -- by an earlier setup, or in its terminal -- is not signed in again.
+          if (!(await computers.agentSignedIn(space.name, agent.runtime))) {
+            if (open === undefined) throw new CloudComputerError(`${who} cannot be signed in from here.`)
+            step('signing-in')
+            await computers.signIn(space.name, agent.runtime, { open, waiting: () => step('signing-in', true), ...(signal === undefined ? {} : { signal }) })
+            if (!(await computers.agentSignedIn(space.name, agent.runtime))) throw new CloudComputerError(`${who} finished, but does not say it is signed in. Try again.`)
+          }
+          await remember(space.name, agent.runtime, 'signed-in')
+        }
+        if (agent === undefined) ready.set(space.name, { version, at: Date.now() })
         step('ready')
-        return { ok: true, repo: where.repo, ...(where.branch === undefined ? {} : { branch: where.branch }), computer: shownComputer({ ...space, state: 'Available' }) }
+        return { ok: true, repo: where.repo, ...(where.branch === undefined ? {} : { branch: where.branch }), computer: shownComputer({ ...space, state: 'Available' }, (await read()).agents) }
       } catch (error) {
         return failed(error, 'Your cloud computer could not be set up.')
       }
@@ -258,10 +326,9 @@ export function createCloudTurns(options: {
       return task === undefined ? undefined : { taskId: task.taskId, codespace: task.codespace }
     },
 
-    prepare: async ({ missionId, folder, follows, openCodeVersion, setUp, say }) => {
-      if (openCodeVersion === undefined || !VERSION.test(openCodeVersion)) {
-        return { ok: false, message: 'Locust could not tell which OpenCode is installed here, so it cannot put the same one on your cloud computer.' }
-      }
+    prepare: async ({ missionId, folder, follows, openCodeVersion, agent, setUp, say }) => {
+      const version = agent === undefined ? openCodeVersion : agent.version
+      if (version === undefined || !VERSION.test(version)) return { ok: false, message: unknownVersion(agent?.runtime) }
       const where = await folderOnGitHub(folder, options.git)
       if (where.repo === undefined) {
         return { ok: false, message: `${basename(folder)} is not on GitHub. Your cloud computer works on a copy of a GitHub repository: push this folder to GitHub first, or open one that is.` }
@@ -281,12 +348,25 @@ export function createCloudTurns(options: {
         } else if (cloudStateOf(space.state) !== 'available') {
           say('cloud-waking')
         }
-        const checked = ready.get(space.name)
-        if (checked === undefined || checked.version !== openCodeVersion || Date.now() - checked.at > READY_FOR_MS || cloudStateOf(space.state) !== 'available') {
+        const key = readyKey(space.name, agent?.runtime)
+        let checked = ready.get(key)
+        if (checked === undefined || checked.version !== version || Date.now() - checked.at > READY_FOR_MS || cloudStateOf(space.state) !== 'available' || (agent !== undefined && checked.bin === undefined)) {
           await computers.whenReady(space.name)
           say('cloud-installing')
-          await computers.ensureOpenCode(space.name, openCodeVersion)
-          ready.set(space.name, { version: openCodeVersion, at: Date.now() })
+          let bin: string | undefined
+          if (agent === undefined) {
+            await computers.ensureOpenCode(space.name, version)
+          } else {
+            bin = (await computers.ensureAgent(space.name, agent.runtime, version)).bin
+            const signedIn = await computers.agentSignedIn(space.name, agent.runtime)
+            await remember(space.name, agent.runtime, signedIn ? 'signed-in' : 'signed-out')
+            // Nothing is brought over or recorded: the person signs it in with one click, then sends again.
+            if (!signedIn) {
+              return { ok: false, message: `${CLOUD_AGENT_NAMES[agent.runtime]} is not signed in on your cloud computer yet.`, signIn: { computer: space.name, repo, agent: agent.runtime } }
+            }
+          }
+          checked = { version, at: Date.now(), ...(bin === undefined ? {} : { bin }) }
+          ready.set(key, checked)
         }
         // The conversation's own copy, when its last turn was there on this computer, from this folder.
         let task = earlier !== undefined && earlier.codespace === space.name && earlier.folder === folder ? earlier : undefined
@@ -302,8 +382,10 @@ export function createCloudTurns(options: {
           tell(next, missionId)
           return { store: next, value: undefined }
         })
+        const dir = cloudTaskDir(made.taskId)
+        if (agent !== undefined) return { ok: true, dir, codespace: space.name, ...(checked.bin === undefined ? {} : { bin: checked.bin }) }
         const port = await freePort()
-        return { ok: true, spawn: cloudServeSpawn({ codespace: space.name, dir: cloudTaskDir(made.taskId), port }), dir: cloudTaskDir(made.taskId) }
+        return { ok: true, spawn: cloudServeSpawn({ codespace: space.name, dir, port }), dir, codespace: space.name }
       } catch (error) {
         ready.clear()
         if (error instanceof CloudComputerError && error.kind === 'permission') {
@@ -490,7 +572,8 @@ export function createCloudTurns(options: {
     computers: async () => {
       try {
         const listed = await computers.list()
-        return { ok: true, computers: listed.map(shownComputer) }
+        const known = (await read()).agents
+        return { ok: true, computers: listed.map((space) => shownComputer(space, known)) }
       } catch (error) {
         if (error instanceof CloudComputerError && error.kind === 'permission') return { ok: false, message: error.message, permission: true }
         return { ok: false, message: sayWhy(error, 'GitHub did not list your cloud computers.') }
@@ -500,7 +583,7 @@ export function createCloudTurns(options: {
     stop: async (name) => {
       try {
         await computers.stop(name)
-        ready.delete(name)
+        forget(name)
         return { ok: true }
       } catch (error) {
         return { ok: false, message: sayWhy(error, 'Your cloud computer did not stop.') }
@@ -510,10 +593,53 @@ export function createCloudTurns(options: {
     remove: async (name) => {
       try {
         await computers.remove(name)
-        ready.delete(name)
+        forget(name)
+        // Its sign-ins went with it.
+        await change((store) => {
+          const { [name]: _gone, ...agents } = store.agents
+          return { store: { ...store, agents }, value: undefined }
+        })
         return { ok: true }
       } catch (error) {
         return { ok: false, message: sayWhy(error, 'Your cloud computer was not deleted.') }
+      }
+    },
+
+    signIn: async ({ name, agent, version, open, step, signal }) => {
+      const who = CLOUD_AGENT_NAMES[agent]
+      if (version === undefined || !VERSION.test(version)) return { ok: false, message: unknownVersion(agent) }
+      try {
+        const space = (await computers.list()).find((one) => one.name === name)
+        if (space === undefined) return { ok: false, message: 'That cloud computer is not on GitHub any more.' }
+        if (cloudStateOf(space.state) !== 'available') step('waking')
+        await computers.whenReady(name)
+        step('installing')
+        const { bin } = await computers.ensureAgent(name, agent, version)
+        if (!(await computers.agentSignedIn(name, agent))) {
+          step('opening')
+          await computers.signIn(name, agent, { open, waiting: () => step('waiting'), ...(signal === undefined ? {} : { signal }) })
+          if (!(await computers.agentSignedIn(name, agent))) {
+            await remember(name, agent, 'signed-out')
+            return { ok: false, message: `${who} finished, but does not say it is signed in. Try again.` }
+          }
+        }
+        await remember(name, agent, 'signed-in')
+        ready.set(readyKey(name, agent), { version, at: Date.now(), bin })
+        return { ok: true }
+      } catch (error) {
+        if (error instanceof CloudComputerError && error.kind === 'permission') return { ok: false, message: error.message, permission: true }
+        return { ok: false, message: sayWhy(error, `${who} could not be signed in on your cloud computer.`) }
+      }
+    },
+
+    signOut: async (name, agent) => {
+      try {
+        await computers.signOut(name, agent)
+        ready.delete(readyKey(name, agent))
+        await remember(name, agent, 'signed-out')
+        return { ok: true }
+      } catch (error) {
+        return { ok: false, message: sayWhy(error, `${CLOUD_AGENT_NAMES[agent]} could not be signed out on your cloud computer.`) }
       }
     }
   }

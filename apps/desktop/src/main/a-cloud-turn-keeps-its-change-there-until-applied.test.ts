@@ -45,6 +45,14 @@ describe('a turn on the cloud computer', () => {
         calls.push(`opencode@${version}`)
         return version
       },
+      // OpenCode turns only, here: an agent's own sign-in there is a-cloud-agent-signs-in-with-one-click.test.ts's.
+      ensureAgent: async (_name, agent, version) => {
+        calls.push(`${agent}@${version}`)
+        return { version, bin: `/home/codespace/.locust/npm/bin/${agent}` }
+      },
+      agentSignedIn: async () => true,
+      signIn: async () => undefined,
+      signOut: async () => undefined,
       bring: async (_name, _repo, _folder, taskId) => {
         calls.push(`bring:${taskId}`)
         return BASE

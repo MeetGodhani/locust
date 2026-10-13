@@ -33,8 +33,8 @@ const code = (text: string): string[] => text.split('\n').filter((line) => !/^\s
 
 /** Each file that reaches the network, how many places in it do, and the document's words for them. */
 const LISTED: Readonly<Record<string, { readonly places: number; readonly said: readonly string[] }>> = {
-  // The updater (Windows), the Mac release list, the pet gallery's fetch, and four openings of the person's browser.
-  'index.ts': { places: 7, said: ['Its own updates (Windows)', 'Its own updates (Mac)', 'The pet gallery', 'A link inside a previewed page asks you first', 'open a public GitHub issue', 'open your mail app'] },
+  // The updater (Windows), the Mac release list, the pet gallery's fetch, and five openings of the person's browser.
+  'index.ts': { places: 8, said: ['Its own updates (Windows)', 'Its own updates (Mac)', 'The pet gallery', 'A link inside a previewed page asks you first', 'open a public GitHub issue', 'open your mail app', 'Locust opens that page in your browser'] },
   'mac-self-update.ts': { places: 2, said: ['Its own updates (Mac)', 'then the disk image you choose'] },
   'runtime-updates.ts': { places: 1, said: ['Keeping Codex CLI and Copilot CLI current'] },
   'pet-library.ts': { places: 1, said: ['The pet gallery'] },
@@ -47,8 +47,9 @@ const LISTED: Readonly<Record<string, { readonly places: number; readonly said: 
   'own-models.ts': { places: 2, said: ['Testing one of your own models', 'When you press Test'] },
   // The default fetch, and the one request every look and keep goes through.
   'skill-library.ts': { places: 2, said: ['Skills from GitHub', 'Redirects are followed only to those two hosts'] },
-  // A free port picked on 127.0.0.1 for the tunnel to OpenCode's server on the codespace (0.761).
-  'cloud-computer.ts': { places: 1, said: ['Your cloud computer', 'Locust picks a free port on `127.0.0.1`'] }
+  // A free port picked on 127.0.0.1 for the tunnel to OpenCode's server on the codespace (0.761); a sign-in's port
+  // checked free here, and one request through its tunnel to the agent's own server there (0.768).
+  'cloud-computer.ts': { places: 3, said: ['Your cloud computer', 'Locust picks a free port on `127.0.0.1`', 'checks that port is free here', 'asks the agent\'s own server there once'] }
 }
 
 describe('every place Locust reaches the network is in docs/NETWORK.md', () => {

@@ -28,7 +28,7 @@ until it is listed here.
 | A web page a teammate made, open in the preview | eight public hosts, for libraries and fonts only | While the page is open |
 | A voice call (Talk, beside the microphone) | OpenAI's voice service, at the media address the call's answer names | On Windows, only while a call you started is on |
 | Scout's looks (a teammate that keeps watch) | GitHub, through your own GitHub CLI; then Scout's own model, through its agent (free: OpenCode's) | Only after you turn Scout on, every 10, 30 or 60 minutes while Locust runs, and its model only when something is new |
-| Your cloud computer (a teammate's turn sent with Cloud) | GitHub, through your own GitHub CLI: Codespaces, and the codespace itself over `gh codespace ssh`; from there, the teammate's model, through its agent (OpenCode) | Only after you pick Cloud for an OpenCode teammate and press Set it up, and then for each turn you send with Cloud |
+| Your cloud computer (a teammate's turn sent with Cloud, or with Cloud computer) | GitHub, through your own GitHub CLI: Codespaces, and the codespace itself over `gh codespace ssh`; from there, the teammate's model, through its agent (OpenCode, Claude Code or Codex) | Only after you pick Cloud for an OpenCode teammate, or Cloud computer for a Claude Code or Codex teammate, and press Set it up, and then for each turn you send there |
 
 **Its own updates.** A plain request for the files of the newest release in a
 public repository that holds only Locust's installers: `latest.yml`, then the
@@ -155,6 +155,23 @@ those. And when you press Open a pull request on a change waiting there, Locust
 itself -- never the agent -- commits just that change on a new branch with the
 codespace's own GitHub sign-in, pushes it to the repository, and opens the pull
 request with your GitHub CLI here (`gh pr create`).
+
+**Claude Code and Codex on your cloud computer (0.768).** Off until you pick
+Cloud computer for a Claude Code or Codex teammate. Locust installs that agent
+on the codespace from npm (`@anthropic-ai/claude-code` or `@openai/codex`, the
+version this computer has), and each is signed in there by you, once: when you
+press Sign in, Locust starts the agent's own sign-in on the codespace, which asks
+to open its maker's page -- `claude.com`, or `auth.openai.com`; Locust opens
+nothing else -- and Locust opens that page in your browser. The page answers
+to a port on `localhost`, one the agent picks (Codex: 1455). Locust
+checks that port is free here, carries that one port to the agent there over a
+second `gh codespace ssh`, and asks the agent's own server there once, through
+it, that the way is open before your browser goes to the page. You click
+Authorize; your browser and the agent do the rest. Locust never sees the
+sign-in, which stays on the codespace and goes when it is deleted. A turn there
+then goes as an OpenCode turn there does, over the same `gh codespace ssh`:
+Codex's app server or Claude Code's own input and output, and the agent's own
+connection to its maker from the codespace.
 
 **Hearing a voice (0.751).** Hear it, beside a voice picker, plays that voice
 saying hello. The first time for each voice it is a call like Talk's, a few

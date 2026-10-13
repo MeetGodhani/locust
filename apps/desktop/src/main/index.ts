@@ -39,6 +39,7 @@ import { createCloudTaskService, launchRunner } from './cloud-task-service.js'
 import { environmentOf, githubRepoOf, leavingNoLog } from './cloud-tasks.js'
 import { createCloudComputers } from './cloud-computer.js'
 import { createCloudTurns } from './cloud-turns.js'
+import { isCloudAgent, type CloudAgent } from '../shared/cloud-computer.js'
 import { createClaudeCloud } from './claude-cloud.js'
 import { createRemoteControl } from './claude-remote-control.js'
 import { registerRemoteControlIpc } from './remote-control-ipc.js'
@@ -84,7 +85,7 @@ import type { MissionApproval, MissionLedger, MissionStarter, Workroom } from '@
 import type { ClaudeListedModel, RuntimeDiscovery } from '@teammate/runtime-adapters'
 import { spawn } from 'node:child_process'
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync, existsSync, renameSync, statSync, unlinkSync } from 'node:fs'
-import { copyFile, lstat, mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { appendFile, copyFile, lstat, mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { randomInt } from 'node:crypto'
 import { basename, dirname, isAbsolute, join, resolve as resolvePath } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -364,6 +365,9 @@ import {
   CLOUD_COMPUTER_ALLOW_CHANNEL,
   CLOUD_COMPUTER_FOLDER_CHANNEL,
   CLOUD_COMPUTER_SETUP_CHANNEL,
+  CLOUD_COMPUTER_SIGN_IN_CHANNEL,
+  CLOUD_COMPUTER_SIGN_IN_STOP_CHANNEL,
+  CLOUD_COMPUTER_SIGN_OUT_CHANNEL,
   CLAUDE_CLOUD_START_CHANNEL,
   CLAUDE_CLOUD_LIST_CHANNEL,
   CLAUDE_CLOUD_HOME_CHANNEL,
@@ -4766,10 +4770,63 @@ if (!ownsSingleInstanceLock) {
     })
     const openCodeVersionHere = async (): Promise<string | undefined> =>
       (await discoverForWork().catch(() => [])).find((entry) => entry.id === 'opencode')?.version?.version
+    const agentVersionHere = async (agent: CloudAgent): Promise<string | undefined> =>
+      (await discoverForWork().catch(() => [])).find((entry) => entry.id === agent)?.version?.version
+    /**
+     * An agent's sign-in page there, opened in the person's own browser (0.768). A drive's stand-in, labelled as such,
+     * writes the page down instead: a drive is not the person, and never signs in as them. Read nowhere else.
+     */
+    const openSignInPage = async (url: string): Promise<void> => {
+      const pages = process.env.LOCUST_SIGN_IN_PAGES
+      if (pages !== undefined && pages.length > 0) {
+        await appendFile(pages, `${url}
+`, 'utf8')
+        return
+      }
+      await shell.openExternal(url)
+    }
+    /** The one sign-in under way, which Stop ends. */
+    let signingIn: AbortController | undefined
+    const signInSignal = (): AbortSignal => {
+      signingIn?.abort()
+      signingIn = new AbortController()
+      return signingIn.signal
+    }
     ipcMain.handle(CLOUD_COMPUTER_FOLDER_CHANNEL, async (event) => (fromOwnWindow(event) ? cloudTurns.forFolder(workspacePath) : { ok: false, message: 'That request was rejected.' }))
-    ipcMain.handle(CLOUD_COMPUTER_SETUP_CHANNEL, async (event) => {
+    ipcMain.handle(CLOUD_COMPUTER_SETUP_CHANNEL, async (event, request: unknown) => {
       if (!fromOwnWindow(event)) return { ok: false, message: 'That request was rejected.' }
-      return cloudTurns.setUp({ folder: workspacePath, openCodeVersion: await openCodeVersionHere(), step: (step) => sendToWindow({ kind: 'cloud-setup', step }) })
+      const asked = typeof request === 'object' && request !== null ? (request as Record<string, unknown>).agent : undefined
+      const agent = isCloudAgent(asked) ? asked : undefined
+      return cloudTurns.setUp({
+        folder: workspacePath,
+        openCodeVersion: await openCodeVersionHere(),
+        ...(agent === undefined ? {} : { agent: { runtime: agent, version: await agentVersionHere(agent) }, open: openSignInPage, signal: signInSignal() }),
+        step: (step, waiting) => sendToWindow({ kind: 'cloud-setup', step, ...(waiting === true ? { waiting } : {}) })
+      })
+    })
+    ipcMain.handle(CLOUD_COMPUTER_SIGN_IN_CHANNEL, async (event, request: unknown) => {
+      const asked = typeof request === 'object' && request !== null ? (request as Record<string, unknown>) : {}
+      const name = computerName(asked.name)
+      const agent = isCloudAgent(asked.agent) ? asked.agent : undefined
+      if (!fromOwnWindow(event) || name === undefined || agent === undefined) return { ok: false, message: 'That sign-in was not started.' }
+      return cloudTurns.signIn({
+        name,
+        agent,
+        version: await agentVersionHere(agent),
+        open: openSignInPage,
+        step: (step) => sendToWindow({ kind: 'cloud-sign-in', name, agent, step }),
+        signal: signInSignal()
+      })
+    })
+    ipcMain.handle(CLOUD_COMPUTER_SIGN_IN_STOP_CHANNEL, async (event) => {
+      if (fromOwnWindow(event)) signingIn?.abort()
+    })
+    ipcMain.handle(CLOUD_COMPUTER_SIGN_OUT_CHANNEL, async (event, request: unknown) => {
+      const asked = typeof request === 'object' && request !== null ? (request as Record<string, unknown>) : {}
+      const name = computerName(asked.name)
+      const agent = isCloudAgent(asked.agent) ? asked.agent : undefined
+      if (!fromOwnWindow(event) || name === undefined || agent === undefined) return { ok: false, message: 'That agent could not be signed out.' }
+      return cloudTurns.signOut(name, agent)
     })
     // GitHub's codespace permission, which the person gives in the terminal and their browser: Locust never sees it.
     ipcMain.handle(CLOUD_COMPUTER_ALLOW_CHANNEL, async (event) => {

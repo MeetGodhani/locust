@@ -157,7 +157,7 @@ import { BesideConversation } from './components/BesideConversation.js'
 import { SideChat } from './components/SideChat.js'
 import { CloudTasks } from './components/CloudTasks.js'
 import { CloudSetupDialog, type CloudSetupState } from './components/CloudSetupDialog.js'
-import type { PublicCloudTurn } from '../../shared/cloud-computer.js'
+import { CLOUD_AGENT_NAMES, type CloudAgent, type PublicCloudTurn } from '../../shared/cloud-computer.js'
 import { BackgroundRuns } from './components/BackgroundRuns.js'
 import type { PublicBackgroundRun } from '../../shared/background.js'
 import { ReviewChanges } from './components/ReviewChanges.js'
@@ -441,7 +441,7 @@ function applyMissionUpdate(run: LiveRunState, update: CodexMissionUpdate): Live
   if (update.kind === 'mission-started') return live
   if (update.kind === 'start-phase') return live
   // The cloud computer's turn cards and its setting up are kept beside the runs (0.761).
-  if (update.kind === 'cloud-turn' || update.kind === 'cloud-setup') return live
+  if (update.kind === 'cloud-turn' || update.kind === 'cloud-setup' || update.kind === 'cloud-sign-in') return live
   // A comparison run again (0.763) is the comparisons' business.
   if (update.kind === 'compare-reruns') return live
   // A hop being started belongs to a teammate, not to any one run.
@@ -1932,6 +1932,8 @@ export default function App(): ReactElement {
    * menu, this folder's tasks, and the panel beside the conversation.
    */
   const [cloudOn, setCloudOn] = useState(false)
+  /** Claude Code or Codex on the person's own cloud computer (0.768), instead of its maker's cloud. */
+  const [computerOn, setComputerOn] = useState(false)
   // YOUR CLOUD COMPUTER (0.761): the turns that ran there, by mission, and the first-time dialog.
   const [cloudTurns, setCloudTurns] = useState<ReadonlyMap<string, PublicCloudTurn>>(() => new Map())
   const [cloudSetup, setCloudSetup] = useState<CloudSetupState>()
@@ -2435,7 +2437,7 @@ export default function App(): ReactElement {
   }, [awaitingModels, runtimeState.phase, models])
   const [effort, setEffort] = useState<string>()
   /** Each chat's mode and effort, by the same key as its model pick (0.552). */
-  const chatSetups = useRef(new Map<string, { readonly mode: MissionMode; readonly effort: string | undefined; readonly kind?: { readonly compare: boolean; readonly blind: boolean; readonly cloud: boolean } }>())
+  const chatSetups = useRef(new Map<string, { readonly mode: MissionMode; readonly effort: string | undefined; readonly kind?: { readonly compare: boolean; readonly blind: boolean; readonly cloud: boolean; readonly computer?: boolean } }>())
   /** What a new chat with nobody starts on, as saved (0.552). */
   const [newChatSetup, setNewChatSetup] = useState<{ readonly mode: MissionMode; readonly effort: string | undefined }>()
   const [swarm, setSwarm] = useState(false)
@@ -2823,7 +2825,19 @@ export default function App(): ReactElement {
       // A start's phase (0.602) arrives before the run knows its id: matched by teammate, not by id.
       if (update.kind === 'start-phase') setRuns((current) => withStartPhase(current, update))
       if (update.kind === 'cloud-turn') setCloudTurns((current) => new Map(current).set(update.turn.missionId, update.turn))
-      if (update.kind === 'cloud-setup') setCloudSetup((current) => (current?.phase === 'working' ? { ...current, step: update.step } : current))
+      if (update.kind === 'cloud-setup') {
+        setCloudSetup((current) => {
+          if (current?.phase !== 'working') return current
+          const { waiting: _was, ...rest } = current
+          return { ...rest, step: update.step, ...(update.waiting === true ? { waiting: true as const } : {}) }
+        })
+      }
+      if (update.kind === 'cloud-sign-in') {
+        setCloudSetup((current) =>
+          current?.phase === 'signing-in' && current.computer === update.name && current.agent === update.agent
+            ? { ...current, step: update.step, ...(update.step === 'waking' ? { woke: true as const } : {}) }
+            : current)
+      }
       // Your own benchmark (0.763): the comparisons its runs again changed, and where each batch is.
       if (update.kind === 'compare-reruns') {
         if (update.compares.length > 0) setCompares((current) => [...current.filter((one) => !update.compares.some((next) => next.compareId === one.compareId)), ...update.compares])
@@ -3771,6 +3785,7 @@ export default function App(): ReactElement {
     if (!latestRanInCloud || cloudRestored.current.has(pickKey)) return
     cloudRestored.current.add(pickKey)
     if (composerRoute.runtime === 'opencode') setCloudOn(true)
+    else if (composerRoute.runtime === 'claude' || composerRoute.runtime === 'codex') setComputerOn(true)
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once per conversation, as it is opened
   }, [latestRanInCloud, pickKey])
   useEffect(() => {
@@ -3784,10 +3799,11 @@ export default function App(): ReactElement {
       const kind = held?.kind ?? { compare: false, blind: false, cloud: false }
       const setup = held ?? (fresh === undefined ? undefined : { ...fresh, kind })
       let moved = false
-      if (kind.compare !== compareOn || kind.blind !== compareBlind || kind.cloud !== cloudOn) {
+      if (kind.compare !== compareOn || kind.blind !== compareBlind || kind.cloud !== cloudOn || (kind.computer === true) !== computerOn) {
         setCompareOn(kind.compare)
         setCompareBlind(kind.blind)
         setCloudOn(kind.cloud)
+        setComputerOn(kind.computer === true)
         moved = true
       }
       if (setup !== undefined && (setup.mode !== mode || setup.effort !== effort)) {
@@ -3797,11 +3813,11 @@ export default function App(): ReactElement {
       }
       if (moved) return
     }
-    chatSetups.current.set(pickKey, { mode, effort, kind: { compare: compareOn, blind: compareBlind, cloud: cloudOn } })
+    chatSetups.current.set(pickKey, { mode, effort, kind: { compare: compareOn, blind: compareBlind, cloud: cloudOn, computer: computerOn } })
     if (pickKey === 'new' && newChatSetup !== undefined && (newChatSetup.mode !== mode || newChatSetup.effort !== effort)) {
       rememberNewChatRoute(composerRoute, mode, effort)
     }
-  }, [pickKey, mode, effort, compareOn, compareBlind, cloudOn])
+  }, [pickKey, mode, effort, compareOn, compareBlind, cloudOn, computerOn])
 
   /** Who a run belongs to: what it was started with, or what the host recorded. */
   const ownerOf = (run: LiveRunState): string | undefined =>
@@ -4381,6 +4397,10 @@ export default function App(): ReactElement {
     // YOUR CLOUD COMPUTER (0.761): an OpenCode teammate's turn runs on the repository's codespace, as a turn of this
     // conversation. Cloud stays on, so the conversation's next turn goes there too.
     if (cloudOn && comparing === undefined && composerRoute.runtime === 'opencode') {
+      return startFromComposer(prompt, sendOptions?.leaveOut, true)
+    }
+    // Claude Code or Codex on your own cloud computer (0.768), not its maker's cloud: a turn of this conversation there.
+    if (computerOn && comparing === undefined && (composerRoute.runtime === 'claude' || composerRoute.runtime === 'codex')) {
       return startFromComposer(prompt, sendOptions?.leaveOut, true)
     }
     // Cloud (0.503): the task goes to Codex Cloud, and the panel follows it.
@@ -5213,6 +5233,19 @@ export default function App(): ReactElement {
           startRefusal.current = 'Not sent: your cloud computer is not set up for this repository yet. Your message is back in the box.'
           return false
         }
+        // CLAUDE CODE OR CODEX NOT SIGNED IN THERE (0.768): nothing started; the dialog offers the one-click sign-in.
+        if (response.error.code === 'CLOUD_SIGN_IN_NEEDED' && response.error.cloudSignIn !== undefined) {
+          setRuns((current) => {
+            const next = new Map(current)
+            next.delete(key)
+            return next
+          })
+          setShownKey((current) => (current === key ? previousKey : current))
+          const signIn = response.error.cloudSignIn
+          setCloudSetup({ phase: 'sign-in', repo: signIn.repo, computer: signIn.computer, agent: signIn.agent })
+          startRefusal.current = `Not sent: ${response.error.message} Your message is back in the box.`
+          return false
+        }
         // A ledger that cannot be written is the same failure whether it hits
         // on the FIRST write or the fortieth, and only the second one used to
         // reach the card that explains it. The first -- a ledger folder that
@@ -5241,7 +5274,7 @@ export default function App(): ReactElement {
       const runId = response.data.runId
       // The conversation this starts (or continues) keeps the setup it was sent with (0.552).
       // A turn sent with Cloud keeps Cloud on for the conversation's next turn (0.761).
-      chatSetups.current.set(response.data.missionId, { mode: modeOverride ?? runMode, effort: runEffort, ...(options?.cloud === true ? { kind: { compare: false, blind: false, cloud: true } } : {}) })
+      chatSetups.current.set(response.data.missionId, { mode: modeOverride ?? runMode, effort: runEffort, ...(options?.cloud === true ? { kind: { compare: false, blind: false, cloud: route.runtime === 'opencode', computer: route.runtime !== 'opencode' } } : {}) })
       // The host recorded the owner; mirror it so the sidebar files the
       // mission under the teammate at once rather than after a refresh.
       if (teammateId !== undefined) {
@@ -7886,12 +7919,22 @@ export default function App(): ReactElement {
     onPullRequest: cloudTurnPullRequest,
     ...(pickedTeammate === undefined ? {} : { teammate: pickedTeammate.name })
   }
-  /** Cloud picked for an OpenCode teammate (0.761): the first time for a repository, the dialog asks. */
-  const checkCloudComputer = async (): Promise<void> => {
+  /**
+   * Cloud picked for an OpenCode teammate (0.761): the first time for a repository, the dialog asks. The cloud computer
+   * picked for a Claude Code or Codex teammate (0.768): the same, and an agent not known to be signed in there is
+   * offered the sign-in now, before anything is sent.
+   */
+  const checkCloudComputer = async (agent?: CloudAgent): Promise<void> => {
     const state = await window.desktop?.cloudComputerForFolder().catch(() => undefined)
     if (state === undefined) return
     if (state.ok) {
-      setCloudSetup(state.computer === undefined ? { phase: 'ask', repo: state.repo } : undefined)
+      setCloudSetup(
+        state.computer === undefined
+          ? { phase: 'ask', repo: state.repo, ...(agent === undefined ? {} : { agent }) }
+          : agent !== undefined && state.computer.agents?.[agent] !== 'signed-in'
+            ? { phase: 'sign-in', repo: state.repo, computer: state.computer.name, agent }
+            : undefined
+      )
       return
     }
     setCloudSetup(
@@ -7902,18 +7945,33 @@ export default function App(): ReactElement {
           : { phase: 'failed', message: state.message }
     )
   }
-  const setUpCloudComputer = async (repo: string): Promise<void> => {
-    setCloudSetup({ phase: 'working', repo, step: 'making' })
-    const done = await window.desktop?.setUpCloudComputer().catch(() => undefined)
+  const setUpCloudComputer = async (repo: string, agent?: CloudAgent): Promise<void> => {
+    const withAgent = agent === undefined ? {} : { agent }
+    setCloudSetup({ phase: 'working', repo, step: 'making', ...withAgent })
+    const done = await window.desktop?.setUpCloudComputer(agent).catch(() => undefined)
     if (done === undefined) {
       setCloudSetup({ phase: 'failed', repo, message: 'Locust could not reach GitHub. Try again in a moment.' })
       return
     }
     if (done.ok) {
-      setCloudSetup({ phase: 'ready', repo: done.repo })
+      setCloudSetup({ phase: 'ready', repo: done.repo, ...withAgent })
       return
     }
-    setCloudSetup(done.permission === true ? { phase: 'permission', message: done.message } : { phase: 'failed', repo, message: done.message })
+    setCloudSetup(done.permission === true ? { phase: 'permission', message: done.message } : { phase: 'failed', repo, message: done.message, ...withAgent })
+  }
+  /** Claude Code or Codex signed in on that cloud computer (0.768): its maker's page opens in the person's browser. */
+  const signInCloudAgent = async (repo: string, computer: string, agent: CloudAgent): Promise<void> => {
+    setCloudSetup({ phase: 'signing-in', repo, computer, agent, step: 'installing' })
+    const done = await window.desktop?.signInCloudAgent(computer, agent).catch(() => undefined)
+    if (done === undefined) {
+      setCloudSetup({ phase: 'failed', repo, computer, agent, message: 'Locust could not reach your cloud computer. Try again in a moment.' })
+      return
+    }
+    if (done.ok) {
+      setCloudSetup((current) => ({ phase: 'signed-in', repo, agent, ...(current?.phase === 'signing-in' && current.woke === true ? { woke: true as const } : {}) }))
+      return
+    }
+    setCloudSetup(done.permission === true ? { phase: 'permission', message: done.message } : { phase: 'failed', repo, computer, agent, message: done.message })
   }
   const threadCalls = useMemo(() => {
     const ids = new Set(conversationTurnIds)
@@ -9491,6 +9549,19 @@ export default function App(): ReactElement {
                 }
               },
               where: composerRoute.runtime === 'claude' ? 'claude' : composerRoute.runtime === 'opencode' ? 'computer' : 'codex',
+              // Claude Code and Codex on the person's own cloud computer too (0.768), beside their makers' clouds.
+              ...(composerRoute.runtime === 'claude' || composerRoute.runtime === 'codex'
+                ? {
+                    computer: {
+                      on: computerOn,
+                      agentName: CLOUD_AGENT_NAMES[composerRoute.runtime],
+                      onMode: (on: boolean) => {
+                        setComputerOn(on)
+                        if (on) void checkCloudComputer(composerRoute.runtime === 'claude' ? 'claude' : 'codex')
+                      }
+                    }
+                  }
+                : {}),
               environment: {
                 value: cloudEnvironment.folder === workspacePath ? cloudEnvironment.value : '',
                 onChange: (value) => setCloudEnvironment({ folder: workspacePath ?? '', value, edited: true })
@@ -10050,13 +10121,20 @@ export default function App(): ReactElement {
           teammateName={pickedTeammate?.name}
           onSetUp={() => {
             const repo = 'repo' in cloudSetup ? cloudSetup.repo : undefined
-            if (repo !== undefined && repo.length > 0) void setUpCloudComputer(repo)
+            if (repo !== undefined && repo.length > 0) void setUpCloudComputer(repo, 'agent' in cloudSetup ? cloudSetup.agent : undefined)
           }}
+          onSignIn={() => {
+            if ('computer' in cloudSetup && cloudSetup.computer !== undefined && cloudSetup.agent !== undefined) void signInCloudAgent(cloudSetup.repo ?? '', cloudSetup.computer, cloudSetup.agent)
+          }}
+          onStopSignIn={() => void window.desktop?.stopCloudSignIn().catch(() => undefined)}
           onAllow={() => void window.desktop?.allowCloudComputers().catch(() => undefined)}
-          onCheckAgain={() => void checkCloudComputer()}
+          onCheckAgain={() => void checkCloudComputer(composerRoute.runtime === 'claude' || composerRoute.runtime === 'codex' ? (computerOn ? composerRoute.runtime : undefined) : undefined)}
           onClose={() => {
-            // Not set up: Cloud goes back off, so a send cannot go nowhere.
-            if (cloudSetup.phase !== 'ready') setCloudOn(false)
+            // Not set up or not signed in: Cloud goes back off, so a send cannot go nowhere.
+            if (cloudSetup.phase !== 'ready' && cloudSetup.phase !== 'signed-in') {
+              setCloudOn(false)
+              setComputerOn(false)
+            }
             setCloudSetup(undefined)
           }}
         />

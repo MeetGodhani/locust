@@ -25,14 +25,15 @@
 
 import { spawn } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
+import * as http from 'node:http'
 import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { rm, writeFile } from 'node:fs/promises'
 
-import type { AppServerRunProcess } from '@teammate/runtime-adapters'
+import type { AppServerRunProcess, ExecutableLaunch, RuntimeSpawn, SpawnedRuntimeProcess } from '@teammate/runtime-adapters'
 
-import { cloudTaskDir, CLOUD_TASK_ROOT, type CloudChangeFile } from '../shared/cloud-computer.js'
+import { CLOUD_AGENT_NAMES, cloudTaskDir, CLOUD_TASK_ROOT, type CloudAgent, type CloudChangeFile } from '../shared/cloud-computer.js'
 import { ghCommand } from './github-account.js'
 
 /** GitHub's smallest machine: 2 CPUs, 8 GB. GitHub's free hours are counted twice for it: 60 of the 120. */
@@ -166,6 +167,191 @@ export function changeFilesOf(numstat: string): readonly CloudChangeFile[] {
 export function openCodeInstallLine(version: string): string {
   if (!/^\d+\.\d+\.\d+$/.test(version)) throw new Error('That is not an OpenCode version.')
   return `test "$(${CLOUD_OPENCODE} --version 2>/dev/null)" = ${version} || { mkdir -p ${CLOUD_TOOLS} && npm i -g --prefix ${CLOUD_TOOLS} opencode-ai@${version} > /tmp/locust-opencode-install.log 2>&1; }; ${CLOUD_OPENCODE} --version`
+}
+
+/**
+ * THE OTHER AGENTS ON IT (0.768). Colin, 2026-10-13: "We 100% want the other agents on the cloud computer", then, of
+ * a sign-in that asked for codes: "making them input launch codes?" Claude Code and Codex go there as OpenCode does,
+ * into Locust's own folder at the version this computer has, and each is signed in there by the person, once, in
+ * their own browser: the same page and the same Authorize as on this computer, and no code.
+ *
+ * MEASURED 2026-10-13 on the test codespace, with a stand-in browser and nothing signed in: `claude auth login`
+ * (2.1.296) and `codex login` (0.162.1), run with no terminal, each hand the page they want opened to $BROWSER and
+ * wait for its answer on a port of their own there -- Claude's at http://localhost:<a port it picks>/callback,
+ * Codex's at http://127.0.0.1:1455/auth/callback. So the page opens here, and a second ssh connection carries that
+ * port back: the browser's answer to localhost reaches the CLI there. Through it, Claude's own server answered from
+ * this computer 7 s after its page was seen.
+ */
+interface CloudAgentFacts {
+  readonly name: string
+  readonly npm: string
+  readonly bin: string
+  readonly login: string
+  readonly logout: string
+  readonly status: string
+  /** Its own words for whether it is signed in. MEASURED signed out: Claude's `"loggedIn": false`, Codex's exit 1. */
+  readonly signedIn: (answer: Answer) => boolean
+  /** Where its sign-in page may be: anything else the computer asks to open is not opened. */
+  readonly pages: readonly string[]
+}
+
+export const CLOUD_AGENTS: Readonly<Record<CloudAgent, CloudAgentFacts>> = {
+  claude: {
+    name: CLOUD_AGENT_NAMES.claude,
+    npm: '@anthropic-ai/claude-code',
+    bin: `${CLOUD_TOOLS}/bin/claude`,
+    login: 'auth login',
+    logout: 'auth logout',
+    status: 'auth status --json',
+    signedIn: (answer) => {
+      try {
+        return answer.code === 0 && (JSON.parse(answer.stdout) as { loggedIn?: unknown }).loggedIn === true
+      } catch {
+        return false
+      }
+    },
+    pages: ['claude.com', 'claude.ai', 'platform.claude.com', 'console.anthropic.com']
+  },
+  codex: {
+    name: CLOUD_AGENT_NAMES.codex,
+    npm: '@openai/codex',
+    bin: `${CLOUD_TOOLS}/bin/codex`,
+    login: 'login',
+    logout: 'logout',
+    status: 'login status',
+    signedIn: (answer) => answer.code === 0 && /logged in/i.test(`${answer.stdout}\n${answer.stderr}`) && !/not logged in/i.test(`${answer.stdout}\n${answer.stderr}`),
+    pages: ['auth.openai.com']
+  }
+}
+
+/**
+ * The agent there, as a launch the command builders take: Locust's own copy of it, by its whole path there (`bin`,
+ * as `ensureAgent` found it) -- a runner here starts nothing by a path that is not whole.
+ */
+export function cloudLaunchOf(agent: CloudAgent, bin: string): ExecutableLaunch {
+  if (!/^\/[A-Za-z0-9_./-]+$/.test(bin)) throw new Error(`That is not where Locust put ${CLOUD_AGENTS[agent].name} there.`)
+  return { commandName: agent, discoveredPath: bin, executablePath: bin, prefixArgs: [], kind: 'native' }
+}
+
+/** The version in an agent's `--version`: "2.1.296 (Claude Code)", "codex-cli 0.162.1". */
+export function agentVersionOf(said: string): string | undefined {
+  return /(\d+\.\d+\.\d+)/.exec(said.trim().split(/\r?\n/).pop() ?? '')?.[1]
+}
+
+/** The agent there at `version`, or installed now: what its `--version` says, then the home it is under there. */
+export function agentInstallLine(agent: CloudAgent, version: string): string {
+  if (!/^\d+\.\d+\.\d+$/.test(version)) throw new Error(`That is not a ${CLOUD_AGENTS[agent].name} version.`)
+  const { bin, npm } = CLOUD_AGENTS[agent]
+  return `test "$(${bin} --version 2>/dev/null | grep -oE '[0-9]+[.][0-9]+[.][0-9]+' | head -n 1)" = ${version} || { mkdir -p ${CLOUD_TOOLS} && npm i -g --prefix ${CLOUD_TOOLS} ${npm}@${version} > /tmp/locust-${agent}-install.log 2>&1; }; ${bin} --version; echo "LOCUST_HOME=$HOME"`
+}
+
+/**
+ * The agent's own sign-in, there, with a stand-in for the browser: each page it asks to open comes back as a
+ * `LOCUST_OPEN <page>` line, its last words as `LOCUST_SAID`, and its end as `LOCUST_DONE <exit code>`. Nothing here
+ * reads or writes what it signs in with; the agent keeps that where it always does. Given it no terminal and no
+ * input: the paste-a-code way it also offers is never taken.
+ */
+export function signInScript(agent: CloudAgent): string {
+  const { bin, login } = CLOUD_AGENTS[agent]
+  return [
+    'set -u',
+    'O=$(mktemp -d)',
+    'D="$HOME/.locust/open"',
+    'mkdir -p "$D"',
+    `printf '%s\\n' '#!/bin/sh' 'f="$LOCUST_OPENED/$(date +%s%N).url"' 'printf "%s\\n" "$1" > "$f.tmp" && mv "$f.tmp" "$f"' > "$D/open"`,
+    'chmod +x "$D/open"',
+    'ln -sf "$D/open" "$D/xdg-open"',
+    `LOCUST_OPENED="$O" PATH="$D:$PATH" BROWSER="$D/open" timeout 900 ${bin} ${login} > "$O/said" 2>&1 < /dev/null &`,
+    'pid=$!',
+    `relay() { for f in "$O"/*.url; do [ -e "$f" ] || continue; printf 'LOCUST_OPEN %s\\n' "$(head -c 4000 "$f" | tr -d '\\r\\n')"; rm -f "$f"; done; }`,
+    'while kill -0 "$pid" 2>/dev/null; do relay; sleep 0.2; done',
+    'wait "$pid"; code=$?',
+    'relay',
+    `tail -n 5 "$O/said" | tr -d '\\r' | sed 's/^/LOCUST_SAID /'`,
+    'rm -rf "$O"',
+    'echo "LOCUST_DONE $code"'
+  ].join('\n')
+}
+
+/** A script there, carried as base64 on its command line: no input is needed, and nothing in it is a word to parse. */
+export function scriptLine(script: string): string {
+  return `bash -c "$(printf %s ${Buffer.from(script, 'utf8').toString('base64')} | base64 -d)"`
+}
+
+/**
+ * The page a sign-in there asked to open, if it is that agent's own: https, on its maker's host, coming back to a
+ * port on localhost -- the one port that is then carried here. Anything else is never opened: a computer an agent
+ * has worked on is not trusted to choose what opens in the person's browser.
+ */
+export function signInPage(agent: CloudAgent, text: string): { readonly url: string; readonly port: number } | undefined {
+  const raw = text.trim()
+  let page: URL
+  let back: URL
+  try {
+    page = new URL(raw)
+    back = new URL(page.searchParams.get('redirect_uri') ?? '')
+  } catch {
+    return undefined
+  }
+  if (page.protocol !== 'https:' || page.username !== '' || page.password !== '' || !CLOUD_AGENTS[agent].pages.includes(page.hostname)) return undefined
+  if (back.protocol !== 'http:' || (back.hostname !== 'localhost' && back.hostname !== '127.0.0.1')) return undefined
+  const port = Number(back.port)
+  if (!Number.isInteger(port) || port < 1024 || port > 65535) return undefined
+  return { url: raw, port }
+}
+
+/** What a sign-in there is told along the way. */
+export interface SignInHooks {
+  /** Opens the agent's page in the person's browser (this computer's own). */
+  readonly open: (url: string) => Promise<void> | void
+  /** The page is open: the rest is the person's, there. */
+  readonly waiting?: () => void
+  readonly signal?: AbortSignal
+}
+
+/** Free on this computer: a sign-in's answer comes back to the same port number here. */
+export function portFree(port: number): Promise<boolean> {
+  return new Promise((resolveFree) => {
+    const server = createServer()
+    server.once('error', () => resolveFree(false))
+    server.listen(port, '127.0.0.1', () => server.close(() => resolveFree(true)))
+  })
+}
+
+/** Whether the agent's own server there answers on this port here yet: any answer at all is the way through. */
+export async function reaches(port: number, withinMs: number, sleep: (ms: number) => Promise<void> = (ms) => new Promise((done) => setTimeout(done, ms))): Promise<boolean> {
+  const until = Date.now() + withinMs
+  for (;;) {
+    const answered = await new Promise<boolean>((resolveAnswer) => {
+      const asked = http.request({ host: '127.0.0.1', port, path: '/', method: 'GET', timeout: 2_000 }, (response) => {
+        response.resume()
+        resolveAnswer(true)
+      })
+      asked.on('timeout', () => asked.destroy())
+      asked.on('error', () => resolveAnswer(false))
+      asked.end()
+    })
+    if (answered) return true
+    if (Date.now() > until) return false
+    await sleep(400)
+  }
+}
+
+/** A turn of Claude Code there (0.768): the runner's process is gh's ssh, and the agent's input and output are its own. */
+export function cloudProcessSpawn(options: { readonly codespace: string; readonly dir: string }): RuntimeSpawn {
+  return (executablePath, args) => {
+    const line = agentLine({ dir: options.dir, executable: executablePath, args })
+    return spawn(ghCommand(), ['codespace', 'ssh', '-c', options.codespace, '--', line], {
+      windowsHide: true,
+      stdio: ['pipe', 'pipe', 'pipe'],
+      env: { ...process.env, GH_PROMPT_DISABLED: '1', GH_NO_UPDATE_NOTIFIER: '1' }
+    }) as unknown as SpawnedRuntimeProcess
+  }
+}
+
+/** Codex's app server there (0.768): it speaks its protocol over the ssh connection's own input and output. */
+export function cloudAppServerSpawn(options: { readonly codespace: string; readonly dir: string; readonly start?: (args: readonly string[]) => AppServerRunProcess }): (executablePath: string, args: readonly string[], env?: Readonly<Record<string, string>>) => AppServerRunProcess {
+  return (executablePath, args) => (options.start ?? startGh)(['codespace', 'ssh', '-c', options.codespace, '--', agentLine({ dir: options.dir, executable: executablePath, args })])
 }
 
 /** A path for a script there: single-quoted, a quote inside closed and reopened. Control characters are refused. */
@@ -405,6 +591,14 @@ export interface CloudComputers {
   whenReady(name: string, timeoutMs?: number): Promise<void>
   /** OpenCode there at this version: the version that answers. */
   ensureOpenCode(name: string, version: string): Promise<string>
+  /** Claude Code or Codex there at this version (0.768): the version that answers, and its whole path there. */
+  ensureAgent(name: string, agent: CloudAgent, version: string): Promise<{ readonly version: string; readonly bin: string }>
+  /** Whether that agent there is signed in, in its own words. */
+  agentSignedIn(name: string, agent: CloudAgent): Promise<boolean>
+  /** That agent signed in there by the person, in their own browser here (`signInScript`): done once it says so. */
+  signIn(name: string, agent: CloudAgent, hooks: SignInHooks): Promise<void>
+  /** That agent signed out there. */
+  signOut(name: string, agent: CloudAgent): Promise<void>
   /** This folder as it is, into a task folder of its own there: the commit it starts from. */
   bring(name: string, repo: string, folder: string, taskId: string): Promise<string>
   /** Which files the task changed since it began, and by how many lines: one round trip, for the card. */
@@ -429,10 +623,32 @@ export interface CloudComputers {
   remove(name: string): Promise<void>
 }
 
-export function createCloudComputers(options: { readonly gh?: GhRun; readonly git?: GitRun; readonly sleep?: (ms: number) => Promise<void> } = {}): CloudComputers {
+/** An agent's last words worth repeating: not its prompt for a code, and never a page's address. */
+function lastWords(said: readonly string[]): string | undefined {
+  const words = said.filter((line) => line.length > 0 && !/paste code|https?:\/\//i.test(line)).pop()
+  return words?.replace(/[.\s]+$/, '').slice(0, 300)
+}
+
+/** The longest a sign-in waits for the person to finish in their browser. */
+export const SIGN_IN_WAIT_MS = 10 * 60_000
+
+export function createCloudComputers(options: {
+  readonly gh?: GhRun
+  readonly git?: GitRun
+  readonly sleep?: (ms: number) => Promise<void>
+  /** gh as a long-running process: a sign-in's relay, and the connection that carries its answer here. */
+  readonly start?: (args: readonly string[]) => AppServerRunProcess
+  readonly portFree?: (port: number) => Promise<boolean>
+  readonly reaches?: (port: number, withinMs: number) => Promise<boolean>
+  readonly signInWaitMs?: number
+} = {}): CloudComputers {
   const gh = options.gh ?? runGh
   const git = options.git ?? runGit
   const sleep = options.sleep ?? ((ms: number) => new Promise<void>((done) => setTimeout(done, ms)))
+  const start = options.start ?? startGh
+  const isFree = options.portFree ?? portFree
+  const through = options.reaches ?? ((port: number, withinMs: number) => reaches(port, withinMs))
+  const waitMs = options.signInWaitMs ?? SIGN_IN_WAIT_MS
   const there = (name: string, line: string, input?: Buffer | string, timeoutMs?: number): Promise<Answer> =>
     gh(['codespace', 'ssh', '-c', name, '--', line], { ...(input === undefined ? {} : { input }), ...(timeoutMs === undefined ? {} : { timeoutMs }) })
   const refuse = (answer: Answer, what: string): never => {
@@ -441,6 +657,17 @@ export function createCloudComputers(options: { readonly gh?: GhRun; readonly gi
       throw new CloudComputerError('GitHub has not let Locust make codespaces yet. Allow it once in your browser, then send again.', 'permission')
     }
     throw new CloudComputerError(`${what}: ${lastWord(answer)}`)
+  }
+  /**
+   * An agent's own command there, with its exit code said on the last line: gh answers 1 both for a command that
+   * ended with 1 and for a connection that failed ("shell closed: exit status 1", MEASURED), and only the first is the
+   * agent's answer.
+   */
+  const agentSays = async (name: string, words: string, what: string): Promise<Answer> => {
+    const answer = await there(name, `${words}; echo "LOCUST_STATUS=$?"`, undefined, 60_000)
+    const status = /^LOCUST_STATUS=(\d+)\s*$/m.exec(answer.stdout)
+    if (answer.code !== 0 || status === null) refuse(answer, what)
+    return { code: Number(status![1]), stdout: answer.stdout.slice(0, status!.index), stderr: answer.stderr }
   }
   const ours = (spaces: readonly Codespace[]): readonly Codespace[] => spaces.filter((space) => space.displayName === cloudDisplayName(space.repository))
   const listed = async (repo?: string): Promise<readonly Codespace[]> => {
@@ -479,6 +706,84 @@ export function createCloudComputers(options: { readonly gh?: GhRun; readonly gi
       if (answer.code !== 0 || answered !== version) refuse(answer, 'OpenCode could not be installed on your cloud computer')
       return answered!
     },
+    ensureAgent: async (name, agent, version) => {
+      const answer = await there(name, agentInstallLine(agent, version), undefined, 8 * 60_000)
+      const home = /^LOCUST_HOME=(\/[A-Za-z0-9_./-]+)\s*$/m.exec(answer.stdout)
+      const answered = home === null ? undefined : agentVersionOf(answer.stdout.slice(0, home.index))
+      if (answer.code !== 0 || home === null || answered !== version) refuse(answer, `${CLOUD_AGENTS[agent].name} could not be installed on your cloud computer`)
+      return { version: answered!, bin: CLOUD_AGENTS[agent].bin.replace(/^~/, home![1]!.replace(/\/+$/, '')) }
+    },
+    agentSignedIn: async (name, agent) => {
+      const facts = CLOUD_AGENTS[agent]
+      return facts.signedIn(await agentSays(name, `${facts.bin} ${facts.status}`, `Your cloud computer did not say whether ${facts.name} is signed in`))
+    },
+    signOut: async (name, agent) => {
+      const facts = CLOUD_AGENTS[agent]
+      await agentSays(name, `${facts.bin} ${facts.logout}`, `${facts.name} could not be signed out on your cloud computer`)
+    },
+    signIn: (name, agent, hooks) => new Promise<void>((resolveSignIn, rejectSignIn) => {
+      const who = CLOUD_AGENTS[agent].name
+      let forward: AppServerRunProcess | undefined
+      let opened = false
+      let ended = false
+      let pending = ''
+      const said: string[] = []
+      const end = (error?: CloudComputerError): void => {
+        if (ended) return
+        ended = true
+        clearTimeout(timer)
+        hooks.signal?.removeEventListener('abort', stop)
+        relay.kill()
+        forward?.kill()
+        if (error === undefined) resolveSignIn()
+        else rejectSignIn(error)
+      }
+      const stop = (): void => end(new CloudComputerError(`Signing ${who} in was stopped.`))
+      const timer = setTimeout(() => end(new CloudComputerError(`${who} was not signed in: the page in your browser was not finished within ${String(Math.round(waitMs / 60_000))} minutes. Try again when you are ready.`)), waitMs)
+      const relay = start(['codespace', 'ssh', '-c', name, '--', scriptLine(signInScript(agent))])
+      // The port the answer comes back to is the agent's own choice, so it is carried here only once its page says it.
+      const openPage = async (text: string): Promise<void> => {
+        const page = signInPage(agent, text)
+        if (page === undefined) return end(new CloudComputerError(`Your cloud computer asked to open a page that is not ${who}'s sign-in, so Locust did not open it.`))
+        if (!(await isFree(page.port))) {
+          return end(new CloudComputerError(`${who}'s sign-in comes back to port ${String(page.port)} on this computer, and something here is using it -- perhaps ${who} signing in here. Finish or close that, then try again.`))
+        }
+        if (ended) return
+        forward = start(['codespace', 'ssh', '-c', name, '--', '-N', '-L', `${String(page.port)}:127.0.0.1:${String(page.port)}`])
+        forward.onExit(() => end(new CloudComputerError(`The connection for ${who}'s sign-in closed before it was done. Try again.`)))
+        if (!(await through(page.port, 30_000))) return end(new CloudComputerError(`Locust could not reach ${who}'s sign-in on your cloud computer from here. Try again.`))
+        if (ended) return
+        await hooks.open(page.url)
+        hooks.waiting?.()
+      }
+      relay.onData((chunk) => {
+        pending += chunk
+        const lines = pending.split(/\r?\n/)
+        pending = lines.pop() ?? ''
+        for (const line of lines) {
+          if (line.startsWith('LOCUST_OPEN ')) {
+            // Its first page is the sign-in; one opened after it is never opened as well.
+            if (opened) continue
+            opened = true
+            void openPage(line.slice('LOCUST_OPEN '.length)).catch(() => end(new CloudComputerError(`${who}'s sign-in page could not be opened here.`)))
+          } else if (line.startsWith('LOCUST_SAID ')) {
+            said.push(line.slice('LOCUST_SAID '.length).trim())
+          } else if (line.startsWith('LOCUST_DONE ')) {
+            const code = line.slice('LOCUST_DONE '.length).trim()
+            if (code === '0') end()
+            else end(new CloudComputerError(`${who} was not signed in: ${lastWords(said) ?? (code === '124' ? 'it waited too long for the page in your browser' : 'it did not say why')}.`))
+          }
+        }
+      })
+      relay.onExit(() => {
+        const why = relay.stderrTail?.() ?? ''
+        end(needsCodespacePermission(why)
+          ? new CloudComputerError('GitHub has not let Locust use your codespaces yet. Allow it once in your browser, then try again.', 'permission')
+          : new CloudComputerError(`${who}'s sign-in on your cloud computer ended before it was done${why.length > 0 ? `: ${why.split(/\r?\n/).pop()!.slice(0, 300)}` : '.'}`))
+      })
+      if (hooks.signal?.aborted === true) stop()
+      else hooks.signal?.addEventListener('abort', stop)
+    }),
     bring: async (name, repo, folder, taskId) => {
       // The whole folder as one commit -- what is committed, what is not, and files not yet added -- made with a
       // scratch index, so the person's own staging is never touched; a ref of its own only while it is bundled.

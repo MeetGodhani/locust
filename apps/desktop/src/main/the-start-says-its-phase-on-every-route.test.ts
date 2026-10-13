@@ -24,7 +24,8 @@ describe('the start says "Starting" on every route', () => {
     ["Codex's app server", 'if (codexStreams) {', 'startCodexAppServerRun('],
     ["OpenCode's server", '} else if (opencodeServes) {', 'startOpenCodeServeRun('],
     ["Copilot's ACP", '} else if (copilotAcp) {', 'startAcpRun('],
-    ['a plain process', "say('starting-runtime')\n              process = options.runner.start(", 'options.runner.start(']
+    // The runner is this computer's, or one whose process is the cloud computer's ssh (0.768): chosen, then said, then started.
+    ['a plain process', "say('starting-runtime')\n              process = runner.start(", 'runner.start(']
   ]
   for (const [route, opens, starts] of branches) {
     it(`${route}: the phase is said before the process starts`, () => {

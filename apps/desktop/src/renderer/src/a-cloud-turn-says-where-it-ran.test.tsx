@@ -157,7 +157,7 @@ describe("a cloud turn's files, while they are not in this folder", () => {
 
 describe('the first time, the dialog', () => {
   const dialog = (state: Parameters<typeof CloudSetupDialog>[0]['state']): string =>
-    renderToStaticMarkup(<CloudSetupDialog state={state} teammateName="Wren" onSetUp={() => undefined} onAllow={() => undefined} onCheckAgain={() => undefined} onClose={() => undefined} />)
+    renderToStaticMarkup(<CloudSetupDialog state={state} teammateName="Wren" onSetUp={() => undefined} onSignIn={() => undefined} onStopSignIn={() => undefined} onAllow={() => undefined} onCheckAgain={() => undefined} onClose={() => undefined} />)
 
   it('says what it is and what it costs before anything is made', () => {
     const html = dialog({ phase: 'ask', repo: 'acme/hearth' })

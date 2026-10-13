@@ -2304,8 +2304,8 @@ export function SettingsScreen({
           <section className="lc-settings__section">
             <h2 className="lc-settings__heading">Cloud computers</h2>
             <p className="lc-settings__lede">
-              Where a teammate works when you pick Cloud and its maker has no cloud of its own: a GitHub Codespace on your
-              GitHub account, one for each repository.
+              Where a teammate works when you pick Cloud computer, or Cloud for a teammate whose maker has no cloud of
+              its own: a GitHub Codespace on your GitHub account, one for each repository.
             </p>
             <More>
               <p>
@@ -2318,6 +2318,11 @@ export function SettingsScreen({
                 A teammate there works on a copy of this folder as it was when the conversation went to the cloud, and
                 runs without GitHub&rsquo;s sign-in, so nothing it does reaches GitHub. Its change comes into this folder
                 only when you press Apply.
+              </p>
+              <p>
+                Claude Code and Codex there are signed in with your own accounts, once for each computer: Sign in opens
+                their maker&rsquo;s page in your browser, and you click Authorize. The sign-in stays on that computer and
+                goes when it is deleted. OpenCode&rsquo;s free models need no sign-in.
               </p>
             </More>
             <CloudComputers />

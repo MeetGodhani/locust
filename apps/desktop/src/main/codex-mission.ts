@@ -24,12 +24,14 @@ import {
   cursorCanEnforceReadOnly,
   notificationOfRecord,
   startAcpRun,
+  createNodeRuntimeProcessRunner,
   startCodexAppServerRun,
   startOpenCodeServeRun
 } from '@teammate/runtime-adapters'
 import type {
   AppServerRunProcess,
   ClaudeEventNormalizer,
+  ExecutableLaunch,
   CodexEventNormalizer,
   JsonValue,
   MissionRuntimeId,
@@ -125,6 +127,7 @@ import { checkpointMessage, checkpointNotice, checkpointSentence, turnOutcomeOf 
 import type { TurnOutcome } from './turn-checkpoint.js'
 import type { CheckpointMessage, CheckpointResult } from './worktrees.js'
 import type { CloudTurns, ServeSpawn } from './cloud-turns.js'
+import { cloudAppServerSpawn, cloudLaunchOf, cloudProcessSpawn } from './cloud-computer.js'
 
 export const MAX_PROMPT_LENGTH = 8_000
 /**
@@ -433,6 +436,10 @@ interface CodexMissionServiceOptions {
    * which conversations ran there, and reads what a turn changed once it ends.
    */
   readonly cloud?: Pick<CloudTurns, 'of' | 'prepare' | 'settled' | 'carry'>
+  /** A Claude Code turn there (0.768): the runner whose process is gh's ssh. A test's own, else cloudProcessSpawn's. */
+  readonly cloudProcessRunner?: (target: { readonly codespace: string; readonly dir: string }) => RuntimeProcessRunner
+  /** Codex's app server there (0.768). A test's own, else cloudAppServerSpawn's. */
+  readonly cloudAppServerSpawn?: (target: { readonly codespace: string; readonly dir: string }) => (executablePath: string, args: readonly string[], env?: Readonly<Record<string, string>>) => AppServerRunProcess
   readonly opencodeServeSpawn?: (
     executablePath: string,
     args: readonly string[],
@@ -1589,12 +1596,15 @@ export function createCodexMissionService(options: CodexMissionServiceOptions): 
           ) as CodexMissionStartResponse
         }
 
-        // YOUR CLOUD COMPUTER (0.761): OpenCode first, on its own server there; refused in words, before anything.
+        /*
+         * YOUR CLOUD COMPUTER (0.761): OpenCode on its own server there; Claude Code and Codex too (0.768), each signed
+         * in there by the person, Codex on its app server. Refused in words, before anything.
+         */
         if (cloud !== undefined) {
-          if (runtime !== 'opencode') {
-            return error('RUNTIME_START_FAILED', 'Your cloud computer runs OpenCode teammates for now. Pick an OpenCode model, or turn Cloud off.') as CodexMissionStartResponse
+          if (runtime !== 'opencode' && runtime !== 'claude' && runtime !== 'codex') {
+            return error('RUNTIME_START_FAILED', 'Your cloud computer runs OpenCode, Claude Code and Codex teammates for now. Pick one of their models, or turn Cloud off.') as CodexMissionStartResponse
           }
-          if (options.cloud === undefined || options.opencodeServeSpawn === undefined) {
+          if (options.cloud === undefined || (runtime === 'opencode' && options.opencodeServeSpawn === undefined) || (runtime === 'codex' && options.appServerSpawn === undefined)) {
             return error('RUNTIME_START_FAILED', 'Cloud is not available in this window.') as CodexMissionStartResponse
           }
           if (side !== undefined) {
@@ -1998,13 +2008,15 @@ export function createCodexMissionService(options: CodexMissionServiceOptions): 
          */
         const askEveryConnector =
           globalThis.process.env.LOCUST_ASK_CONNECTORS === '1' || (await options.askConnectors?.()) === true
-        const commandGuardPath = runtime === 'claude' ? await options.commandGuard?.() : undefined
+        // A cloud turn's guard is the computer it runs on (cloud-computer.ts): the guards below name files on this one.
+        const commandGuardPath = runtime === 'claude' && cloud === undefined ? await options.commandGuard?.() : undefined
         const copilotGuardPlugin = runtime === 'copilot' ? await options.copilotCommandGuard?.().catch(() => undefined) : undefined
         // A cloud turn's guard is the computer it runs on: nothing there reaches GitHub (cloud-computer.ts).
         const openCodeGuardPlugin = runtime === 'opencode' && cloud === undefined ? await options.openCodeCommandGuard?.().catch(() => undefined) : undefined
-        const codexGuardConfig = runtime === 'codex' ? await options.codexCommandGuard?.(runCwd).catch(() => undefined) : undefined
+        const codexGuardConfig = runtime === 'codex' && cloud === undefined ? await options.codexCommandGuard?.(runCwd).catch(() => undefined) : undefined
+        // The person's connectors are this computer's: a turn there has none to ask about.
         const permissionBridge =
-          runtime === 'claude' && effectiveSandbox !== 'full-access' && options.permissionHost !== undefined
+          cloud === undefined && runtime === 'claude' && effectiveSandbox !== 'full-access' && options.permissionHost !== undefined
             ? await options.permissionHost.register({ runId, missionId, cwd: runCwd, beforeApproval: flushBeforeApproval })
             : undefined
         /*
@@ -2032,7 +2044,7 @@ export function createCodexMissionService(options: CodexMissionServiceOptions): 
          * the skills kept from GitHub (0.710), which live in Locust's profile.
          */
         const skills =
-          runtime === 'claude' && options.claudeSkills !== undefined
+          runtime === 'claude' && cloud === undefined && options.claudeSkills !== undefined
             ? await options.claudeSkills(runCwd, { auto: effectiveSandbox === 'full-access' }).catch(() => undefined)
             : undefined
         const skillPlugins = skills?.plugins.map((plugin) => plugin.dir) ?? []
@@ -2051,8 +2063,12 @@ export function createCodexMissionService(options: CodexMissionServiceOptions): 
         const bare = asCommand === true && relay === undefined && startedBy === undefined && (runtime !== 'codex' || codexStreams)
         const openCodeCommand = bare && runtime === 'opencode' ? commandNamed(prompt) : undefined
         const codexCommand = bare && runtime === 'codex' ? commandNamed(prompt) : undefined
+        /** Claude Code or Codex on the cloud computer (0.768): its own copy there, in the conversation's folder there. */
+        let cloudLaunch: { readonly executable: ExecutableLaunch; readonly dir: string } | undefined
         const buildCommand = (promptText: string): RuntimeCommandSpec => {
           const chosenEffort = route.effort
+          const agentExecutable = cloudLaunch?.executable ?? executable
+          const agentFolder = cloudLaunch?.dir ?? runCwd
           const choice = {
             ...(chosenModel === undefined ? {} : { model: chosenModel }),
             ...(chosenEffort === undefined ? {} : { effort: chosenEffort }),
@@ -2125,8 +2141,8 @@ export function createCodexMissionService(options: CodexMissionServiceOptions): 
             })
           }
           return runtime === 'claude'
-            ? createClaudePrintCommand(executable, {
-                workspacePath: runCwd,
+            ? createClaudePrintCommand(agentExecutable, {
+                workspacePath: agentFolder,
                 ...(permissionBridge === undefined ? {} : { permissionBridge }),
                 ...(commandGuardPath === undefined ? {} : { commandGuard: { settingsPath: commandGuardPath } }),
                 ...(skillPlugins.length === 0 ? {} : { skillPlugins }),
@@ -2155,7 +2171,7 @@ export function createCodexMissionService(options: CodexMissionServiceOptions): 
                    */
                   // The teammate's own list when it has one -- a NARROWING of
                   // what the person has -- else everything the person has.
-                  return claudeConnectorRules(effectiveSandbox, askEveryConnector, peer?.connectors ?? options.connectors?.() ?? [])
+                  return claudeConnectorRules(effectiveSandbox, askEveryConnector, cloud !== undefined ? [] : (peer?.connectors ?? options.connectors?.() ?? []))
                 })(),
                 // Claude's containment IS this value: it picks the permission
                 // mode and the tool list. Leaving it out defaulted every
@@ -2173,8 +2189,8 @@ export function createCodexMissionService(options: CodexMissionServiceOptions): 
                   ...choice
                 })
               : codexStreams
-              ? createCodexAppServerCommand(executable, {
-                  workspacePath: runCwd,
+              ? createCodexAppServerCommand(agentExecutable, {
+                  workspacePath: agentFolder,
                   sandbox: effectiveSandbox,
                   // Switches Codex's plan tool on, so its plan reaches the
                   // panel rather than being typed into the reply (0.304).
@@ -2228,16 +2244,20 @@ export function createCodexMissionService(options: CodexMissionServiceOptions): 
          * its reply that "the Windows path you gave maps to the workspace root here" (drive-a-cloud-turn, 0.761).
          */
         let cloudDir: string | undefined
+        let cloudCodespace: string | undefined
         if (cloud !== undefined && options.cloud !== undefined) {
+          const agent = runtime === 'claude' || runtime === 'codex' ? runtime : undefined
           const prepared = await options.cloud.prepare({
             missionId,
             folder: runCwd,
             ...(followUpOf === undefined ? {} : { follows: followUpOf }),
             openCodeVersion: chosen.version?.version,
+            ...(agent === undefined ? {} : { agent: { runtime: agent, version: chosen.version?.version } }),
             ...(cloud.setUp === true ? { setUp: true } : {}),
             say
           })
           if (!prepared.ok) {
+            if (prepared.signIn !== undefined) return { ok: false, error: { code: 'CLOUD_SIGN_IN_NEEDED', message: prepared.message, cloudSignIn: prepared.signIn } }
             return prepared.setup === undefined
               ? error('RUNTIME_START_FAILED', prepared.message) as CodexMissionStartResponse
               : { ok: false, error: { code: 'CLOUD_SETUP_NEEDED', message: prepared.message, cloudSetup: prepared.setup } }
@@ -2247,6 +2267,13 @@ export function createCodexMissionService(options: CodexMissionServiceOptions): 
           }
           cloudSpawn = prepared.spawn
           cloudDir = prepared.dir
+          cloudCodespace = prepared.codespace
+          // Its command again, now that it is known where it runs: the agent there, in the conversation's copy there.
+          if (agent !== undefined) {
+            if (prepared.bin === undefined) return error('RUNTIME_START_FAILED', 'Your cloud computer did not say where its copy of the agent is. Send again.') as CodexMissionStartResponse
+            cloudLaunch = { executable: cloudLaunchOf(agent, prepared.bin), dir: prepared.dir }
+            command = buildCommand(prompt)
+          }
         }
         // The run's own folder when it is not this one: a teammate's worktree, or the copy on the cloud computer.
         const ownFolder = cloudDir ?? slot?.cwd
@@ -2263,7 +2290,7 @@ export function createCodexMissionService(options: CodexMissionServiceOptions): 
         const attached = placed.prompt
         // On the cloud computer (0.762), the message's own files go to the copy there, which git never gave them. One
         // that does not arrive is left as named: the agent's own read says it is missing, as for a worktree (M16).
-        if (cloudSpawn !== undefined && placed.files.length > 0) await options.cloud?.carry(missionId, runCwd, placed.files).catch(() => undefined)
+        if (cloudDir !== undefined && placed.files.length > 0) await options.cloud?.carry(missionId, runCwd, placed.files).catch(() => undefined)
         // Cold, not a command and not a side question: told what was said before (0.495).
         const sentPrompt = coldEarlier === undefined || bare || side !== undefined ? attached : composeColdFollowUp(coldEarlier, attached, rewind === true)
         let runtimePrompt = sentPrompt
@@ -2533,7 +2560,9 @@ ${sentPrompt.trim()}`
                 ? options.approvals.requestHandlerFor({ runId, missionId, cwd: runCwd, changesByItem })
                 : undefined
             const streamed = startCodexAppServerRun({
-              spawn: options.appServerSpawn!,
+              spawn: cloudDir !== undefined && cloudCodespace !== undefined
+                ? (options.cloudAppServerSpawn ?? cloudAppServerSpawn)({ codespace: cloudCodespace, dir: cloudDir })
+                : options.appServerSpawn!,
               command,
               prompt: runtimePrompt,
               sandbox: policy.sandbox,
@@ -2578,11 +2607,6 @@ ${sentPrompt.trim()}`
               signal: controller.signal,
               now
             })
-            if (cloudSpawn !== undefined) {
-              // What the turn changed there is read once it ends, for the card under it (cloud-turns.ts).
-              const settle = (): void => void options.cloud?.settled(missionId).catch(() => undefined)
-              process.completion.then(settle, settle)
-            }
           } else if (copilotAcp) {
             say('starting-runtime')
             // Each thing Copilot asks becomes the same card Codex's do. A
@@ -2623,8 +2647,12 @@ ${sentPrompt.trim()}`
               options.note?.('connectors-allowed', `${missionId} ${connectorGrant.added.join(' ')}`)
             }
             try {
+              // Claude Code there (0.768): the same runner, its process gh's ssh.
+              const runner = cloudDir !== undefined && cloudCodespace !== undefined
+                ? (options.cloudProcessRunner ?? ((target) => createNodeRuntimeProcessRunner({ spawnProcess: cloudProcessSpawn(target) })))({ codespace: cloudCodespace, dir: cloudDir })
+                : options.runner
               say('starting-runtime')
-              process = options.runner.start(command, runtimePrompt, { signal: controller.signal })
+              process = runner.start(command, runtimePrompt, { signal: controller.signal })
             } catch (startError) {
               if (skills !== undefined) void skills.dispose()
               if (cursorGuard !== undefined) void cursorGuard.after().catch(() => undefined)
@@ -2672,6 +2700,11 @@ ${sentPrompt.trim()}`
             'RUNTIME_START_FAILED',
             why
           ) as CodexMissionStartResponse
+        }
+        if (cloudDir !== undefined) {
+          // What the turn changed there is read once it ends, for the card under it (cloud-turns.ts), whichever agent.
+          const settle = (): void => void options.cloud?.settled(missionId).catch(() => undefined)
+          process.completion.then(settle, settle)
         }
 
         const mission: ActiveCodexMission = {

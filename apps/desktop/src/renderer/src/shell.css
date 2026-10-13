@@ -21282,6 +21282,36 @@ textarea.lc-compare__judgecriteria {
   color: var(--lc-text-secondary);
   font-size: var(--lc-text-description);
 }
+/* The agents on it (0.768): each signed in there or not, with Sign in or Sign out at the row's end. */
+.lc-cloudcomputer__agents {
+  margin: 0;
+  padding: var(--lc-space-3) 0 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--lc-space-3);
+  border-top: 1px solid var(--lc-border-hairline);
+}
+.lc-cloudcomputer__agent {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--lc-space-4);
+  min-height: 30px;
+}
+.lc-cloudcomputer__agentname {
+  font-size: var(--lc-text-description);
+  color: var(--lc-text-name);
+}
+.lc-cloudcomputer__agentstate {
+  min-width: 0;
+  font-size: var(--lc-text-description);
+  color: var(--lc-text-muted);
+  text-wrap: pretty;
+}
+.lc-cloudcomputer__agentstate.is-in {
+  color: var(--lc-green-text);
+}
 
 /* Not on GitHub (0.504): the folder named, then the person's folders that are, one click each. */
 .lc-cloudtasks__elsewhere {

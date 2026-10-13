@@ -75,12 +75,38 @@ export function cloudFilesHere(turn: PublicCloudTurn | undefined): boolean {
   return turn === undefined || turn.state === 'home' || turn.state === 'none' || (turn.state === 'carried' && turn.outcome === 'home')
 }
 
+/**
+ * The agents besides OpenCode that a cloud computer can have (0.768), each signed in there by the person, once, in
+ * their own browser (main/cloud-computer.ts says how).
+ */
+export type CloudAgent = 'claude' | 'codex'
+
+export const CLOUD_AGENT_NAMES: Readonly<Record<CloudAgent, string>> = { claude: 'Claude Code', codex: 'Codex' }
+
+/** Whose page the person signs in on: "Claude's sign-in", "OpenAI's sign-in". */
+export const CLOUD_AGENT_MAKERS: Readonly<Record<CloudAgent, string>> = { claude: 'Claude', codex: 'OpenAI' }
+
+/** The account it signs in with, in its maker's own words: "Sign in with Claude", "Sign in with ChatGPT". */
+export const CLOUD_AGENT_ACCOUNTS: Readonly<Record<CloudAgent, string>> = { claude: 'Claude', codex: 'ChatGPT' }
+
+export function isCloudAgent(value: unknown): value is CloudAgent {
+  return value === 'claude' || value === 'codex'
+}
+
+/** A step of signing an agent in there, as the dialog shows them. */
+export type CloudSignInStep = 'waking' | 'installing' | 'opening' | 'waiting'
+
+/** What is known of an agent there without asking it: from its last sign-in, sign-out or look (0.768). */
+export type CloudAgentState = 'signed-in' | 'signed-out'
+
 /** A cloud computer as Settings lists it. */
 export interface PublicCloudComputer {
   readonly name: string
   readonly repo: string
   readonly state: 'available' | 'starting' | 'stopped' | 'other'
   readonly lastUsedAt?: string
+  /** Each agent's sign-in there, as last known (0.768); an agent never seen there is absent. */
+  readonly agents?: Readonly<Partial<Record<CloudAgent, CloudAgentState>>>
 }
 
 /** Where a folder stands with the cloud computer: the window asks first when it has none. */
@@ -88,8 +114,8 @@ export type CloudFolderState =
   | { readonly ok: true; readonly repo: string; readonly branch?: string; readonly computer?: PublicCloudComputer }
   | { readonly ok: false; readonly message: string; readonly permission?: true; readonly notOnGitHub?: true }
 
-/** A step of setting one up, as the dialog shows them. */
-export type CloudSetupStep = 'making' | 'readying' | 'installing' | 'ready'
+/** A step of setting one up, as the dialog shows them; `signing-in` only for an agent that is signed in there (0.768). */
+export type CloudSetupStep = 'making' | 'readying' | 'installing' | 'signing-in' | 'ready'
 
 /** GitHub's word for a codespace's state, as Locust's three. */
 export function cloudStateOf(state: string): PublicCloudComputer['state'] {

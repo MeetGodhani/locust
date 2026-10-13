@@ -292,6 +292,11 @@ export interface ComposerProps {
      */
     readonly where?: 'codex' | 'claude' | 'computer'
     readonly environment?: { readonly value: string; readonly onChange: (value: string) => void }
+    /**
+     * The person's own cloud computer for a Claude Code or Codex teammate (0.768), offered beside its maker's cloud:
+     * that agent, signed in there by the person, runs the turn there as a turn of this conversation.
+     */
+    readonly computer?: { readonly on: boolean; readonly onMode: (on: boolean) => void; readonly agentName: string }
   }
   /**
    * BACKGROUND (W10, 0.683): the chat-type menu's choice to hand a Claude turn to Claude Code's own background
@@ -424,13 +429,15 @@ export function shiftTabMode<M extends string>(current: M, usable: readonly M[],
 }
 
 /** The chat mode chip's three choices, in Arena's words where they fit (0.451). */
-const CHAT_MODES: readonly { readonly id: 'direct' | 'compare' | 'blind' | 'cloud' | 'background'; readonly name: string; readonly desc: string; readonly icon: 'message' | 'columns' | 'eye-off' | 'cloud' | 'clock' }[] = [
+const CHAT_MODES: readonly { readonly id: 'direct' | 'compare' | 'blind' | 'cloud' | 'computer' | 'background'; readonly name: string; readonly desc: string; readonly icon: 'message' | 'columns' | 'eye-off' | 'cloud' | 'server' | 'clock' }[] = [
   { id: 'direct', name: 'Direct', desc: 'Chat with one model at a time', icon: 'message' },
   { id: 'compare', name: 'Compare', desc: 'Two or three models of your choice, side by side', icon: 'columns' },
   { id: 'blind', name: 'Blind', desc: 'Compare with the names hidden until you keep one', icon: 'eye-off' },
   // 0.503: offered only where the window passes `cloud` (main/cloud-tasks.ts). Codex Cloud takes no model from
   // Locust (`codex cloud exec` 0.161.0 has no --model), so the line says whose model it runs on (10/08).
   { id: 'cloud', name: 'Cloud', desc: 'Runs in Codex Cloud on this repository, on the model Codex Cloud chooses; bring the change home when it is done', icon: 'cloud' },
+  // 0.768: offered only where the window passes `cloud.computer` (a Claude Code or Codex route); its words name the agent.
+  { id: 'computer', name: 'Cloud computer', desc: 'Runs on your cloud computer, a GitHub Codespace; watch it here, bring the change home when it is done', icon: 'server' },
   // W10: offered only where the window passes `background` (a Claude route).
   { id: 'background', name: 'Background', desc: 'Keeps working on this computer even if you close Locust. Claude Code runs it, and you answer its questions there', icon: 'clock' }
 ]
@@ -441,6 +448,8 @@ const CHAT_MODES: readonly { readonly id: 'direct' | 'compare' | 'blind' | 'clou
 const CLAUDE_CLOUD_DESC = 'Runs in Claude’s cloud; follow it on claude.ai, tell it more from here, bring it home when it is done'
 /** The Cloud choice for a teammate whose maker has no cloud (0.761): the person's own, a GitHub Codespace. */
 const COMPUTER_CLOUD_DESC = 'Runs on your cloud computer, a GitHub Codespace; watch it here, bring the change home when it is done'
+/** The Cloud computer choice for a Claude Code or Codex teammate (0.768): its own copy there runs it. */
+const agentComputerDesc = (agentName: string): string => `${agentName} runs it on your cloud computer, a GitHub Codespace; watch it here, bring the change home when it is done`
 
 export function Composer({
   talkTo,
@@ -919,11 +928,11 @@ export function Composer({
   const compareEdits = asking !== undefined ? asking.changes === true : compare?.changes === true
   const compareModeOpen = comparing && asking === undefined && compare?.onChanges !== undefined
   // Direct, Compare or Blind: what the chat mode chip says (0.451).
-  const chatMode: 'direct' | 'compare' | 'blind' | 'cloud' | 'background' =
-    asking !== undefined ? (asking.blind === true ? 'blind' : 'compare') : background?.on === true ? 'background' : cloud?.on === true ? 'cloud' : compare?.on === true ? (compare.blind === true ? 'blind' : 'compare') : 'direct'
+  const chatMode: 'direct' | 'compare' | 'blind' | 'cloud' | 'computer' | 'background' =
+    asking !== undefined ? (asking.blind === true ? 'blind' : 'compare') : background?.on === true ? 'background' : cloud?.computer?.on === true ? 'computer' : cloud?.on === true ? 'cloud' : compare?.on === true ? (compare.blind === true ? 'blind' : 'compare') : 'direct'
   const versus = asking?.label ?? versusLabel((compare?.picks ?? []).map((pick) => pick.label))
   // One column left answering (the others could not start) is asked as one.
-  const placeholder = background?.on === true && asking === undefined ? 'Say what Claude should keep working on…' : cloud?.on === true && asking === undefined ? (cloud.where === 'claude' ? 'Describe a task for Claude’s cloud…' : cloud.where === 'computer' ? 'Describe a task for your cloud computer…' : 'Describe a task for Codex Cloud…') : asking !== undefined ? (asking.columns <= 1 ? 'Ask a follow-up…' : `Ask ${asking.columns === 2 ? 'both' : `all ${String(asking.columns)}`}…`) : workingNow
+  const placeholder = background?.on === true && asking === undefined ? 'Say what Claude should keep working on…' : cloud?.computer?.on === true && asking === undefined ? 'Describe a task for your cloud computer…' : cloud?.on === true && asking === undefined ? (cloud.where === 'claude' ? 'Describe a task for Claude’s cloud…' : cloud.where === 'computer' ? 'Describe a task for your cloud computer…' : 'Describe a task for Codex Cloud…') : asking !== undefined ? (asking.columns <= 1 ? 'Ask a follow-up…' : `Ask ${asking.columns === 2 ? 'both' : `all ${String(asking.columns)}`}…`) : workingNow
     ? queued === undefined
       ? `Say what is next — it goes to ${workingName} when this finishes…`
       : 'Edit the queued message to change it…'
@@ -1903,7 +1912,7 @@ export function Composer({
                 <span className="lc-control__anchor" ref={chatModeAnchor}>
                   {chatModeOpen && (
                     <div className="lc-menu" role="menu" aria-label="Direct or compare">
-                      {CHAT_MODES.filter((option) => (option.id !== 'cloud' || cloud !== undefined) && (option.id !== 'background' || background !== undefined)).map((option) => (
+                      {CHAT_MODES.filter((option) => (option.id !== 'cloud' || cloud !== undefined) && (option.id !== 'computer' || cloud?.computer !== undefined) && (option.id !== 'background' || background !== undefined)).map((option) => (
                         <button
                           key={option.id}
                           type="button"
@@ -1917,10 +1926,19 @@ export function Composer({
                               compare.onMode(false)
                               compare.onBlind?.(false)
                               cloud?.onMode(false)
+                              cloud?.computer?.onMode(false)
                               background?.onMode(true)
                               return
                             }
                             background?.onMode(false)
+                            if (option.id === 'computer') {
+                              compare.onMode(false)
+                              compare.onBlind?.(false)
+                              cloud?.onMode(false)
+                              cloud?.computer?.onMode(true)
+                              return
+                            }
+                            cloud?.computer?.onMode(false)
                             if (option.id === 'cloud') {
                               // Said, not silently refused: why Cloud cannot be picked here.
                               if (cloud?.refusal !== undefined) {
@@ -1946,7 +1964,7 @@ export function Composer({
                           <Icon name={option.icon} size={15} />
                           <span className="lc-menu__text">
                             <span className="lc-menu__name">{option.name}</span>
-                            <span className="lc-menu__desc">{option.id === 'cloud' && cloud?.refusal !== undefined ? cloud.refusal : option.id === 'cloud' && cloud?.where === 'claude' ? CLAUDE_CLOUD_DESC : option.id === 'cloud' && cloud?.where === 'computer' ? COMPUTER_CLOUD_DESC : option.desc}</span>
+                            <span className="lc-menu__desc">{option.id === 'computer' && cloud?.computer !== undefined ? agentComputerDesc(cloud.computer.agentName) : option.id === 'cloud' && cloud?.refusal !== undefined ? cloud.refusal : option.id === 'cloud' && cloud?.where === 'claude' ? CLAUDE_CLOUD_DESC : option.id === 'cloud' && cloud?.where === 'computer' ? COMPUTER_CLOUD_DESC : option.desc}</span>
                           </span>
                           {chatMode === option.id && <Icon name="check" size={13} />}
                         </button>
@@ -1959,7 +1977,7 @@ export function Composer({
                     aria-haspopup="menu"
                     aria-expanded={chatModeOpen}
                     aria-label={`Chat mode: ${CHAT_MODES.find((option) => option.id === chatMode)?.name ?? 'Direct'}`}
-                    title={chatMode === 'cloud' && cloud?.where === 'computer' ? COMPUTER_CLOUD_DESC : chatMode === 'cloud' && cloud?.where === 'claude' ? CLAUDE_CLOUD_DESC : CHAT_MODES.find((option) => option.id === chatMode)?.desc}
+                    title={chatMode === 'computer' && cloud?.computer !== undefined ? agentComputerDesc(cloud.computer.agentName) : chatMode === 'cloud' && cloud?.where === 'computer' ? COMPUTER_CLOUD_DESC : chatMode === 'cloud' && cloud?.where === 'claude' ? CLAUDE_CLOUD_DESC : CHAT_MODES.find((option) => option.id === chatMode)?.desc}
                     disabled={running || asking !== undefined}
                     onClick={() => setChatModeOpen(!chatModeOpen)}
                   >

@@ -119,6 +119,9 @@ import {
   CLOUD_COMPUTER_ALLOW_CHANNEL,
   CLOUD_COMPUTER_FOLDER_CHANNEL,
   CLOUD_COMPUTER_SETUP_CHANNEL,
+  CLOUD_COMPUTER_SIGN_IN_CHANNEL,
+  CLOUD_COMPUTER_SIGN_IN_STOP_CHANNEL,
+  CLOUD_COMPUTER_SIGN_OUT_CHANNEL,
   CLAUDE_CLOUD_START_CHANNEL,
   CLAUDE_CLOUD_LIST_CHANNEL,
   CLAUDE_CLOUD_HOME_CHANNEL,
@@ -287,6 +290,7 @@ import type {
   CloudTurnResponse,
   CloudPullRequestResponse,
   CloudComputersResponse,
+  CloudSignInResponse,
   RewindPutBackRequest,
   RewindPutBackResponse,
   AttachFilesResponse,
@@ -421,7 +425,7 @@ export type {
   RuntimeDiscoveryResponse,
   RuntimeProbeStatus
 } from '../shared/ipc.js'
-import type { CloudFolderState, PublicCloudTurn } from '../shared/cloud-computer.js'
+import type { CloudAgent, CloudFolderState, PublicCloudTurn } from '../shared/cloud-computer.js'
 
 const desktopApi: DesktopApi = {
   locustMcp: {
@@ -708,7 +712,10 @@ const desktopApi: DesktopApi = {
   openCloudComputerTerminal: (name: string) => ipcRenderer.invoke(CLOUD_COMPUTER_TERMINAL_CHANNEL, name) as Promise<OpenInTerminalResponse>,
   allowCloudComputers: () => ipcRenderer.invoke(CLOUD_COMPUTER_ALLOW_CHANNEL) as Promise<OpenInTerminalResponse>,
   cloudComputerForFolder: () => ipcRenderer.invoke(CLOUD_COMPUTER_FOLDER_CHANNEL) as Promise<CloudFolderState>,
-  setUpCloudComputer: () => ipcRenderer.invoke(CLOUD_COMPUTER_SETUP_CHANNEL) as Promise<CloudFolderState>,
+  setUpCloudComputer: (agent?: CloudAgent) => ipcRenderer.invoke(CLOUD_COMPUTER_SETUP_CHANNEL, agent === undefined ? {} : { agent }) as Promise<CloudFolderState>,
+  signInCloudAgent: (name: string, agent: CloudAgent) => ipcRenderer.invoke(CLOUD_COMPUTER_SIGN_IN_CHANNEL, { name, agent }) as Promise<CloudSignInResponse>,
+  stopCloudSignIn: () => ipcRenderer.invoke(CLOUD_COMPUTER_SIGN_IN_STOP_CHANNEL) as Promise<void>,
+  signOutCloudAgent: (name: string, agent: CloudAgent) => ipcRenderer.invoke(CLOUD_COMPUTER_SIGN_OUT_CHANNEL, { name, agent }) as Promise<{ readonly ok: true } | { readonly ok: false; readonly message: string }>,
   getRemoteControl: () => ipcRenderer.invoke(REMOTE_CONTROL_GET_CHANNEL) as Promise<RemoteControlState>,
   setRemoteControl: (enabled: boolean) => ipcRenderer.invoke(REMOTE_CONTROL_SET_CHANNEL, enabled) as Promise<RemoteControlState>,
   startClaudeCloud: (prompt: string, teammateId?: string, choice?: { readonly model?: string; readonly effort?: string; readonly environment?: string }) => ipcRenderer.invoke(CLAUDE_CLOUD_START_CHANNEL, prompt, teammateId, choice) as Promise<ClaudeCloudStartResponse>,
