@@ -158,6 +158,34 @@ export function panelPick<T extends string>(picks: readonly (T | undefined)[], a
   return [...counted].find(([, count]) => count * 2 > answered)?.[0]
 }
 
+/** Points a draft holds (0.766): enough to say what a good answer does, few enough to read and edit. */
+export const DRAFT_MIN_POINTS = 3
+export const DRAFT_MAX_POINTS = 5
+
+/**
+ * DRAFT THE POINTS (0.766), the canvas's "Locust drafts that list (the rubric) from the task with a cheap model. You
+ * edit it." What the model is asked: not to answer, only to say what a good answer must do, in the scorecard's own
+ * POINT form so it is read as a judge's points are.
+ */
+export function pointsDraftRequest(ask: string): string {
+  return [
+    'Several AI models are about to be compared on this request:',
+    clip(ask, 4_000),
+    `Do not answer it. Write the points a good answer to it must meet, so that a judge can check each one: ${String(DRAFT_MIN_POINTS)} to ${String(DRAFT_MAX_POINTS)} of them, each specific and checkable, one line each, in exactly this form and with nothing else:`,
+    'POINT 1: <a point, in at most ten words>\nPOINT 2: <a point, in at most ten words>'
+  ].join('\n\n')
+}
+
+/** The points in a draft, in order from 1, each once; at most `DRAFT_MAX_POINTS`. */
+export function draftedPoints(text: string): readonly string[] {
+  const set: string[] = []
+  for (const line of text.split(/\r?\n/).map(plain)) {
+    const point = POINT_LINE.exec(line)
+    if (point !== null && Number(point[1]) === set.length + 1 && set.length < DRAFT_MAX_POINTS) set.push(clip(point[2] ?? '', MAX_POINT_CHARS))
+  }
+  return set.filter((point) => point.length > 0)
+}
+
 /** How many points a column met, of how many were scored. */
 export function scoreOf(row: readonly (ScoreVerdict | undefined)[] | undefined): { readonly met: number; readonly of: number } {
   const scored = (row ?? []).filter((verdict): verdict is ScoreVerdict => verdict !== undefined)

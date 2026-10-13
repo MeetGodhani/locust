@@ -117,6 +117,8 @@ export interface PublicCompare {
   readonly reruns?: readonly string[]
   /** A run again whose models and judge have finished, its copies of the project gone (0.763). */
   readonly settled?: true
+  /** The runs that drafted its points (0.766): the comparison's, never conversations of their own. */
+  readonly pointDrafts?: readonly string[]
 }
 
 /** How many more times a comparison can be run again at once (0.763): one, or three -- one run can be luck. */
@@ -171,7 +173,7 @@ export function newestJudgeMissionIds(judge: PublicCompare['judge']): readonly s
 
 /** Every judge's run, so the sidebar and the history never list one as a conversation (0.520). */
 export function judgeMissionIds(compares: readonly PublicCompare[]): ReadonlySet<string> {
-  return new Set(compares.flatMap((compare) => [...(compare.judge?.missionIds ?? []), ...(compare.judge?.panelMissionIds ?? [])]))
+  return new Set(compares.flatMap((compare) => [...(compare.judge?.missionIds ?? []), ...(compare.judge?.panelMissionIds ?? []), ...(compare.pointDrafts ?? [])]))
 }
 
 /** The run slot a column holds, so one teammate can run on two models at once. */

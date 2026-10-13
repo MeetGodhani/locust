@@ -119,6 +119,7 @@ export function CompareView({
   judgeChoices = [],
   judging = false,
   onJudge,
+  onDraftPoints,
   addChoices = [],
   adding = false,
   onAddModel,
@@ -158,7 +159,9 @@ export function CompareView({
   readonly judgeChoices?: readonly ModelChoice[]
   /** A judge is being asked. */
   readonly judging?: boolean
-  readonly onJudge?: (choiceKey: string, criteria: string) => void
+  readonly onJudge?: (choiceKey: string, criteria: string, others?: readonly string[]) => void
+  /** Draft the points from the question (0.766): the points, or why there are none. */
+  readonly onDraftPoints?: (choiceKey: string) => Promise<readonly string[] | string>
   /** Models not yet in it, that the same question can be put to (0.523). */
   readonly addChoices?: readonly ModelChoice[]
   readonly adding?: boolean
@@ -447,7 +450,7 @@ export function CompareView({
         {/* Your own benchmark (0.763): under the judge's view, once it has scored the answers. */}
         {benchmark !== undefined && <CompareBenchmark view={benchmark} />}
         {onJudge !== undefined && compare.rerunOf === undefined && (compare.reruns ?? []).length === 0 && judgeChoices.length > 0 && judge?.running !== true && columns.filter((column) => column.keepable).length >= 2 && !columns.some((column) => column.running) && (
-          <JudgeAsk choices={judgeChoices} compared={compare.slots.map((column) => `${column.route.runtime}:${column.route.model}`)} again={judge !== undefined} busy={judging} onJudge={onJudge} />
+          <JudgeAsk choices={judgeChoices} compared={compare.slots.map((column) => `${column.route.runtime}:${column.route.model}`)} again={judge !== undefined} busy={judging} onJudge={onJudge} {...(onDraftPoints === undefined ? {} : { onDraftPoints })} />
         )}
         {onAddModel !== undefined && compare.rerunOf === undefined && addChoices.length > 0 && columns.length < 3 && compare.changes !== true && !columns.some((column) => column.running) && columns.every((column) => column.turns.length <= 1) && (
           <AddModelAsk choices={addChoices} busy={adding} onAdd={onAddModel} />
@@ -606,7 +609,9 @@ function ModelOptions({ choices }: { readonly choices: readonly ModelChoice[] })
  * does if the person wants to say. One line under the answers, once at
  * least two have finished; nothing runs until Judge is pressed.
  */
-function JudgeAsk({ choices, compared = [], again, busy, onJudge }: {
+function JudgeAsk({ choices, compared = [], again, busy, onJudge, onDraftPoints }: {
+  /** Draft the points from the question on this model (0.766): the points, or why there are none. */
+  readonly onDraftPoints?: (choiceKey: string) => Promise<readonly string[] | string>
   readonly choices: readonly ModelChoice[]
   /** The compared models' keys: a judge is never one of them while another model can judge. */
   readonly compared?: readonly string[]
@@ -631,7 +636,28 @@ function JudgeAsk({ choices, compared = [], again, busy, onJudge }: {
   const choice = judges[0] ?? ''
   const others = judges.slice(1)
   const pointsWritten = criteria.split(/\r?\n/).some((line) => line.trim().length > 0)
-  const ready = choice.length > 0 && (!three || (others.length === 2 && pointsWritten))
+  /*
+   * DRAFT THE POINTS (0.766), the canvas's "Locust drafts that list from the task with a cheap model. You edit it."
+   * On the first judge's model, offered while the box is empty; what comes back goes in the box, to be edited.
+   */
+  const [drafting, setDrafting] = useState(false)
+  const [draftProblem, setDraftProblem] = useState<string>()
+  const draft = async (): Promise<void> => {
+    if (onDraftPoints === undefined || choice.length === 0) return
+    setDrafting(true)
+    setDraftProblem(undefined)
+    try {
+      const drafted = await onDraftPoints(choice)
+      if (typeof drafted === 'string') setDraftProblem(drafted)
+      else setCriteria((current) => (current.trim().length === 0 ? drafted.join('\n') : current))
+    } finally {
+      setDrafting(false)
+    }
+  }
+  // By its model -- or, for an account's default, its agent: "with Account Default" said nothing (the 0.766 drive).
+  const drafter = choices.find((one) => one.key === choice)
+  const draftName = drafter === undefined ? '' : choice.endsWith(':account-default') ? drafter.group ?? drafter.label.split(' / ')[0] ?? drafter.label : drafter.short ?? drafter.label
+  const ready = !drafting && choice.length > 0 && (!three || (others.length === 2 && pointsWritten))
   // Each label written out where it is used: the harness check reads labels from the attribute itself.
   const pickerOf = (index: number, value: string, onPick: (key: string) => void): ReactElement => (
     <span className="lc-compare__select" key={`judge:${String(index)}`}>
@@ -678,6 +704,22 @@ function JudgeAsk({ choices, compared = [], again, busy, onJudge }: {
           </>
         )}
       </p>
+      {onDraftPoints !== undefined && !pointsWritten && (
+        <p className="lc-compare__judgenote lc-compare__draft" {...(drafting ? { role: 'status' } : {})}>
+          {drafting ? (
+            <>
+              <WorkingSpark />
+              {`${draftName} is drafting the points from your question…`}
+            </>
+          ) : (
+            <>
+              <button type="button" className="lc-linkbutton" disabled={choice.length === 0} onClick={() => void draft()}>Draft the points</button>
+              {` from your question with ${draftName}, then edit them.`}
+            </>
+          )}
+        </p>
+      )}
+      {draftProblem !== undefined && !drafting && <p className="lc-compare__problem" role="status">{draftProblem}</p>}
     </div>
   )
 }

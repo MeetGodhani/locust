@@ -128,6 +128,38 @@ try {
   check('the two beside the first are never the two compared, and are free ones when there are', keys.slice(1).every((key) => !/mimo-v2\.6-flash|ling-3\.0-flash-fin/.test(key)) && (freeOthers.length === 0 || keys.slice(1).some((key) => /-free$/.test(key))), `${JSON.stringify(keys)} · free others offered: ${String(freeOthers.length)}`)
   check('and Judge waits for the points they vote on', three.judgeDisabled === true && /They vote on the points you write/.test(three.note), `disabled ${String(three.judgeDisabled)} · ${three.note}`)
 
+  // DRAFT THE POINTS (0.766): on the first judge's model -- Codex here, one short read-only run -- into the box.
+  await drive.evaluate(`(async () => {
+    const pick = document.querySelector('.lc-compare__judgeask').querySelectorAll('select')[0]
+    const codex = [...pick.querySelectorAll('option')].find((o) => o.value === 'codex:account-default')
+    if (codex) {
+      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(pick, codex.value)
+      pick.dispatchEvent(new Event('change', { bubbles: true }))
+    }
+    await new Promise((r) => setTimeout(r, 300))
+    return 1
+  })()`)
+  const offeredDraft = String(await drive.evaluate(`document.querySelector('.lc-compare__draft')?.innerText.replace(/\\s+/g, ' ').trim() ?? ''`))
+  check('with the box empty, it offers to draft the points on the first judge, by its agent\'s name', offeredDraft === 'Draft the points from your question with Codex CLI, then edit them.', offeredDraft)
+  say(`  draft: ${String(await pressLink('Draft the points'))}`)
+  let drafting = ''
+  let drafted = ''
+  for (let waited = 0; waited < 240_000; waited += 1000) {
+    await sleep(1000)
+    const now = JSON.parse(String(await drive.evaluate(`JSON.stringify({ line: document.querySelector('.lc-compare__draft')?.innerText.trim() ?? '', box: document.querySelector('.lc-compare__judgecriteria')?.value ?? '', problem: document.querySelector('.lc-compare__judgeask .lc-compare__problem')?.innerText ?? '' })`)))
+    if (/is drafting the points/.test(now.line) && drafting === '') drafting = now.line
+    if (now.box.trim().length > 0 || now.problem.length > 0) {
+      drafted = now.box.trim().length > 0 ? now.box : `PROBLEM: ${now.problem}`
+      break
+    }
+  }
+  await drive.capture('the points, drafted', () => read())
+  const draftLines = drafted.split('\n').filter((line) => line.trim().length > 0)
+  check('while it drafts, it says so', /is drafting the points from your question/.test(drafting), drafting)
+  check('the box fills with three to five points to edit, none of them a scorecard line', draftLines.length >= 3 && draftLines.length <= 5 && draftLines.every((line) => !/^(POINT|SCORE)\b/i.test(line)), drafted)
+  const sidebarNow = JSON.parse(String(await drive.evaluate(`JSON.stringify([...document.querySelectorAll('.lc-convrow button.lc-conv')].map((b) => b.innerText.trim()))`)))
+  check('and the drafting run is not listed as a conversation', sidebarNow.length === 1, JSON.stringify(sidebarNow))
+
   // The first on Codex; the other two on free OpenCode models that are not the two compared.
   const picked = JSON.parse(String(await drive.evaluate(`(async () => {
     const set = (select, value) => {
@@ -166,8 +198,9 @@ try {
   check('while they read, the view names all three', /^THE JUDGES' VIEW · .+, .+ and .+ · reading$/.test(readingLabel), readingLabel)
   // The judges asked are the three the pickers showed when Judge was pressed.
   // An account's default is named by its agent in the heading: "Codex CLI / Account Default" reads "Codex CLI".
-  const shownNames = ready.pickers.map((picker) => (/ \/ Account Default$/.test(picker.text) ? picker.text.split(' / ')[0] : picker.text.split(' / ').at(-1)) ?? picker.text)
-  check('the judges asked are the three the pickers showed', shownNames.length === 3 && shownNames.every((name) => readingLabel.includes(name)), `${JSON.stringify(shownNames)} vs ${readingLabel}`)
+  // By model, from the picker's own text; an account's default is named by its agent, so it is matched by key.
+  const shownNames = ready.pickers.map((picker) => (picker.value.endsWith(':account-default') ? '' : picker.text.split(' / ').at(-1) ?? picker.text))
+  check('the judges asked are the three the pickers showed', shownNames.length === 3 && shownNames.every((name) => readingLabel.includes(name)) && /^THE JUDGES' VIEW · Codex CLI, /.test(readingLabel), `${JSON.stringify(ready.pickers.map((picker) => picker.value))} vs ${readingLabel}`)
   check("once they are done, it is the judges' view", /^THE JUDGES' VIEW · .+, .+ and .+$/.test(after.label) && !/reading/.test(after.label), after.label)
   const card = after.scorecard
   check('every point of both answers is their vote, a dot a judge that answered', card !== null && JSON.stringify(card.points) === JSON.stringify(POINTS) && card.verdicts.length === 4 && card.dots.every((dots) => dots.length >= 2 && dots.length <= 3), JSON.stringify(card))

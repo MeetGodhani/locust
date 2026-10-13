@@ -108,4 +108,33 @@ describe('three judges, on screen', () => {
     expect(html).toContain("Judges&#x27; pick")
     expect(html).toContain("The words below are Codex&#x27;s.")
   })
+
+  it('offers to draft the points on the judge picked, while the box is empty (0.766)', () => {
+    const { judge: _unused, ...unjudged } = compare
+    const choices: ModelChoice[] = [{ key: 'codex:account-default', label: 'Codex CLI / Account Default', group: 'Codex CLI', short: 'Account Default' }, { key: 'opencode:x-free', label: 'OpenCode / X Free' }]
+    const html = renderToStaticMarkup(
+      <CompareView
+        compare={unjudged}
+        changeLines={{}}
+        prompts={[compare.prompt]}
+        columns={[column('a', 'Space Bunny'), column('b', 'Muse Spark')]}
+        owner={undefined}
+        workspacePath={undefined}
+        keeping={false}
+        retrying={undefined}
+        onKeep={() => undefined}
+        onRetry={() => undefined}
+        onBack={undefined}
+        judgeChoices={choices}
+        onJudge={() => undefined}
+        onDraftPoints={async () => ['Names a price']}
+      />
+    )
+    expect(html).toContain('>Draft the points</button> from your question with Codex CLI, then edit them.')
+    // Without a way to draft, nothing is offered.
+    const plain = renderToStaticMarkup(
+      <CompareView compare={unjudged} changeLines={{}} prompts={[compare.prompt]} columns={[column('a', 'Space Bunny'), column('b', 'Muse Spark')]} owner={undefined} workspacePath={undefined} keeping={false} retrying={undefined} onKeep={() => undefined} onRetry={() => undefined} onBack={undefined} judgeChoices={choices} onJudge={() => undefined} />
+    )
+    expect(plain).not.toContain('Draft the points')
+  })
 })

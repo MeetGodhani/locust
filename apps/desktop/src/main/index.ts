@@ -33,7 +33,7 @@ import { createCursorDefaultModel } from './cursor-default-model.js'
 import { listWorkspaceFiles } from './workspace-files.js'
 import { MAX_TAGGED, taggedPrompt } from '../shared/tagging.js'
 import { COMPARE_SLOTS, COMPARE_TREES_DIRECTORY, comparesGoneWith, compareNeedsCopy, compareRefusalOf, compareSlotKey, compareTreeId, MAX_COMPARE_SLOTS, MAX_JUDGE_CRITERIA, MIN_COMPARE_SLOTS, PANEL_JUDGES } from '../shared/compare.js'
-import { criteriaLines } from '../shared/compare-score.js'
+import { criteriaLines, draftedPoints, pointsDraftRequest } from '../shared/compare-score.js'
 import { reverseChanges } from '../shared/reverse-diff.js'
 import { createCloudTaskService, launchRunner } from './cloud-task-service.js'
 import { environmentOf, githubRepoOf, leavingNoLog } from './cloud-tasks.js'
@@ -414,6 +414,7 @@ import {
   COMPARE_RETRY_CHANNEL,
   COMPARE_JUDGE_CHANNEL,
   COMPARE_RERUN_CHANNEL,
+  COMPARE_DRAFT_POINTS_CHANNEL,
   COMPARE_RERUN_STOP_CHANNEL,
   COMPARE_RERUNS_CHANNEL,
   COMPARE_ADD_MODEL_CHANNEL,
@@ -6687,6 +6688,53 @@ if (!ownsSingleInstanceLock) {
       if (fromOwnWindow(event) && typeof compareId === 'string') compareReruns.stop(compareId)
     })
     ipcMain.handle(COMPARE_RERUNS_CHANNEL, async (event) => (fromOwnWindow(event) ? compareReruns.progress() : []))
+    /*
+     * DRAFT THE POINTS (0.766, compare-score.ts pointsDraftRequest): one short read-only run on the model asked --
+     * the first judge's -- that does not answer the request, only says what a good answer must do. Answered once it
+     * is done, with the points to put in the box; the run is the comparison's, never a conversation.
+     */
+    ipcMain.handle(COMPARE_DRAFT_POINTS_CHANNEL, async (event, request: unknown) => {
+      const no = (message: string) => ({ ok: false as const, message })
+      if (!fromOwnWindow(event)) return no('The request was rejected.')
+      const input = (typeof request === 'object' && request !== null ? request : {}) as Record<string, unknown>
+      const compare = await compares.get(input.compareId).catch(() => undefined)
+      if (compare === undefined) return no('That comparison is no longer here.')
+      const route = (typeof input.route === 'object' && input.route !== null ? input.route : {}) as Record<string, unknown>
+      if (!isMissionRuntime(route.runtime) || typeof route.model !== 'string' || route.model.length === 0 || route.model.length > 200) return no('Pick a model to draft them.')
+      const cannot = compareRefusalOf(route.runtime, antigravityProbe.cliPath() !== undefined)
+      if (cannot !== undefined) return no(cannot.replace('a comparison', 'the points'))
+      const model = route.model
+      const response = await codexMissions.start(
+        pointsDraftRequest(compare.prompt),
+        route.runtime,
+        'ask',
+        { ...(model === 'account-default' ? {} : { model }), ...(typeof route.effort === 'string' ? { effort: route.effort } : {}) },
+        sendToWindow,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        { key: `draft:${compare.compareId}` }
+      )
+      if (!response.ok) return no(response.error.code === 'RUN_ALREADY_ACTIVE' ? 'The points are being drafted already.' : response.error.message)
+      const { missionId, runId } = response.data
+      // Kept before it is drawn anywhere, so the window never lists it among the conversations.
+      const held = await compares.addPointDraft(compare.compareId, missionId).catch(() => undefined)
+      if (held !== undefined) sendToWindow({ kind: 'compare-reruns', compares: [held], progress: compareReruns.progress() })
+      sendToWindow({ kind: 'mission-started', runId, missionId, prompt: 'Draft the points', data: response.data, startedBy: { kind: 'judge', compareId: compare.compareId } })
+      for (let waited = 0; waited < 240 && codexMissions.hasMission(missionId); waited += 1) await new Promise((done) => setTimeout(done, 1_000))
+      if (codexMissions.hasMission(missionId)) {
+        codexMissions.cancel(runId)
+        return no('It took too long to draft them. Write the points yourself, or pick another model.')
+      }
+      const recorded = await missionLedger.getMission(missionId).catch(() => undefined)
+      const tracker = createTranscriptTracker()
+      tracker.track(recorded?.events ?? [])
+      const points = draftedPoints(tracker.latestFinal ?? '')
+      return points.length === 0 ? no('It wrote no points. Write them yourself, or pick another model.') : { ok: true as const, points }
+    })
     // Nothing refuses a comparison that edits now (0.555): a folder too big to copy works in place.
     ipcMain.handle(COMPARE_CHANGES_REFUSAL_CHANNEL, () => undefined)
     // ...but said before it starts (0.675): Auto's line promised each model its own copy where there would be none.

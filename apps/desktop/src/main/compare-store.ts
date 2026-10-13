@@ -72,6 +72,8 @@ export interface CompareStore {
    * voting (0.765), the other two's runs, which replace the last ask's panel.
    */
   judge(compareId: string, route: CompareRoute, missionId: string, criteria?: string, panel?: readonly { readonly route: CompareRoute; readonly missionId: string }[]): Promise<PublicCompare>
+  /** A model drafted its points (0.766): that run, kept so it is never listed as a conversation. */
+  addPointDraft(compareId: string, missionId: string): Promise<PublicCompare>
   /** A run of it again began (0.763): that comparison's id, newest last. */
   addRerun(compareId: string, rerunId: string): Promise<PublicCompare>
   /** A run again is over (0.763): its models and judge have finished, and its copies are gone. */
@@ -146,6 +148,7 @@ function parsedCompare(value: unknown): PublicCompare | undefined {
   const base = typeof record.base === 'string' && COMMIT.test(record.base) ? record.base : undefined
   const rerunOf = text(record.rerunOf, 80)
   const reruns = Array.isArray(record.reruns) ? record.reruns.filter((id): id is string => typeof id === 'string' && id.length > 0 && id.length <= 80).slice(-MAX_RERUNS) : []
+  const pointDrafts = Array.isArray(record.pointDrafts) ? record.pointDrafts.filter((id): id is string => typeof id === 'string' && id.length > 0 && id.length <= 200).slice(-MAX_JUDGES) : []
   const keptSlot = kept !== undefined && isSlot(kept.slot) && keptAt !== undefined && slots.some((slot) => slot.slot === kept.slot)
     ? { slot: kept.slot, at: keptAt, ...(brought === undefined ? {} : { brought }) }
     : undefined
@@ -163,7 +166,8 @@ function parsedCompare(value: unknown): PublicCompare | undefined {
     ...(base === undefined ? {} : { base }),
     ...(rerunOf === undefined ? {} : { rerunOf }),
     ...(reruns.length === 0 ? {} : { reruns }),
-    ...(record.settled === true ? { settled: true as const } : {})
+    ...(record.settled === true ? { settled: true as const } : {}),
+    ...(pointDrafts.length === 0 ? {} : { pointDrafts })
   }
 }
 
@@ -355,6 +359,9 @@ export function createCompareStore(options: {
           }
         }
       }),
+
+    addPointDraft: (compareId, missionId) =>
+      change(compareId, (compare) => ({ ...compare, pointDrafts: [...(compare.pointDrafts ?? []), missionId].slice(-MAX_JUDGES) })),
 
     addRerun: (compareId, rerunId) =>
       change(compareId, (compare) => ({ ...compare, reruns: [...(compare.reruns ?? []).filter((id) => id !== rerunId), rerunId].slice(-MAX_RERUNS) })),

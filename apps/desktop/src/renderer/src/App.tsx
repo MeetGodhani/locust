@@ -8552,6 +8552,14 @@ export default function App(): ReactElement {
                       ...(judge === undefined ? {} : { judge }),
                       judgeChoices: choices,
                       judging: judgingCompare,
+                      // Draft the points (0.766): one short run on the model picked, its points back for the box.
+                      onDraftPoints: async (key: string): Promise<readonly string[] | string> => {
+                        const choice = choices.find((one) => one.key === key)
+                        const bridge = window.desktop
+                        if (choice === undefined || bridge === undefined) return 'Pick a model to draft them.'
+                        const answer = await bridge.draftJudgePoints({ compareId: comparing.compareId, route: { runtime: choice.runtime, model: choice.model, label: choice.label } }).catch(() => undefined)
+                        return answer === undefined ? 'The points could not be drafted. Write them yourself.' : answer.ok ? answer.points : answer.message
+                      },
                       onJudge: (key: string, criteria: string, others: readonly string[] = []) => {
                         const choice = choices.find((one) => one.key === key)
                         const panel = others.flatMap((other) => choices.filter((one) => one.key === other))
