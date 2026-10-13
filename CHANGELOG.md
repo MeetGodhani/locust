@@ -11,6 +11,13 @@ Settings shows this file as What's new. An entry may group its changes under
 about when they arrive on it carries `<!-- big -->` on the line under its
 heading: the home screen then shows it once, as a splash.
 
+## 0.770.0 - 2026-10-13
+
+### New
+
+- **Diagrams in a reply.** A flowchart, a sequence of calls, a pie chart or a state diagram a teammate writes in Mermaid is now drawn as the diagram, in Locust's own type and colours, with its text a tab away. A wide one scrolls inside its frame instead of shrinking its words, and one Mermaid cannot read stays text, with the reason under it.
+- **Links that open Locust with a message ready.** A link like `locust://new?prompt=...` in a README or on a page opens Locust on a new conversation with that message in the box. It is never sent: the box says it came from a link, and anything in it you could not see is taken out first.
+
 ## 0.769.0 - 2026-10-13
 
 ### New
