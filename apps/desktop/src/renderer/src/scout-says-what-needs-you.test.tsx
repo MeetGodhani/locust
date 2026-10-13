@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { seedAvatar } from '../../shared/avatar.js'
 import { DEFAULT_SCOUT_SETTINGS, type ScoutCard, type ScoutState } from '../../shared/scout.js'
-import { ScoutCards, ScoutInvite } from './components/ScoutCards.js'
+import { ScoutCards, ScoutInvite, ScoutWatching } from './components/ScoutCards.js'
 import { ScoutSetting } from './components/ScoutSetting.js'
 
 /*
@@ -91,5 +91,34 @@ describe('Scout in Settings', () => {
     expect(html).toContain('Your teammates’ turns')
     expect(html).toContain('Every 10 minutes')
     expect(html).toContain('Tell me in Windows')
+  })
+})
+
+/*
+ * KEEPING WATCH, WITH NOTHING TO SAY (0.768). Colin, 2026-10-13: "you tell me they are working properly but i have not
+ * seen anything". A Scout with no cards drew nothing, so it read as one that was off.
+ */
+describe('Scout with nothing to say', () => {
+  const quiet = (shown: ScoutState, looking = false): string =>
+    renderToStaticMarkup(createElement(ScoutWatching, { state: shown, scout, onLookNow: vi.fn(), looking, now }))
+
+  it('says it keeps watch, when it last looked, and that nothing needs the person', () => {
+    const html = quiet(state([], { lastLookAt: '2026-10-12T06:02:00.000Z' }))
+    expect(html).toContain('aria-label="Scout keeps watch"')
+    expect(html).toContain(' Scout keeps watch')
+    expect(html).toContain('looked 4 min ago · nothing needs you')
+    expect(html).toContain('>Look now</button>')
+    expect(quiet(state([], { lastLookAt: '2026-10-12T06:02:00.000Z' }), true)).toContain('>Looking…</button>')
+  })
+
+  it('before its first look, says one is on its way', () => {
+    expect(quiet(state([]))).toContain('its first look is on its way')
+  })
+
+  it('in Settings, says when it last looked and offers a look now', () => {
+    const api = { state: vi.fn(), turnOn: vi.fn(), set: vi.fn(), dismiss: vi.fn(), look: vi.fn(), onChanged: vi.fn() }
+    const html = renderToStaticMarkup(createElement(ScoutSetting, { heading: createElement('h2', null, 'Scout'), state: state([], { lastLookAt: new Date(Date.now() - 3 * 60_000).toISOString() }), api }))
+    expect(html).toContain('Last looked 3 min ago, and nothing needed you.')
+    expect(html).toContain('>Look now</button>')
   })
 })

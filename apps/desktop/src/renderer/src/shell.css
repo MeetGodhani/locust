@@ -6548,6 +6548,9 @@ textarea {
 .lc-scout__head { display: flex; align-items: center; gap: var(--lc-space-3); min-height: 24px; }
 .lc-scout__heading { display: inline-flex; align-items: center; gap: var(--lc-space-2); flex: 1 1 auto; font-family: var(--lc-font-mono); font-size: var(--lc-text-mono-label); letter-spacing: var(--lc-tracking-label); text-transform: uppercase; color: var(--lc-text-muted); white-space: nowrap; }
 .lc-scout__said { margin: 0; font-size: var(--lc-text-mono-caption); color: var(--lc-text-muted); }
+/* Keeping watch with nothing to say (0.768): the heading, when it last looked, and Look now, on one quiet line. */
+.lc-scout--watching .lc-scout__heading { flex: 0 0 auto; }
+.lc-scout__looked { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--lc-text-mono-caption); color: var(--lc-text-muted); }
 .lc-scoutcard { display: flex; flex-direction: column; gap: var(--lc-space-3); padding: var(--lc-space-4) var(--lc-space-5); }
 .lc-scoutcard__head { display: flex; align-items: center; gap: var(--lc-space-3); min-width: 0; }
 .lc-scoutcard__kind { font-weight: 600; font-size: var(--lc-text-control); }

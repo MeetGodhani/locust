@@ -238,7 +238,7 @@ import { addCallHandOff, addLiveCallTurn, liveCall, useCallHandOffs, useCallsSav
 import { CallTodosContext, callTodoState, type CallTodoState, type CallTodos } from './callTodos.js'
 import { pressTalk } from './talkPress.js'
 import { useScoutState } from './scoutState.js'
-import { ScoutCards, ScoutInvite } from './components/ScoutCards.js'
+import { ScoutCards, ScoutInvite, ScoutWatching } from './components/ScoutCards.js'
 import type { ScoutDraft, ScoutOpen } from '../../shared/scout.js'
 import type { TalkShortcutPress } from '../../shared/talk-shortcut.js'
 import type { SavedCall } from '../../shared/calls.js'
@@ -6834,6 +6834,13 @@ export default function App(): ReactElement {
    * on the steadiest free model listed here (freeStartModel, best first, passing over one that is down).
    */
   const [scoutBusy, setScoutBusy] = useState(false)
+  /** Look now, pressed on Home (0.768): its line says Looking… until the look is in. */
+  const [scoutLooking, setScoutLooking] = useState(false)
+  const lookWithScout = (): void => {
+    if (scoutLooking) return
+    setScoutLooking(true)
+    void window.desktop?.scout?.look().catch(() => undefined).finally(() => { setScoutLooking(false) })
+  }
   const [scoutMessage, setScoutMessage] = useState<string>()
   const [scoutNotNow, setScoutNotNow] = useState(() => {
     try { return window.localStorage.getItem(SCOUT_NOT_NOW) === '1' } catch { return false }
@@ -8706,6 +8713,8 @@ export default function App(): ReactElement {
                   // team, a folder and a free model to read with -- until they say Not now.
                   if (runtimeState.phase !== 'ready' || scout === undefined || teammates.length === 0) return undefined
                   if (scout.settings.on) {
+                    // Nothing needs the person: one quiet line that says it keeps watch, not nothing at all (0.768).
+                    if (scout.cards.length === 0) return <ScoutWatching state={scout} scout={teammates.find((one) => one.teammateId === scout.settings.teammateId)} onLookNow={lookWithScout} looking={scoutLooking} />
                     return <ScoutCards state={scout} scout={teammates.find((one) => one.teammateId === scout.settings.teammateId)} onOpen={openScoutCard}
                       onSend={sendScoutDraft} onDraftIntoBox={draftScoutIntoBox}
                       onDismiss={(cardId) => { void window.desktop?.scout?.dismiss(cardId).catch(() => undefined) }} />

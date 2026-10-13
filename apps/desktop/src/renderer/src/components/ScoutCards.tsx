@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { ReactElement } from 'react'
 
 import type { PublicTeammate } from '../../../shared/ipc.js'
@@ -14,7 +14,7 @@ import { TeammateBot } from './TeammateBot.js'
  */
 const SHOWN = 3
 
-function ago(iso: string, now: Date): string {
+export function ago(iso: string, now: Date): string {
   const minutes = Math.max(0, Math.round((now.getTime() - Date.parse(iso)) / 60_000))
   if (!Number.isFinite(minutes)) return ''
   if (minutes < 1) return 'just now'
@@ -82,6 +82,36 @@ export function ScoutCards({ state, scout, onOpen, onSend, onDraftIntoBox, onDis
     </div>
     {state.modelSaid !== undefined && <p className="lc-scout__said lc-mono">{`${state.modelSaid} The cards below are in Locust’s words.`}</p>}
     {shown.map((card) => <Card key={card.cardId} card={card} scout={scout} now={now} onOpen={onOpen} onSend={onSend} onDraftIntoBox={onDraftIntoBox} onDismiss={onDismiss} />)}
+  </section>
+}
+
+/*
+ * KEEPING WATCH, WITH NOTHING TO SAY (0.768). Colin, 2026-10-13, of Scout: "you tell me they are working properly but
+ * i have not seen anything, is that normal". Scout speaks only when something needs the person, so a look that found
+ * nothing drew nothing at all, and a Scout keeping watch read as one that was not. One quiet line says it is on, when
+ * it last looked, and offers a look now. The time moves on by itself, once a minute.
+ */
+export function ScoutWatching({ state, scout, onLookNow, looking, now: fixed }: {
+  readonly state: ScoutState
+  readonly scout: PublicTeammate | undefined
+  readonly onLookNow: () => void
+  readonly looking?: boolean
+  readonly now?: Date
+}): ReactElement {
+  const [ticked, setTicked] = useState(() => new Date())
+  useEffect(() => {
+    if (fixed !== undefined) return undefined
+    const timer = setInterval(() => { setTicked(new Date()) }, 60_000)
+    return () => { clearInterval(timer) }
+  }, [fixed])
+  const now = fixed ?? ticked
+  const name = scout?.name ?? 'Scout'
+  return <section className="lc-scout lc-scout--watching" aria-label="Scout keeps watch">
+    <div className="lc-scout__head">
+      <span className="lc-scout__heading"><Icon name="eye" size={13} />{` ${name} keeps watch`}</span>
+      <span className="lc-scout__looked lc-mono">{state.lastLookAt === undefined ? 'its first look is on its way' : `looked ${ago(state.lastLookAt, now)} · nothing needs you`}</span>
+      <button type="button" className="lc-ghostbutton" disabled={looking === true} onClick={onLookNow}>{looking === true ? 'Looking…' : 'Look now'}</button>
+    </div>
   </section>
 }
 

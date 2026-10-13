@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { ReactNode } from 'react'
 
 import { SCOUT_EVERY_MINUTES, type ScoutApi, type ScoutEvery, type ScoutState, type ScoutWatches } from '../../../shared/scout.js'
+import { ago } from './ScoutCards.js'
 
 /**
  * SCOUT IN SETTINGS (0.756, shared/scout.ts): on or off, what it watches, how often it looks, and whether a card that
@@ -51,11 +52,14 @@ export function ScoutSetting({ heading, state, model, route, onChangeModel, api 
         <p className="lc-settings__lede">{on
           ? `On. Scout looks every ${String(state?.settings.everyMinutes ?? 10)} minutes while Locust runs, and tells you on Home what needs you, with the next step drafted. It never sends, merges or changes anything by itself.${model === undefined ? '' : ` It reads with ${model}.`}`
           : 'Off. Turn it on and Scout joins your team: it looks at your pull requests and their checks, the reviews asked of you and your teammates’ turns, and tells you on Home what needs you.'}</p>
+        {/* When it last looked (0.768): a Scout with nothing to say otherwise shows nothing at all. */}
+        {on && state?.lastLookAt !== undefined && <p className="lc-settings__note" role="status">{`Last looked ${ago(state.lastLookAt, new Date())}${state.cards.length === 0 ? ', and nothing needed you.' : '.'}`}</p>}
         {state?.modelSaid !== undefined && on && <p className="lc-settings__note" role="status">{`Last look: ${state.modelSaid}`}</p>}
         {message && <p className="lc-settings__note" role="status">{message}</p>}
       </div>
       <span className="lc-talkkeys">
         {/* Its model is its teammate's (Colin, 2026-10-12: "allow the user to change the model of proactive teammate"). */}
+        {on && <button type="button" className="lc-control lc-control--boxed" disabled={busy} onClick={() => { void act(() => api.look()) }}>Look now</button>}
         {on && onChangeModel !== undefined && <button type="button" className="lc-control lc-control--boxed" onClick={onChangeModel}>Change its model</button>}
         {switchOf('Scout keeps watch', on, toggle)}
       </span>
