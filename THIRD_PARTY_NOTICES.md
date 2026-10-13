@@ -39,6 +39,24 @@ the installer. Their MIT notices are kept alongside the downloaded files in
   https://github.com/shikijs/textmate-grammars-themes, each under its own
   licence as listed there.
 
+## Mermaid
+
+- Project: https://github.com/mermaid-js/mermaid
+- Licence: MIT, Copyright (c) 2014 - 2022 Knut Sveidqvist.
+  https://github.com/mermaid-js/mermaid/blob/develop/LICENSE
+- Version: `mermaid` 11.17.2, unmodified.
+- What Locust uses: the library, bundled into the page that draws a diagram
+  in a reply (`apps/desktop/src/renderer/diagram.html`,
+  `apps/desktop/src/renderer/src/diagramPage.ts`), in a view of its own that
+  fetches nothing. The libraries it is built on come with it, each under its
+  own licence: D3 (ISC) and d3-sankey (BSD-3-Clause); dagre-d3-es,
+  Cytoscape.js and its fcose and cose-bilkent layouts, khroma, Rough.js,
+  marked, stylis, Day.js, lodash-es, es-toolkit, uuid, ts-dedent,
+  @iconify/utils and @braintree/sanitize-url (MIT); Langium (MIT) and
+  Chevrotain (Apache-2.0), built into `@mermaid-js/parser` (MIT); KaTeX (MIT),
+  which Locust already carries; and DOMPurify (Apache-2.0, of its Apache-2.0
+  or MPL-2.0 choice).
+
 ## OpenPets
 
 - Project: https://github.com/OpenPetsHQ/openpets

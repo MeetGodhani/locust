@@ -46,7 +46,10 @@ export default defineConfig({
           // The page that opens an attached PDF for the agent (0.713,
           // src/pdfReader.ts): its own entry, so pdf.js is never in the app's
           // bundle and the app never runs in the view that reads.
-          pdf: resolve('src/renderer/pdf.html')
+          pdf: resolve('src/renderer/pdf.html'),
+          // The page that draws a diagram in a reply (0.770, src/diagramPage.ts): its own entry too, so Mermaid
+          // is never in the app's bundle and the app never runs in the view that draws.
+          diagram: resolve('src/renderer/diagram.html')
         }
       }
     },

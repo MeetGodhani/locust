@@ -482,6 +482,9 @@ import { decideRoutineRecovery } from './routine-recovery-ipc.js'
 import { parsedMissionMode } from './mission-mode.js'
 import { createPdfReadings, isPdfPath } from './pdf-reading.js'
 import { createViewPdfReader } from './pdf-window.js'
+import { createViewDiagramDrawer, diagramViewOn } from './diagram-view.js'
+import { keptDiagrams } from './diagrams.js'
+import { DIAGRAM_DRAW_CHANNEL } from '../shared/diagram.js'
 
 /*
  * AN ATTACHED PDF IS OPENED FOR THE AGENT (0.713, pdf-reading.ts): its text
@@ -494,6 +497,19 @@ const pdfReadings = createPdfReadings(
       if (!app.isPackaged && process.env.ELECTRON_RENDERER_URL) await contents.loadURL(`${process.env.ELECTRON_RENDERER_URL}/pdf.html`)
       else await contents.loadFile(join(__dirname, '../renderer/pdf.html'))
     }
+  })
+)
+
+/*
+ * A DIAGRAM IN A REPLY IS DRAWN (0.770, shared/diagram.ts): in a view no one sees, from Locust's own page, and
+ * kept by what it says, so a conversation opened again draws nothing twice.
+ */
+const drawDiagram = keptDiagrams(
+  createViewDiagramDrawer({
+    open: diagramViewOn(async (contents) => {
+      if (!app.isPackaged && process.env.ELECTRON_RENDERER_URL) await contents.loadURL(`${process.env.ELECTRON_RENDERER_URL}/diagram.html`)
+      else await contents.loadFile(join(__dirname, '../renderer/diagram.html'))
+    })
   })
 )
 
@@ -5403,6 +5419,11 @@ if (!ownsSingleInstanceLock) {
       if (!fromOwnWindow(event) || typeof pageUrl !== 'string') return
       const frame = pageFrameOf(event.sender.mainFrame.framesInSubtree, pageUrl)
       await frame?.executeJavaScript(CANCEL_SCRIPT).catch(() => undefined)
+    })
+    ipcMain.handle(DIAGRAM_DRAW_CHANNEL, async (event, source: unknown) => {
+      if (!fromOwnWindow(event)) return { ok: false, message: 'the request came from outside the window' } as const
+      if (typeof source !== 'string') return { ok: false, message: 'there was no diagram to draw' } as const
+      return drawDiagram(source)
     })
     ipcMain.handle(REPLY_PAGE_CHANNEL, async (event, html: unknown) => {
       if (!fromOwnWindow(event)) return { ok: false, message: 'That request was rejected.' } as const

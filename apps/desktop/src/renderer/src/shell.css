@@ -21581,6 +21581,53 @@ textarea.lc-compare__judgecriteria {
   color: var(--lc-text-muted);
 }
 
+/* A diagram in a reply (0.770, ReplyDiagram.tsx): framed as a page in a reply is, its text a tab away, drawn at
+   its own size -- a wide one scrolls inside its frame, as a wide table does, rather than shrinking its words. */
+.lc-replydiagram {
+  contain: layout paint;
+}
+
+.lc-replydiagram__kind {
+  margin-left: auto;
+  padding-right: 4px;
+  color: var(--lc-text-muted);
+  font-size: var(--lc-text-description);
+}
+
+.lc-replydiagram__stage {
+  overflow-x: auto;
+  padding: 20px 18px;
+}
+
+.lc-replydiagram__picture {
+  display: block;
+  max-width: none;
+  height: auto;
+  margin: 0 auto;
+  user-select: none;
+}
+
+.lc-replydiagram__wait {
+  min-height: 120px;
+  display: grid;
+  place-items: center;
+}
+
+/* Text Mermaid could not read: the block as it always was, and why, under it. */
+.lc-replydiagram--text {
+  margin: 10px 0;
+}
+
+.lc-replydiagram--text .lc-code {
+  margin: 0;
+}
+
+.lc-replydiagram__why {
+  margin-top: 6px;
+  color: var(--lc-text-muted);
+  font-size: var(--lc-text-description);
+}
+
 
 /* The column the judge would keep (0.554): a small mark in its head, never a decision. */
 .lc-compare__judgebadge {

@@ -17,12 +17,14 @@ import { MathTex } from './MathTex.js'
 import type { FaceActivity } from '../faceState.js'
 import { Icon } from './Icon.js'
 import { ThreadImage } from './ThreadImage.js'
+import { ReplyDiagram } from './ReplyDiagram.js'
 import { ReplyPage } from './ReplyPage.js'
 import { statusColumnOf, statusToneOf } from '../statusChips.js'
 import { StatusChip } from './StatusChip.js'
 
 /** A table cell's words without its marks, to name its row by. */
 const plainCell = (cell: string): string => cell.replace(/[*_`~]/g, '').replace(/\[([^\]]*)\]\([^)]*\)/g, '$1').trim().slice(0, 80) || 'this row'
+import { isDiagram } from '../../../shared/diagram.js'
 import { isWholePage } from '../../../shared/reply-page.js'
 
 /**
@@ -354,6 +356,10 @@ export function AgentText({
           // A whole web page runs on a stage, once its block has closed (0.553).
           if (!(streaming && last) && isWholePage(block.code, block.language)) {
             return <ReplyPage key={`b${String(index)}`} code={block.code} {...(block.language === undefined ? {} : { language: block.language })} />
+          }
+          // A diagram is drawn once its block has closed (0.770, shared/diagram.ts).
+          if (block.closed && block.language !== undefined && isDiagram(block.code, block.language)) {
+            return <ReplyDiagram key={`b${String(index)}`} code={block.code} language={block.language} />
           }
           return (
             <pre className="lc-code" key={`b${String(index)}`}>

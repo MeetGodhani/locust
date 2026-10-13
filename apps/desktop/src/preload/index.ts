@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 import { LOCUST_MCP_CLAUDE_APP, LOCUST_MCP_CLAUDE_APP_RESTART, LOCUST_MCP_CLAUDE_APP_SET, LOCUST_MCP_GET, LOCUST_MCP_SET, LOCUST_MCP_SET_OWN_MODE } from '../shared/locust-mcp.js'
 import { VOICE_READY, VOICE_DOWNLOAD, VOICE_TRANSCRIBE, VOICE_CANCEL, VOICE_PROGRESS, VOICE_SETTINGS_READ, VOICE_SETTINGS_SAVE, VOICE_OPENAI_CONSENT } from '../shared/voice.js'
 import { CALLS_LIST, CALLS_SAVE } from '../shared/calls.js'
+import { DIAGRAM_DRAW_CHANNEL, type DiagramResponse } from '../shared/diagram.js'
 import { VOICE_CALL_ANSWER, VOICE_CALL_AVAILABLE, VOICE_CALL_EVENT, VOICE_CALL_PREVIEW, VOICE_CALL_SET_VOICE, VOICE_CALL_START, VOICE_CALL_STOP, VOICE_CALL_VOICES, VOICE_PREVIEW_SAVE, VOICE_PREVIEW_SAVED, VOICE_PREVIEW_TRIGGER } from '../shared/voice-call.js'
 import type { VoiceCallEvent } from '../shared/voice-call.js'
 import { TALK_SHORTCUT_PENDING, TALK_SHORTCUT_PRESSED, TALK_SHORTCUT_READ, TALK_SHORTCUT_SET, type TalkShortcutPress } from '../shared/talk-shortcut.js'
@@ -733,6 +734,7 @@ const desktopApi: DesktopApi = {
   readTextFile: (path: string) => ipcRenderer.invoke(WORKSPACE_TEXT_CHANNEL, path) as Promise<WorkspaceTextResponse>,
   pageUrlFor: (path: string, column?: { readonly compareId: string; readonly slot: string }) => ipcRenderer.invoke(WORKSPACE_PAGE_CHANNEL, path, column) as Promise<WorkspacePageResponse>,
   replyPageUrl: (html: string) => ipcRenderer.invoke(REPLY_PAGE_CHANNEL, html) as Promise<WorkspacePageResponse>,
+  drawDiagram: (source: string) => ipcRenderer.invoke(DIAGRAM_DRAW_CHANNEL, source) as Promise<DiagramResponse>,
   runtimeCommands: () => ipcRenderer.invoke(RUNTIME_COMMANDS_CHANNEL) as Promise<RuntimeCommandsResponse>,
   revealDiagnostics: () => ipcRenderer.invoke(DIAGNOSTICS_REVEAL_CHANNEL) as Promise<void>,
   sendFeedback: (report: FeedbackReport) => ipcRenderer.invoke(FEEDBACK_CHANNEL, report) as Promise<OpenLinkResponse>,

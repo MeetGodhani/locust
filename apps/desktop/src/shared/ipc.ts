@@ -5,6 +5,7 @@ import type { CommitResult, CommitThen, FolderChanges } from './folder-commit.js
 import type { BackgroundStartRequest, BackgroundStartResponse, PublicBackgroundRun } from './background.js'
 import type { MissionRuntimeId, NormalizedRuntimeEvent } from '@teammate/runtime-adapters'
 import type { QueuedMessagesResponse, SavedQueuedMessage } from './queued-messages.js'
+import type { DiagramResponse } from './diagram.js'
 
 import type { AvatarSpec, PetSource } from './avatar.js'
 import type { PetRows } from './pets.js'
@@ -3878,6 +3879,8 @@ export interface DesktopApi {
   pageUrlFor(path: string, column?: { readonly compareId: string; readonly slot: string }): Promise<WorkspacePageResponse>
   /** The address a reply's whole web page runs at (0.553). */
   replyPageUrl(html: string): Promise<WorkspacePageResponse>
+  /** A reply's Mermaid diagram as a picture, drawn in a view no one sees (0.770, shared/diagram.ts). */
+  drawDiagram(source: string): Promise<DiagramResponse>
   /** Each runtime's own slash commands, as its CLI last listed them (0.426). */
   runtimeCommands(): Promise<RuntimeCommandsResponse>
   /** Show the diagnostics log in the file manager. Names no path. */
