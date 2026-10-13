@@ -30,6 +30,8 @@ const ledger = store.createFileMissionLedger({ rootDirectory: join(profilePath, 
 const TEAMMATE = { teammateId: 'tm_atlas0000000000000000', name: 'Atlas', hue: 'blue', role: 'Custom', roleTitle: 'Research', createdAt: '2026-09-05T05:00:00.000Z', route: { runtime: 'codex', model: 'account-default', mode: 'ask' } }
 const ASK = 'Which CRM should a five-person team buy? One sentence.'
 const POINTS = ['Names a price for five seats', 'Says which CRM to buy']
+// The first counts twice (0.767, weighted points): written with its weight, scored without it.
+const WRITTEN = [`${POINTS[0]} ×2`, POINTS[1]]
 const ANSWERS = {
   a: ['opencode/mimo-v2.6-flash-free', 'Mimo V2.6 Flash', 'HubSpot Starter: $20 per seat a month, so $100 for five, and it covers email and deals.'],
   b: ['opencode/ling-3.0-flash-fin-free', 'Ling 3.0 Flash', 'Some CRM would probably be good for a small team.']
@@ -89,7 +91,8 @@ const state = `JSON.stringify({
     const card = document.querySelector('.lc-compare__scorecard')
     if (!card) return null
     return {
-      points: [...card.querySelectorAll('tbody th')].map((th) => th.innerText.trim()),
+      points: [...card.querySelectorAll('tbody th')].map((th) => th.firstChild?.textContent?.trim() ?? ''),
+      weights: [...card.querySelectorAll('tbody th')].map((th) => th.querySelector('.lc-compare__weight')?.innerText.trim() ?? ''),
       verdicts: [...card.querySelectorAll('tbody td')].map((td) => td.querySelector('.lc-compare__verdict')?.firstChild?.textContent?.trim() ?? ''),
       votes: [...card.querySelectorAll('tbody td')].map((td) => td.querySelector('.lc-compare__votes')?.getAttribute('aria-label') ?? ''),
       dots: [...card.querySelectorAll('tbody td')].map((td) => [...td.querySelectorAll('.lc-compare__vote')].map((dot) => (dot.classList.contains('is-met') ? '●' : '○')).join('')),
@@ -176,7 +179,7 @@ try {
       await new Promise((r) => setTimeout(r, 200))
     }
     const box = document.querySelector('.lc-compare__judgecriteria')
-    Object.getOwnPropertyDescriptor(Object.getPrototypeOf(box), 'value').set.call(box, ${JSON.stringify(POINTS.join('\n'))})
+    Object.getOwnPropertyDescriptor(Object.getPrototypeOf(box), 'value').set.call(box, ${JSON.stringify(WRITTEN.join('\n'))})
     box.dispatchEvent(new Event('input', { bubbles: true }))
     await new Promise((r) => setTimeout(r, 300))
     return JSON.stringify(pickers().map((s) => s.value))
@@ -204,6 +207,7 @@ try {
   check("once they are done, it is the judges' view", /^THE JUDGES' VIEW · .+, .+ and .+$/.test(after.label) && !/reading/.test(after.label), after.label)
   const card = after.scorecard
   check('every point of both answers is their vote, a dot a judge that answered', card !== null && JSON.stringify(card.points) === JSON.stringify(POINTS) && card.verdicts.length === 4 && card.dots.every((dots) => dots.length >= 2 && dots.length <= 3), JSON.stringify(card))
+  check('the point written with ×2 says so, and counts twice in the score', card !== null && JSON.stringify(card.weights) === JSON.stringify(['×2', '']) && JSON.stringify(card.scores) === JSON.stringify(['3 of 3', '0 of 3']), JSON.stringify({ weights: card?.weights, scores: card?.scores }))
   check('each verdict is what most of them said', card !== null && card.verdicts.every((verdict, index) => {
     const dots = card.dots[index] ?? ''
     const met = [...dots].filter((dot) => dot === '●').length

@@ -130,7 +130,7 @@ import { CompareView, joinedNames } from './components/CompareView.js'
 import { comparisonOf, foldComparisons } from './compareRows.js'
 import type { CompareColumnView, JudgeView } from './components/CompareView.js'
 import { blindName, changesLine, compareMembership, compareRecord, compareNeedsCopy, compareRefusalOf, judgeMissionIds, judgePickOf, MAX_COMPARE_SLOTS, MIN_COMPARE_SLOTS, rerunMissionIds, rerunRefusalOf } from '../../shared/compare.js'
-import { criteriaLines, panelPick, panelVote, parseScorecard, scoreOf, withoutScorecard } from '../../shared/compare-score.js'
+import { criteriaLines, criteriaWeights, panelPick, panelVote, parseScorecard, scoreOf, weighted, withoutScorecard } from '../../shared/compare-score.js'
 import type { CompareRoute, CompareSlotId, PublicCompare, RerunProgress } from '../../shared/compare.js'
 import { benchmarkChart, benchmarkRows, type BenchmarkRow, type BenchmarkRunInput } from './benchmark.js'
 import type { BenchmarkView } from './components/CompareBenchmark.js'
@@ -4651,7 +4651,7 @@ export default function App(): ReactElement {
         answers: run.slots.map((slot, index) => {
           const column = columns[index]
           const verdicts = scorecard?.verdicts[slot.slot]
-          const score = verdicts === undefined ? undefined : scoreOf(verdicts)
+          const score = verdicts === undefined ? undefined : scoreOf(verdicts, scorecard?.weights)
           const key = `${slot.route.runtime}:${slot.route.model}`
           return {
             key,
@@ -4773,7 +4773,7 @@ export default function App(): ReactElement {
       if (!running && answer.length === 0) return { name, running, answer, items, failed: 'The judge did not answer. Ask again, or pick another model.' }
       const pick = running ? undefined : judgePickOf(answer, slots)
       // Its scorecard (0.759): read from what it said once it is done.
-      const scorecard = running ? undefined : parseScorecard(answer, slots, criteriaLines(judge.criteria))
+      const scorecard = running ? undefined : weighted(parseScorecard(answer, slots, criteriaLines(judge.criteria)), criteriaWeights(judge.criteria))
       return { name, running, answer, items: saidOf(items), ...(pick === undefined ? {} : { pick }), ...(scorecard === undefined ? {} : { scorecard }) }
     }
     /*
@@ -4794,7 +4794,7 @@ export default function App(): ReactElement {
     const together = joinedNames(judges)
     if (!running && answered.length === 0) return { name: together, running, answer: '', items: first.items, panel, failed: 'None of the judges answered. Ask again, or pick other models.' }
     const points = criteriaLines(judge.criteria)
-    const scorecard = running ? undefined : panelVote(answered.map((one) => parseScorecard(one.answer, slots, points)))
+    const scorecard = running ? undefined : weighted(panelVote(answered.map((one) => parseScorecard(one.answer, slots, points))), criteriaWeights(judge.criteria))
     const pick = running ? undefined : panelPick(answered.map((one) => judgePickOf(one.answer, slots)), answered.length)
     return { name: together, running, answer: shown.answer, items: saidOf(shown.items), panel, ...(pick === undefined ? {} : { pick }), ...(scorecard === undefined ? {} : { scorecard }) }
   }

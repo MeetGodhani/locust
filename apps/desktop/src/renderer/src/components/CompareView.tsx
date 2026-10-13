@@ -697,6 +697,7 @@ function JudgeAsk({ choices, compared = [], again, busy, onJudge, onDraftPoints 
         {three
           ? 'Each reads the answers without the models’ names and scores every point on its own; a point counts when two of the three agree. They vote on the points you write. Nothing is kept.'
           : 'It reads the answers without the models’ names, scores each on every point, and says which it would keep. With no points written, it sets three from your request. It keeps nothing itself.'}
+        {pointsWritten && ' End a point with ×2 to count it twice.'}
         {!three && choices.length >= 3 && (
           <>
             {' '}
@@ -772,7 +773,7 @@ function JudgeScorecard({ scorecard, columns, veiled }: {
   readonly veiled: boolean
 }): ReactElement {
   const shown = columns.filter((column) => scorecard.verdicts[column.slot] !== undefined)
-  const scores = shown.map((column) => scoreOf(scorecard.verdicts[column.slot]))
+  const scores = shown.map((column) => scoreOf(scorecard.verdicts[column.slot], scorecard.weights))
   const best = Math.max(...scores.map((score) => score.met))
   const alone = scores.filter((score) => score.met === best).length === 1
   return (
@@ -787,7 +788,12 @@ function JudgeScorecard({ scorecard, columns, veiled }: {
         <tbody>
           {scorecard.points.map((point, index) => (
             <tr key={`point:${String(index)}`}>
-              <th scope="row" className="lc-compare__point">{point}</th>
+              <th scope="row" className="lc-compare__point">
+                {point}
+                {(scorecard.weights?.[index] ?? 1) > 1 && (
+                  <span className="lc-compare__weight lc-mono" title={`Counts ${String(scorecard.weights![index])} times in the score`}>{`×${String(scorecard.weights![index])}`}</span>
+                )}
+              </th>
               {shown.map((column) => {
                 const verdict = scorecard.verdicts[column.slot]?.[index]
                 return (

@@ -32,6 +32,8 @@ export interface Scorecard {
   readonly byJudge: boolean
   /** Each column's verdict on each point, in the points' order; undefined where the judge gave none. */
   readonly verdicts: Readonly<Record<string, readonly (ScoreVerdict | undefined)[]>>
+  /** How many times each point counts (0.767), in the points' order; absent when every one counts once. */
+  readonly weights?: readonly number[]
 }
 
 const clip = (text: string, max: number): string => {
@@ -39,15 +41,39 @@ const clip = (text: string, max: number): string => {
   return flat.length <= max ? flat : `${flat.slice(0, max - 1).trimEnd()}…`
 }
 
-/** The person's points: one a line, a list's bullet or number taken off, at most `MAX_SCORE_POINTS`. */
-export function criteriaLines(criteria: string | undefined): readonly string[] {
+/**
+ * WEIGHTED POINTS (0.767), the canvas's "Score = the weighted lines met": a point ending in x2 to x5 -- or the times
+ * sign, or in brackets -- counts that many times in the score. The judges are given the point without it.
+ */
+const WEIGHT = /\s*(?:\(\s*[x×]\s*([2-5])\s*\)|[x×]\s*([2-5]))\s*$/i
+
+/** The person's lines, a list's bullet or number taken off, at most `MAX_SCORE_POINTS`. */
+function pointLines(criteria: string | undefined): readonly string[] {
   if (criteria === undefined) return []
   return criteria
     .split(/\r?\n/)
     .map((line) => line.replace(/^\s*(?:[-*•]|\d{1,2}[.)])\s+/, '').trim())
-    .filter((line) => line.length > 0)
+    .filter((line) => line.replace(WEIGHT, '').trim().length > 0)
     .slice(0, MAX_SCORE_POINTS)
-    .map((line) => clip(line, MAX_POINT_CHARS))
+}
+
+/** The person's points: one a line, without its weight. */
+export function criteriaLines(criteria: string | undefined): readonly string[] {
+  return pointLines(criteria).map((line) => clip(line.replace(WEIGHT, '').trim(), MAX_POINT_CHARS))
+}
+
+/** How many times each of the person's points counts: 1, or the x2 to x5 it ends in. */
+export function criteriaWeights(criteria: string | undefined): readonly number[] {
+  return pointLines(criteria).map((line) => {
+    const weight = WEIGHT.exec(line)
+    return weight === null ? 1 : Number(weight[1] ?? weight[2])
+  })
+}
+
+/** A scorecard with its points' weights, when any counts more than once and they are its points. */
+export function weighted(card: Scorecard | undefined, weights: readonly number[]): Scorecard | undefined {
+  if (card === undefined || card.byJudge || weights.length !== card.points.length || weights.every((weight) => weight === 1)) return card
+  return { ...card, weights }
 }
 
 /** What the judge is asked for, after its view: the points (its own, when the person gave none), then the scores. */
@@ -148,7 +174,7 @@ export function panelVote(cards: readonly (Scorecard | undefined)[]): Scorecard 
     const passed = met * 2 > cast.length
     return { met: passed, why: cast.find((verdict) => verdict.met === passed)?.why ?? '', votes: { met, of: cast.length } }
   })]))
-  return { points: first.points, byJudge: first.byJudge, verdicts }
+  return { points: first.points, byJudge: first.byJudge, verdicts, ...(first.weights === undefined ? {} : { weights: first.weights }) }
 }
 
 /** The judges' pick: the answer more than half of those that answered would keep, or none when they do not agree. */
@@ -186,8 +212,12 @@ export function draftedPoints(text: string): readonly string[] {
   return set.filter((point) => point.length > 0)
 }
 
-/** How many points a column met, of how many were scored. */
-export function scoreOf(row: readonly (ScoreVerdict | undefined)[] | undefined): { readonly met: number; readonly of: number } {
-  const scored = (row ?? []).filter((verdict): verdict is ScoreVerdict => verdict !== undefined)
-  return { met: scored.filter((verdict) => verdict.met).length, of: (row ?? []).length }
+/** How many points a column met, of how many were scored -- each counted as many times as it weighs (0.767). */
+export function scoreOf(row: readonly (ScoreVerdict | undefined)[] | undefined, weights?: readonly number[]): { readonly met: number; readonly of: number } {
+  const weightOf = (index: number): number => weights?.[index] ?? 1
+  const cells = row ?? []
+  return {
+    met: cells.reduce((sum, verdict, index) => sum + (verdict?.met === true ? weightOf(index) : 0), 0),
+    of: cells.reduce((sum, _verdict, index) => sum + weightOf(index), 0)
+  }
 }
