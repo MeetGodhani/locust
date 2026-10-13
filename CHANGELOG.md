@@ -11,6 +11,16 @@ Settings shows this file as What's new. An entry may group its changes under
 about when they arrive on it carries `<!-- big -->` on the line under its
 heading: the home screen then shows it once, as a splash.
 
+## 0.764.0 - 2026-10-12
+
+### New
+
+- **Your benchmarks, in one place.** Once you have run a comparison again, Benchmarks appears in the sidebar. It lists every benchmark with its question, its models, how many times it ran, which model leads and its score, and when it last ran. A row opens the benchmark at its table, and Back takes you to the list.
+
+### Fixed
+
+- **A benchmark Locust closed on finishes.** If you quit Locust while a benchmark was running, the run under way said "waiting" for good. At the next start it is settled: scored if its judge had finished, or not scored, saying why.
+
 ## 0.763.0 - 2026-10-12
 <!-- big -->
 
