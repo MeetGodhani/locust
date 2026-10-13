@@ -11,6 +11,13 @@ Settings shows this file as What's new. An entry may group its changes under
 about when they arrive on it carries `<!-- big -->` on the line under its
 heading: the home screen then shows it once, as a splash.
 
+## 0.769.0 - 2026-10-13
+
+### New
+
+- **Find in a conversation.** Press Ctrl+F (Cmd+F on a Mac) and type. Every match in the conversation lights up, with how many there are, and the one you are on stands out. Enter steps to the next, Shift+Enter to the one before, and Esc closes it. When earlier turns are folded away, Find offers to search them too.
+- **Your cloud hours this month.** Settings > Cloud computers now shows about how many hours Locust kept your cloud computers on this month, on a bar against the 60 GitHub includes free, or 90 with Pro. Each computer shows its own share. Exact hours on GitHub opens GitHub's own count, which also sees your other codespaces.
+
 ## 0.768.0 - 2026-10-13
 <!-- big -->
 
