@@ -11,6 +11,13 @@ Settings shows this file as What's new. An entry may group its changes under
 about when they arrive on it carries `<!-- big -->` on the line under its
 heading: the home screen then shows it once, as a splash.
 
+## 0.771.0 - 2026-10-13
+
+### New
+
+- **Commit messages written from the changes.** In Commit, Write it from the changes asks the teammate that made them to write the message from the diff: a subject line, and a short body that a pull request takes as its description. It goes in the box for you to read and change; nothing is committed until you press Commit.
+- **Walk me through it.** In Changes, the teammate that made a change goes through it as its author would in a review: what it does, then each file in the order to read it, why it changed and what to check. The files are shown in that order, each with its note, until you close it.
+
 ## 0.770.0 - 2026-10-13
 
 ### New
