@@ -21,7 +21,7 @@ import type { ConnectorAddRequest, ConnectorAddResponse, ConnectorAgent } from '
 import type { GithubAccount, GithubCliVersions, GithubInstallResult, GithubSignInCode, GithubSignInResult } from './github-account.js'
 import type { FolderPullRequest, PullRequestNews } from './pull-request.js'
 import type { FolderDiff } from './folder-diff.js'
-import type { CloudAgent, CloudFolderState, CloudSetupStep, CloudSignInStep, PublicCloudComputer, PublicCloudTurn } from './cloud-computer.js'
+import type { CloudAgent, CloudFolderState, CloudSetupStep, CloudSignInStep, CloudUse, PublicCloudComputer, PublicCloudTurn } from './cloud-computer.js'
 import type { OfficeDocument } from './office-document.js'
 import type { Workbook } from './sheet.js'
 import type { AboutYouSuggestion } from './about-you.js'
@@ -941,7 +941,8 @@ export type CloudPullRequestResponse = { readonly ok: true; readonly turn: Publi
 export type CloudSignInResponse = { readonly ok: true } | { readonly ok: false; readonly message: string; readonly permission?: true }
 
 export type CloudComputersResponse =
-  | { readonly ok: true; readonly computers: readonly PublicCloudComputer[] }
+  /** `use`: Locust's own hours on its cloud computers this month (0.769), once it has spent any. */
+  | { readonly ok: true; readonly computers: readonly PublicCloudComputer[]; readonly use?: CloudUse }
   | { readonly ok: false; readonly message: string; readonly permission?: true }
 export interface PublicCloudWhere {
   readonly repo: string | undefined

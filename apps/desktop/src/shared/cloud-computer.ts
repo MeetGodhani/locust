@@ -107,6 +107,8 @@ export interface PublicCloudComputer {
   readonly lastUsedAt?: string
   /** Each agent's sign-in there, as last known (0.768); an agent never seen there is absent. */
   readonly agents?: Readonly<Partial<Record<CloudAgent, CloudAgentState>>>
+  /** Locust's own hours on it this month (0.769), absent before it has spent any. */
+  readonly hoursThisMonth?: number
 }
 
 /** Where a folder stands with the cloud computer: the window asks first when it has none. */
@@ -124,6 +126,72 @@ export function cloudStateOf(state: string): PublicCloudComputer['state'] {
   if (word === 'shutdown' || word === 'shuttingdown' || word === 'archived') return 'stopped'
   if (word === 'starting' || word === 'provisioning' || word === 'queued' || word === 'created' || word === 'rebuilding') return 'starting'
   return 'other'
+}
+
+/**
+ * LOCUST'S HOURS ON ITS CLOUD COMPUTERS (0.769). Colin, 2026-10-13: "the usage would be nice for the user as well".
+ * GitHub tells its exact count only to a sign-in with its `user` permission -- one more code to type, which Colin
+ * would not have ("making them input launch codes?") -- so Locust counts its own time instead: every stretch it spent
+ * on a computer (a turn from start to end, a sign-in, an apply), each followed by the 10 idle minutes the computer
+ * stays on before it stops itself, overlaps counted once. The person's own terminal there, and their other
+ * codespaces, are GitHub's to count: the screen says so, with GitHub's own page a click away.
+ */
+export const CLOUD_IDLE_MS = 10 * 60_000
+/**
+ * What GitHub includes each month at this size (2 cores), on GitHub Free and on Pro. CHECKED 2026-10-13 on GitHub's
+ * Codespaces billing page: 120 and 180 hours of compute, a 2-core hour counting twice. Locust's sign-in does not
+ * show which plan a person has, so the screen says both, and its meter runs to the smaller.
+ */
+export const CLOUD_FREE_HOURS = 60
+export const CLOUD_PRO_HOURS = 90
+/**
+ * Where GitHub shows the exact count: its billing summary. CHECKED 2026-10-13 signed out: /settings/billing/summary
+ * sends to the sign-in page as a real page does; /settings/billing/usage and /settings/billing answer 404.
+ */
+export const CLOUD_USAGE_PAGE = 'https://github.com/settings/billing/summary'
+
+/** A stretch Locust was on a computer: when it began and ended, as ISO times. */
+export type CloudSpan = readonly [string, string]
+
+/** The hours a set of stretches kept a computer on, as of `now`: each with its idle tail, overlaps once. */
+export function cloudHours(spans: readonly CloudSpan[], now: Date, idleMs: number = CLOUD_IDLE_MS): number {
+  const stretches = spans
+    .map(([from, to]) => [Date.parse(from), Date.parse(to)] as const)
+    .filter(([from, to]) => Number.isFinite(from) && Number.isFinite(to) && to >= from)
+    .sort((left, right) => left[0] - right[0])
+  const until = now.getTime()
+  let total = 0
+  let open: [number, number] | undefined
+  for (const [from, to] of stretches) {
+    const end = Math.min(to + idleMs, until)
+    if (open !== undefined && from <= open[1]) {
+      open[1] = Math.max(open[1], end)
+      continue
+    }
+    if (open !== undefined) total += open[1] - open[0]
+    open = [from, Math.max(from, end)]
+  }
+  if (open !== undefined) total += open[1] - open[0]
+  return total / 3_600_000
+}
+
+/** "a few minutes", "25 minutes", "2.5 hours". */
+export function cloudHoursWords(hours: number): string {
+  if (hours < 0.1) return 'a few minutes'
+  if (hours < 1) return `${String(Math.round(hours * 60))} minutes`
+  return `${hours < 10 ? hours.toFixed(1) : String(Math.round(hours))} hours`
+}
+
+/** The month a time falls in, as Locust keeps its hours: "2026-10". */
+export function cloudMonth(at: Date): string {
+  return at.toISOString().slice(0, 7)
+}
+
+/** Locust's hours this month, for Settings: on all its computers, and since when it has counted them. */
+export interface CloudUse {
+  readonly hours: number
+  /** When the count began, when that was this month: the first month is counted only from then. */
+  readonly since?: string
 }
 
 /** "2 files · +18 −6" */

@@ -21306,6 +21306,16 @@ textarea.lc-compare__judgecriteria {
   color: var(--lc-text-secondary);
   font-size: var(--lc-text-description);
 }
+/* Locust's hours on its cloud computers this month (0.769, CloudHours): the count, against what GitHub includes. */
+.lc-cloudhours { display: flex; flex-direction: column; gap: var(--lc-space-3); padding: var(--lc-space-5) var(--lc-space-6); border: 1px solid var(--lc-border-card); border-radius: var(--lc-radius-card); background: var(--lc-bg-raised); }
+.lc-cloudhours__head { display: flex; align-items: center; justify-content: space-between; gap: var(--lc-space-4); min-height: 24px; }
+.lc-cloudhours__exact { font-size: var(--lc-text-description); }
+.lc-cloudhours__label { font-family: var(--lc-font-mono); font-size: var(--lc-text-mono-label); letter-spacing: var(--lc-tracking-label); text-transform: uppercase; color: var(--lc-text-muted); }
+.lc-cloudhours__line { margin: 0; color: var(--lc-text-secondary); font-size: var(--lc-text-description); font-variant-numeric: tabular-nums; }
+.lc-cloudhours__hours { color: var(--lc-text-primary); font-size: var(--lc-text-body); font-weight: 500; }
+.lc-cloudhours__meter { position: relative; height: 6px; border-radius: 3px; background: var(--lc-bg-control); overflow: hidden; }
+.lc-cloudhours__fill { position: absolute; inset: 0 auto 0 0; border-radius: 3px; background: var(--lc-green); }
+.lc-cloudhours__note { margin: 0; color: var(--lc-text-muted); font-size: var(--lc-text-description); text-wrap: pretty; }
 /* The agents on it (0.768): each signed in there or not, with Sign in or Sign out at the row's end. */
 .lc-cloudcomputer__agents {
   margin: 0;

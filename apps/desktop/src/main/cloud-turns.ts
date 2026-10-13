@@ -15,7 +15,7 @@ import { basename, dirname, join } from 'node:path'
 import type { AppServerRunProcess } from '@teammate/runtime-adapters'
 
 import type { StartPhase } from '../shared/ipc.js'
-import { CLOUD_AGENT_NAMES, cloudStateOf, cloudTaskDir, CLOUD_TASK_ID, type CloudAgent, type CloudAgentState, type CloudChangeFile, type CloudFolderState, type CloudPullRequest, type CloudSetupStep, type CloudSignInStep, type PublicCloudComputer, type PublicCloudTurn } from '../shared/cloud-computer.js'
+import { CLOUD_AGENT_NAMES, CLOUD_IDLE_MS, cloudHours, cloudMonth, cloudStateOf, cloudTaskDir, CLOUD_TASK_ID, type CloudAgent, type CloudAgentState, type CloudChangeFile, type CloudFolderState, type CloudPullRequest, type CloudSetupStep, type CloudSignInStep, type CloudSpan, type CloudUse, type PublicCloudComputer, type PublicCloudTurn } from '../shared/cloud-computer.js'
 import { applyHere, carriedPath, cloudServeSpawn, CloudComputerError, freePort, runGit, SAFE_BRANCH_NAME, type CloudComputers, type GitRun } from './cloud-computer.js'
 import { folderOnGitHub, type Runner } from './cloud-tasks.js'
 import { branchFromSubject } from './folder-commit.js'
@@ -61,6 +61,8 @@ interface CloudTask {
 interface CloudTurn {
   readonly missionId: string
   readonly taskId: string
+  /** When Locust began readying it (0.769): the turn kept its computer on from then until it ended. */
+  readonly began?: string
   readonly state: PublicCloudTurn['state']
   readonly files?: readonly CloudChangeFile[]
   readonly appliedAt?: string
@@ -75,6 +77,10 @@ interface CloudStore {
   readonly turns: Readonly<Record<string, CloudTurn>>
   /** Each agent's sign-in on each cloud computer, by its name, as last known (0.768). */
   readonly agents: Readonly<Record<string, Readonly<Partial<Record<CloudAgent, CloudAgentState>>>>>
+  /** Locust's own stretches on each computer, by month and computer name (0.769): the hours it shows. */
+  readonly use: Readonly<Record<string, Readonly<Record<string, readonly CloudSpan[]>>>>
+  /** When it began counting them. */
+  readonly useSince?: string
 }
 
 /** How many turns the store keeps; the oldest go first. */
@@ -135,7 +141,8 @@ export interface CloudTurns {
   pullRequest(missionId: string, message: string): Promise<{ readonly ok: true; readonly turn: PublicCloudTurn; readonly added: boolean } | { readonly ok: false; readonly message: string }>
   /** A message's own files (`.locust/attachments`), sent to the turn's copy there before its agent starts. */
   carry(missionId: string, folder: string, files: readonly string[]): Promise<void>
-  computers(): Promise<{ readonly ok: true; readonly computers: readonly PublicCloudComputer[] } | { readonly ok: false; readonly message: string; readonly permission?: true }>
+  /** The person's cloud computers, each with Locust's hours on it this month, and those hours in all (0.769). */
+  computers(): Promise<{ readonly ok: true; readonly computers: readonly PublicCloudComputer[]; readonly use?: CloudUse } | { readonly ok: false; readonly message: string; readonly permission?: true }>
   stop(name: string): Promise<{ readonly ok: true } | { readonly ok: false; readonly message: string }>
   remove(name: string): Promise<{ readonly ok: true } | { readonly ok: false; readonly message: string }>
   /**
@@ -166,16 +173,42 @@ export function createCloudTurns(options: {
   readonly now?: () => Date
 }): CloudTurns {
   const now = options.now ?? (() => new Date())
-  const computers = options.computers
+  /** Every stretch on a computer counts toward its hours (0.769): each of these connects to it while it runs. */
+  const on = async <R>(name: string, work: () => Promise<R>): Promise<R> => {
+    const from = now()
+    try {
+      return await work()
+    } finally {
+      // Kept before the step counts as done: nothing is left writing once its caller moves on.
+      await noteUse(name, from, now()).catch(() => undefined)
+    }
+  }
+  const given = options.computers
+  const computers: CloudComputers = {
+    ...given,
+    whenReady: (name, timeoutMs) => on(name, () => given.whenReady(name, timeoutMs)),
+    ensureOpenCode: (name, version) => on(name, () => given.ensureOpenCode(name, version)),
+    ensureAgent: (name, agent, version) => on(name, () => given.ensureAgent(name, agent, version)),
+    agentSignedIn: (name, agent) => on(name, () => given.agentSignedIn(name, agent)),
+    signIn: (name, agent, hooks) => on(name, () => given.signIn(name, agent, hooks)),
+    signOut: (name, agent) => on(name, () => given.signOut(name, agent)),
+    bring: (name, repo, folder, taskId) => on(name, () => given.bring(name, repo, folder, taskId)),
+    counts: (name, taskId, base) => on(name, () => given.counts(name, taskId, base)),
+    change: (name, taskId, base) => on(name, () => given.change(name, taskId, base)),
+    settle: (name, taskId, went) => on(name, () => given.settle(name, taskId, went)),
+    discard: (name, taskId, base) => on(name, () => given.discard(name, taskId, base)),
+    carry: (name, taskId, files) => on(name, () => given.carry(name, taskId, files)),
+    pushChange: (name, repo, taskId, base, target, message) => on(name, () => given.pushChange(name, repo, taskId, base, target, message))
+  }
   const ready = new Map<string, { readonly version: string; readonly at: number; readonly bin?: string }>()
   let queue: Promise<unknown> = Promise.resolve()
 
   const read = async (): Promise<CloudStore> => {
     try {
       const parsed = JSON.parse(await readFile(options.file, 'utf8')) as Partial<CloudStore>
-      return { tasks: parsed.tasks ?? {}, turns: parsed.turns ?? {}, agents: parsed.agents ?? {} }
+      return { tasks: parsed.tasks ?? {}, turns: parsed.turns ?? {}, agents: parsed.agents ?? {}, use: parsed.use ?? {}, ...(parsed.useSince === undefined ? {} : { useSince: parsed.useSince }) }
     } catch {
-      return { tasks: {}, turns: {}, agents: {} }
+      return { tasks: {}, turns: {}, agents: {}, use: {} }
     }
   }
   const write = async (store: CloudStore): Promise<void> => {
@@ -184,7 +217,7 @@ export function createCloudTurns(options: {
     const tasks = Object.fromEntries(Object.entries(store.tasks).filter(([taskId]) => kept.has(taskId)))
     await mkdir(dirname(options.file), { recursive: true })
     const scratch = `${options.file}.${randomBytes(4).toString('hex')}.tmp`
-    await writeFile(scratch, JSON.stringify({ tasks, turns: Object.fromEntries(turns.map((turn) => [turn.missionId, turn])), agents: store.agents }, null, 2), 'utf8')
+    await writeFile(scratch, JSON.stringify({ tasks, turns: Object.fromEntries(turns.map((turn) => [turn.missionId, turn])), agents: store.agents, use: store.use, ...(store.useSince === undefined ? {} : { useSince: store.useSince }) }, null, 2), 'utf8')
     await rename(scratch, options.file)
   }
   /** One change to the store at a time. */
@@ -257,6 +290,24 @@ export function createCloudTurns(options: {
       ...(agents === undefined || Object.keys(agents).length === 0 ? {} : { agents })
     }
   }
+  /**
+   * A stretch on a computer, kept for its month (0.769). One within the last's idle tail joins it, so the list stays
+   * short; this month and the one before are kept, older months go.
+   */
+  const noteUse = (name: string, from: Date, to: Date): Promise<void> =>
+    change((store) => {
+      const month = cloudMonth(from)
+      const before = cloudMonth(new Date(Date.UTC(from.getUTCFullYear(), from.getUTCMonth() - 1, 1)))
+      const use = Object.fromEntries(Object.entries(store.use).filter(([key]) => key === month || key === before))
+      const spans = [...(use[month]?.[name] ?? [])]
+      const last = spans.at(-1)
+      if (last !== undefined && Date.parse(last[1]) + CLOUD_IDLE_MS >= from.getTime() && Date.parse(last[0]) <= to.getTime() + CLOUD_IDLE_MS) {
+        spans[spans.length - 1] = [new Date(Math.min(Date.parse(last[0]), from.getTime())).toISOString(), new Date(Math.max(Date.parse(last[1]), to.getTime())).toISOString()]
+      } else {
+        spans.push([from.toISOString(), to.toISOString()])
+      }
+      return { store: { ...store, use: { ...use, [month]: { ...use[month], [name]: spans } }, useSince: store.useSince ?? from.toISOString() }, value: undefined }
+    })
   /** What an agent there was last seen to be (0.768): kept, so Settings says it without waking the computer. */
   const remember = (name: string, agent: CloudAgent, state: CloudAgentState): Promise<void> =>
     change((store) => ({ store: { ...store, agents: { ...store.agents, [name]: { ...store.agents[name], [agent]: state } } }, value: undefined }))
@@ -327,6 +378,7 @@ export function createCloudTurns(options: {
     },
 
     prepare: async ({ missionId, folder, follows, openCodeVersion, agent, setUp, say }) => {
+      const began = now().toISOString()
       const version = agent === undefined ? openCodeVersion : agent.version
       if (version === undefined || !VERSION.test(version)) return { ok: false, message: unknownVersion(agent?.runtime) }
       const where = await folderOnGitHub(folder, options.git)
@@ -378,7 +430,7 @@ export function createCloudTurns(options: {
         }
         const made = task
         await change((current) => {
-          const next = putTurn({ ...current, tasks: { ...current.tasks, [made.taskId]: made } }, { missionId, taskId: made.taskId, state: 'working', at: now().toISOString() })
+          const next = putTurn({ ...current, tasks: { ...current.tasks, [made.taskId]: made } }, { missionId, taskId: made.taskId, began, state: 'working', at: now().toISOString() })
           tell(next, missionId)
           return { store: next, value: undefined }
         })
@@ -400,6 +452,8 @@ export function createCloudTurns(options: {
       const turn = store.turns[missionId]
       const task = turn === undefined ? undefined : store.tasks[turn.taskId]
       if (turn === undefined || task === undefined) return
+      // The turn kept its computer on from its readying to now (0.769).
+      if (turn.began !== undefined) await noteUse(task.codespace, new Date(turn.began), now()).catch(() => undefined)
       let next: CloudTurn
       try {
         const files = await computers.counts(task.codespace, task.taskId, task.base)
@@ -572,8 +626,21 @@ export function createCloudTurns(options: {
     computers: async () => {
       try {
         const listed = await computers.list()
-        const known = (await read()).agents
-        return { ok: true, computers: listed.map((space) => shownComputer(space, known)) }
+        const store = await read()
+        const at = now()
+        const month = store.use[cloudMonth(at)] ?? {}
+        const hoursOf = (name: string): number => cloudHours(month[name] ?? [], at)
+        const hours = Object.keys(month).reduce((sum, name) => sum + hoursOf(name), 0)
+        const counted = Object.keys(month).length > 0
+        const since = store.useSince !== undefined && cloudMonth(new Date(store.useSince)) === cloudMonth(at) ? store.useSince : undefined
+        return {
+          ok: true,
+          computers: listed.map((space) => {
+            const shown = shownComputer(space, store.agents)
+            return month[space.name] === undefined ? shown : { ...shown, hoursThisMonth: hoursOf(space.name) }
+          }),
+          ...(counted ? { use: { hours, ...(since === undefined ? {} : { since }) } } : {})
+        }
       } catch (error) {
         if (error instanceof CloudComputerError && error.kind === 'permission') return { ok: false, message: error.message, permission: true }
         return { ok: false, message: sayWhy(error, 'GitHub did not list your cloud computers.') }

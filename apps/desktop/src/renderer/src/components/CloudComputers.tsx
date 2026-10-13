@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { ReactElement } from 'react'
 
-import { CLOUD_AGENT_ACCOUNTS, CLOUD_AGENT_MAKERS, CLOUD_AGENT_NAMES, CLOUD_MACHINE_WORDS, type CloudAgent, type CloudSignInStep, type PublicCloudComputer } from '../../../shared/cloud-computer.js'
+import { CLOUD_AGENT_ACCOUNTS, CLOUD_AGENT_MAKERS, CLOUD_AGENT_NAMES, CLOUD_FREE_HOURS, CLOUD_MACHINE_WORDS, CLOUD_PRO_HOURS, CLOUD_USAGE_PAGE, cloudHoursWords, type CloudAgent, type CloudSignInStep, type CloudUse, type PublicCloudComputer } from '../../../shared/cloud-computer.js'
 import { agoLabel } from '../teammateWork.js'
 import { Icon } from './Icon.js'
 
@@ -12,10 +12,28 @@ import { Icon } from './Icon.js'
  *
  * THE AGENTS ON EACH (0.768): Claude Code and Codex, each signed in there or not, as last known -- said without
  * waking the computer -- with Sign in (its maker's page in the person's browser, one Authorize) and Sign out.
+ *
+ * THE HOURS (0.769, shared/cloud-computer.ts `cloudHours`): Locust's own time on them this month, against what GitHub
+ * includes, with GitHub's exact count a click away -- it alone sees the person's other codespaces.
  */
+export function CloudHours({ use }: { readonly use: CloudUse }): ReactElement {
+  const share = Math.min(100, (use.hours / CLOUD_FREE_HOURS) * 100)
+  const since = use.since === undefined ? undefined : new Date(use.since).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+  return <section className="lc-cloudhours" aria-label="Locust's hours on its cloud computers this month">
+    <div className="lc-cloudhours__head">
+      <span className="lc-cloudhours__label">This month</span>
+      <button type="button" className="lc-ghostbutton lc-cloudhours__exact" onClick={() => { void window.desktop?.openLink(CLOUD_USAGE_PAGE).catch(() => undefined) }}>Exact hours on GitHub</button>
+    </div>
+    <p className="lc-cloudhours__line"><span className="lc-cloudhours__hours">{`About ${cloudHoursWords(use.hours)}`}</span>{` of the ${String(CLOUD_FREE_HOURS)} GitHub includes free, or ${String(CLOUD_PRO_HOURS)} with Pro`}</p>
+    <div className="lc-cloudhours__meter" role="meter" aria-label="Hours used this month" aria-valuemin={0} aria-valuemax={CLOUD_FREE_HOURS} aria-valuenow={Math.round(use.hours * 10) / 10}>
+      <span className="lc-cloudhours__fill" style={{ width: `${String(Math.max(share, use.hours > 0 ? 1 : 0))}%` }} />
+    </div>
+    <p className="lc-cloudhours__note">{`Locust counts its own time there: its turns, sign-ins and changes, and the 10 minutes each computer stays on after. Your own terminal there and your other codespaces count only on GitHub.${since === undefined ? '' : ` Counted since ${since}.`}`}</p>
+  </section>
+}
 type Listing =
   | { readonly phase: 'loading' }
-  | { readonly phase: 'listed'; readonly computers: readonly PublicCloudComputer[] }
+  | { readonly phase: 'listed'; readonly computers: readonly PublicCloudComputer[]; readonly use?: CloudUse }
   | { readonly phase: 'refused'; readonly message: string; readonly permission: boolean }
 
 const AGENTS: readonly CloudAgent[] = ['claude', 'codex']
@@ -49,7 +67,7 @@ export function CloudComputers(): ReactElement {
 
   const load = (): void => {
     void window.desktop?.cloudComputers()
-      .then((answer) => setListing(answer.ok ? { phase: 'listed', computers: answer.computers } : { phase: 'refused', message: answer.message, permission: answer.permission === true }))
+      .then((answer) => setListing(answer.ok ? { phase: 'listed', computers: answer.computers, ...(answer.use === undefined ? {} : { use: answer.use }) } : { phase: 'refused', message: answer.message, permission: answer.permission === true }))
       .catch(() => setListing({ phase: 'refused', message: 'GitHub could not be reached. Try again in a moment.', permission: false }))
   }
   useEffect(load, [])
@@ -122,6 +140,7 @@ export function CloudComputers(): ReactElement {
   }
   return (
     <div className="lc-cloudcomputers">
+      {listing.use !== undefined && <CloudHours use={listing.use} />}
       {said !== undefined && <p className="lc-cloudcomputers__said" role="alert">{said}</p>}
       {listing.computers.map((computer) => {
         const name = computer.repo.split('/').pop() ?? computer.repo
@@ -142,6 +161,7 @@ export function CloudComputers(): ReactElement {
               {computer.state === 'stopped'
                 ? `Stopped${used === undefined ? '' : `, last used ${used}`}. It wakes when a teammate needs it, in about a minute and a half; its files stay.`
                 : `${used === undefined ? 'On' : `Last used ${used}`}. It stops itself after 10 minutes with nothing to do.`}
+              {computer.hoursThisMonth !== undefined && ` About ${cloudHoursWords(computer.hoursThisMonth)} this month, by Locust's count.`}
             </p>
             <ul className="lc-cloudcomputer__agents" aria-label={`The agents on ${name}'s cloud computer`}>
               {AGENTS.map((agent) => {
