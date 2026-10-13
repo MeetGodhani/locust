@@ -168,6 +168,14 @@ press (a copy of its settings is kept first); Claude Code, Codex and OpenClaw
 get the command or config entry to paste. Through OpenClaw, your chat apps
 (WhatsApp, Telegram, iMessage, Slack) can ask the team too.
 
+**Links.** A link like `locust://new?prompt=Explain%20this%20project` opens
+Locust on a new conversation with that message in the box, so a README or a
+page can hand someone a prompt. It is never sent: the box says it came from a
+link, and anything in it a person could not see -- Unicode tag characters,
+direction overrides, zero-width marks -- is taken out first. Only the message
+travels; no folder, model or file. The installed app claims these links; a copy
+a test runs never does.
+
 **Compare.** The same mission on two or three models at once, each in its own
 copy of the folder, side by side; keep the one you like. Blind hides the names
 until you choose. ([Three models building the same game,

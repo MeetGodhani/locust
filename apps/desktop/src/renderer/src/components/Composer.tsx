@@ -306,8 +306,12 @@ export interface ComposerProps {
   readonly asking?: { readonly label: string; readonly columns: number; readonly changes?: boolean; readonly blind?: boolean }
   /** Opens the model picker when it changes: Home's Compare models (0.442). */
   readonly pickerRequest?: number
-  /** Words put in the box from outside it, each time `seq` moves (0.448: a Build and compare starter). */
-  readonly fill?: { readonly text: string; readonly seq: number }
+  /**
+   * Words put in the box from outside it, each time `seq` moves (0.448: a Build and compare starter). From a link
+   * (0.770, shared/locust-link.ts) the box takes the cursor and says where they came from, until they are sent or
+   * cleared.
+   */
+  readonly fill?: { readonly text: string; readonly seq: number; readonly from?: 'link' }
   /**
    * An earlier message is being edited (0.498): its words are in the box, and
    * sending starts the conversation again from there. Cancel leaves it as it was.
@@ -672,9 +676,17 @@ export function Composer({
   useEffect(() => {
     if (pickerRequest !== undefined && pickerRequest > 0) setPickerOpen(true)
   }, [pickerRequest])
+  const [fromLink, setFromLink] = useState(false)
   useEffect(() => {
-    if (fill !== undefined) setValue(fill.text)
+    if (fill === undefined) return
+    setValue(fill.text)
+    setFromLink(fill.from === 'link')
+    if (fill.from === 'link') field.current?.focus()
   }, [fill?.seq])
+  useEffect(() => {
+    // Sent or emptied. Only once it was said: a box drawn afresh reads its first, empty value after the fill.
+    if (fromLink && value.trim().length === 0) setFromLink(false)
+  }, [value])
 
   /*
    * These three panels closed only by pressing their own control again,
@@ -1514,6 +1526,17 @@ export function Composer({
           * what you will see in the thread once it goes -- and one quiet line
           * under it: when it goes, or why it is held, and what can be done.
           */}
+        {fromLink && editingEarlier === undefined && (
+          <div className="lc-queued is-editing" role="status" aria-live="polite">
+            <div className="lc-queued__meta">
+              <Icon name="link" size={12} />
+              <span className="lc-queued__note">From a link — read it before you send it.</span>
+              <button type="button" className="lc-queued__action" onClick={() => { setValue(''); setFromLink(false) }}>
+                Clear
+              </button>
+            </div>
+          </div>
+        )}
         {editingEarlier !== undefined && (
           <div className="lc-queued is-editing" role="status" aria-live="polite">
             <div className="lc-queued__meta">

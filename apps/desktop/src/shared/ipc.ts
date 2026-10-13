@@ -3616,6 +3616,8 @@ export interface DesktopApi {
   readonly calls?: import('./calls.js').CallsApi
   /** The keys that start Talk from any app (0.755). */
   readonly talkShortcut?: import('./talk-shortcut.js').TalkShortcutApi
+  /** A link that opens Locust with a message ready (0.770): never sent, the person reads it first. */
+  readonly locustLinks?: import('./locust-link.js').LocustLinkApi
   /** Scout, a teammate that keeps watch (0.756). */
   readonly scout?: import('./scout.js').ScoutApi
   readonly locustMcp?: import('./locust-mcp.js').LocustMcpApi

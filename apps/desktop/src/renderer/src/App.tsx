@@ -1875,8 +1875,8 @@ export default function App(): ReactElement {
   const [compareProblem, setCompareProblem] = useState<string>()
   /** Home's Compare models opens the composer's picker (0.442). */
   const [pickerRequest, setPickerRequest] = useState(0)
-  /** Words put in the message box from outside it (0.448: a Build and compare starter). */
-  const [composerFill, setComposerFill] = useState<{ readonly text: string; readonly seq: number }>()
+  /** Words put in the message box from outside it (0.448: a Build and compare starter; 0.770: a link). */
+  const [composerFill, setComposerFill] = useState<{ readonly text: string; readonly seq: number; readonly from?: 'link' }>()
   /**
    * An earlier message being edited (0.498, Claude Code's rewind): which
    * conversation on screen (`key`), its latest turn (`tip`), the turn before
@@ -7024,6 +7024,33 @@ export default function App(): ReactElement {
     const clear = window.setTimeout(() => setTalkNotice(undefined), 8_000)
     return () => window.clearTimeout(clear)
   }, [talkNotice])
+  /*
+   * A LINK THAT OPENS LOCUST WITH A MESSAGE READY (0.770, shared/locust-link.ts): Home, as the logo opens it, with
+   * the message in the box and a word over it that it came from a link. Never sent: Send is the person's.
+   */
+  useEffect(() => {
+    const links = window.desktop?.locustLinks
+    if (links === undefined) return
+    let live = true
+    const take = (): void => {
+      void links.take().then((link) => {
+        if (!live || link === undefined) return
+        setSelectedTeammateId(undefined)
+        setShownKey(undefined)
+        setComparingId(undefined)
+        setRoomNotice(undefined)
+        setScreen('workroom')
+        setComposerFill((current) => ({ text: link.prompt, seq: (current?.seq ?? 0) + 1, from: 'link' }))
+      }).catch(() => undefined)
+    }
+    // One that started Locust, or arrived as it opened, is already waiting.
+    take()
+    const stop = links.onWaiting(take)
+    return () => {
+      live = false
+      stop()
+    }
+  }, [])
   /*
    * Why a conversation did not open in a terminal (0.387), said where the
    * delete refusal is said, and gone on its own: it answers one press.

@@ -116,6 +116,14 @@ extraResources:
 # Never ship the caller's mission ledger, smoke profiles, or source maps.
 asar: true
 
+# locust:// links open Locust with a message ready, never sent (0.770, src/shared/locust-link.ts). macOS reads this
+# from the app's Info.plist; Windows has no installer step for it, so the installed copy claims the scheme itself
+# when a person starts it (src/main/locust-links.ts `claimLinks`), and a test's copy never does.
+protocols:
+  - name: Locust
+    schemes:
+      - locust
+
 win:
   icon: resources/icon.ico
   target:

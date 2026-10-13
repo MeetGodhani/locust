@@ -6,6 +6,7 @@ import { DIAGRAM_DRAW_CHANNEL, type DiagramResponse } from '../shared/diagram.js
 import { VOICE_CALL_ANSWER, VOICE_CALL_AVAILABLE, VOICE_CALL_EVENT, VOICE_CALL_PREVIEW, VOICE_CALL_SET_VOICE, VOICE_CALL_START, VOICE_CALL_STOP, VOICE_CALL_VOICES, VOICE_PREVIEW_SAVE, VOICE_PREVIEW_SAVED, VOICE_PREVIEW_TRIGGER } from '../shared/voice-call.js'
 import type { VoiceCallEvent } from '../shared/voice-call.js'
 import { TALK_SHORTCUT_PENDING, TALK_SHORTCUT_PRESSED, TALK_SHORTCUT_READ, TALK_SHORTCUT_SET, type TalkShortcutPress } from '../shared/talk-shortcut.js'
+import { LOCUST_LINK_TAKE, LOCUST_LINK_WAITING, type LocustLink } from '../shared/locust-link.js'
 import { SCOUT_CHANGED, SCOUT_DISMISS, SCOUT_LOOK, SCOUT_SET, SCOUT_STATE, SCOUT_TURN_ON, type ScoutState } from '../shared/scout.js'
 import { REMOTE_CONTROL_GET_CHANNEL, REMOTE_CONTROL_SET_CHANNEL, type RemoteControlState } from '../shared/claude-remote-control.js'
 import { FOLDER_CHANGES_CHANNEL, FOLDER_COMMIT_CHANNEL, type CommitResult, type FolderChanges } from '../shared/folder-commit.js'
@@ -475,6 +476,14 @@ const desktopApi: DesktopApi = {
       const receive = (_event: Electron.IpcRendererEvent, press: TalkShortcutPress): void => { listener(press) }
       ipcRenderer.on(TALK_SHORTCUT_PRESSED, receive)
       return () => { ipcRenderer.removeListener(TALK_SHORTCUT_PRESSED, receive) }
+    }
+  },
+  locustLinks: {
+    take: () => ipcRenderer.invoke(LOCUST_LINK_TAKE) as Promise<LocustLink | undefined>,
+    onWaiting: (listener) => {
+      const receive = (): void => { listener() }
+      ipcRenderer.on(LOCUST_LINK_WAITING, receive)
+      return () => { ipcRenderer.removeListener(LOCUST_LINK_WAITING, receive) }
     }
   },
   voiceCall: {

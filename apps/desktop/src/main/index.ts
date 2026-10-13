@@ -11,6 +11,8 @@ import { createVoiceHost } from './voice-host.js'
 import { voicePermission } from './voice-permission.js'
 import { VOICE_READY, VOICE_DOWNLOAD, VOICE_TRANSCRIBE, VOICE_CANCEL, VOICE_PROGRESS, VOICE_SETTINGS_READ, VOICE_SETTINGS_SAVE, VOICE_OPENAI_CONSENT } from '../shared/voice.js'
 import { TALK_SHORTCUT_PENDING, TALK_SHORTCUT_PRESSED, TALK_SHORTCUT_READ, TALK_SHORTCUT_SET, isTalkShortcut, type TalkShortcutPress } from '../shared/talk-shortcut.js'
+import { LOCUST_LINK_TAKE, LOCUST_LINK_WAITING, linkInArguments, parseLocustLink, type LocustLink } from '../shared/locust-link.js'
+import { claimLinks, createLinkInbox } from './locust-links.js'
 import { createTalkShortcut, type TalkShortcut } from './talk-shortcut.js'
 import { createScout, type Scout } from './scout.js'
 import { readScoutGithub } from './scout-github.js'
@@ -1566,10 +1568,47 @@ protocol.registerSchemesAsPrivileged([
 /** Opens the window from the tray when --background started with none. */
 let openFromBackground: (() => void) | undefined
 
+/*
+ * A LINK THAT OPENS LOCUST WITH A MESSAGE READY (0.770, shared/locust-link.ts). It waits in the inbox until the
+ * window takes it, and the window is brought up and told. One that started Locust is in its own arguments
+ * (Windows); on macOS it arrives as open-url, maybe before the app is ready; one that arrives while Locust runs
+ * comes with a second launch's arguments.
+ */
+const linkInbox = createLinkInbox()
+{
+  const launchedWith = linkInArguments(process.argv)
+  if (launchedWith !== undefined) linkInbox.arrive(launchedWith)
+}
+const linkArrived = (link: LocustLink | undefined): void => {
+  if (link === undefined) return
+  linkInbox.arrive(link)
+  if (!app.isReady()) return
+  const window = BrowserWindow.getAllWindows()[0]
+  if (window === undefined) {
+    openFromBackground?.()
+    return
+  }
+  if (window.isMinimized()) window.restore()
+  if (!window.isVisible()) window.show()
+  window.focus()
+  for (const each of BrowserWindow.getAllWindows()) {
+    if (!each.isDestroyed() && !each.webContents.isLoading()) each.webContents.send(LOCUST_LINK_WAITING)
+  }
+}
+app.on('open-url', (event, url) => {
+  event.preventDefault()
+  linkArrived(parseLocustLink(url))
+})
+
 if (!ownsSingleInstanceLock) {
   app.quit()
 } else {
-  app.on('second-instance', () => {
+  app.on('second-instance', (_event, argv) => {
+    const link = linkInArguments(argv)
+    if (link !== undefined) {
+      linkArrived(link)
+      return
+    }
     const window = BrowserWindow.getAllWindows()[0]
     if (!window) {
       openFromBackground?.()
@@ -3966,6 +4005,8 @@ if (!ownsSingleInstanceLock) {
       await event.sender.executeJavaScript('0', true).catch(() => undefined)
       return waiting.press
     })
+    // A link's message, taken once by the window that shows it (0.770, locust-links.ts).
+    ipcMain.handle(LOCUST_LINK_TAKE, (event) => (fromOwnWindow(event) ? linkInbox.take() : undefined))
     // At launch, once Talk has had time to be found; then each time the window finds it ready (VOICE_CALL_AVAILABLE).
     setTimeout(() => { void shortcut.ensure() }, 4_000)
     app.once('will-quit', () => shortcut.dispose())
@@ -7619,6 +7660,12 @@ if (!ownsSingleInstanceLock) {
       }
     })()
     const installedCopy = existsSync(join(dirname(process.execPath), 'Uninstall Locust.exe'))
+    // locust:// links open the installed copy (0.770, locust-links.ts `claimLinks`); a test's copy never claims them.
+    try {
+      claimLinks({ platform: process.platform, packaged: app.isPackaged, installed: installedCopy, argv: process.argv, host: app })
+    } catch {
+      // A registry that refuses leaves links unclaimed, and the app as it was.
+    }
     /*
      * A MAC UPDATES ITSELF (0.516, mac-self-update.ts): a Locust.app in a folder
      * it can write, replaced by Locust's own download. macOS's updater would
