@@ -11,6 +11,12 @@ Settings shows this file as What's new. An entry may group its changes under
 about when they arrive on it carries `<!-- big -->` on the line under its
 heading: the home screen then shows it once, as a splash.
 
+## 0.765.0 - 2026-10-12
+
+### New
+
+- **Three judges vote.** One judge can be wrong. Under a comparison, choose Ask three judges to vote, write the points a good answer meets, and three models score every answer on their own. A point counts when two of the three agree, and each one shows the vote as a dot for each judge. If a judge does not answer, the others still vote. A benchmark judged by three is scored by the same three on every run again. Free models that are not in the comparison are offered first.
+
 ## 0.764.0 - 2026-10-12
 
 ### New
