@@ -82,6 +82,8 @@ export interface OpenCodeServeRunOptions {
   /** Test seam. */
   readonly fetch?: typeof fetch;
   readonly startupTimeoutMs?: number;
+  /** How long a taken message may show no sign of the model before the server is asked whether it began (0.763). */
+  readonly beginCheckMs?: number;
 }
 
 const LISTENING = /listening on (http:\/\/127\.0\.0\.1:\d+)/;
@@ -191,6 +193,7 @@ export function startOpenCodeServeRun(options: OpenCodeServeRunOptions): Runtime
   const finish = (): void => {
     if (settled) return;
     settled = true;
+    if (beginCheck !== undefined) clearTimeout(beginCheck);
     events.abort();
     records.end();
     try {
@@ -263,6 +266,36 @@ export function startOpenCodeServeRun(options: OpenCodeServeRunOptions): Runtime
       : { reply }).catch(() => undefined);
   };
 
+  /*
+   * A MESSAGE TAKEN AND NEVER BEGUN (0.763). The server answers `prompt_async` at once and works on it after. On
+   * 2026-10-12 its own storage was locked by another OpenCode on the same computer -- two comparison columns at once
+   * -- and the work failed inside it ("prompt_async failed ... SQLiteError: database is locked", in its log), and
+   * nothing more came: no error, no idle, a turn on "Starting" for eight minutes. So once a message is taken, a minute
+   * with no sign of the model working has the server asked: a session it does not list as busy, holding no answer, was
+   * dropped, and the run ends saying so -- to be sent again (a benchmark's run asks such a model once more itself).
+   */
+  let begun = false;
+  let beginCheck: ReturnType<typeof setTimeout> | undefined;
+  const checkBegun = async (): Promise<void> => {
+    beginCheck = undefined;
+    if (settled || begun || base === undefined || sessionId === undefined) return;
+    try {
+      const statuses: unknown = await (await request(`${base}/session/status`, { headers: auth })).json().catch(() => undefined);
+      // Busy, or trying the model again: it is at work.
+      if (isObject(statuses) && isObject(statuses[sessionId])) return void scheduleBeginCheck();
+      const messages: unknown = await (await request(`${base}/session/${encodeURIComponent(sessionId)}/message`, { headers: auth })).json().catch(() => undefined);
+      const answered = Array.isArray(messages) && messages.some((one) => isObject(one) && (text(isObject(one.info) ? one.info.role : undefined) ?? text(one.role)) === "assistant");
+      if (answered || settled || begun) return void scheduleBeginCheck();
+      lose("OpenCode took the message but never began on it: its own storage was likely busy with another OpenCode on this computer. Send it again.");
+    } catch {
+      scheduleBeginCheck();
+    }
+  };
+  const scheduleBeginCheck = (): void => {
+    if (settled || begun || beginCheck !== undefined) return;
+    beginCheck = setTimeout(() => void checkBegun(), options.beginCheckMs ?? 60_000);
+  };
+
   const children = new Set<string>();
   const accept = (event: JsonObject): void => {
     const type = text(event.type);
@@ -290,6 +323,12 @@ export function startOpenCodeServeRun(options: OpenCodeServeRunOptions): Runtime
     if (about !== sessionId) {
       if (children.has(about) && type === "permission.asked") void answer(props);
       return;
+    }
+    // A sign the model is at work on it (checkBegun): the server's status, or the answer's message or a part of it --
+    // not the person's own message, which the server records before the model is asked anything.
+    if (prompted && !begun) {
+      const partOf = type === "message.part.delta" ? text(props.messageID) : type === "message.part.updated" && isObject(props.part) ? text(props.part.messageID) : undefined;
+      if (type === "session.status" || (type === "message.updated" && isObject(props.info) && text(props.info.role) === "assistant") || (partOf !== undefined && roles.get(partOf) === "assistant")) begun = true;
     }
     if (type === "message.updated" && isObject(props.info)) {
       const id = text(props.info.id);
@@ -427,6 +466,7 @@ export function startOpenCodeServeRun(options: OpenCodeServeRunOptions): Runtime
       ...(options.variant === undefined ? {} : { variant: options.variant }),
     });
     if (!sent.ok) throw new Error(`OpenCode's server refused the message (${String(sent.status)}).`);
+    scheduleBeginCheck();
     await stream;
   };
 
