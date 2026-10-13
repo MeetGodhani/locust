@@ -93,7 +93,19 @@ export interface PublicCompare {
    * keeps one itself. `missionIds` are its runs, newest last -- the newest is
    * shown; every one is the comparison's, never a conversation of its own.
    */
-  readonly judge?: { readonly route: CompareRoute; readonly missionIds: readonly string[]; readonly criteria?: string }
+  readonly judge?: {
+    readonly route: CompareRoute
+    readonly missionIds: readonly string[]
+    readonly criteria?: string
+    /**
+     * Two more judges, voting (0.765): the canvas's "three judge models check every run against every line of the
+     * rubric; a line counts when two of three agree". Each reads the answers of the newest ask on its own, on the
+     * person's points; absent when one judge was asked.
+     */
+    readonly panel?: readonly { readonly route: CompareRoute; readonly missionId: string }[]
+    /** Every run a judge of a panel made, the ones asked again over too: the comparison's, never a conversation. */
+    readonly panelMissionIds?: readonly string[]
+  }
   /**
    * The commit a comparison that changes files started from, in a git project (0.763): every column's copy is cut
    * from it, and so is every column of a run of it again -- the same start for every model, every time.
@@ -129,7 +141,8 @@ export interface RerunProgress {
 export function rerunMissionIds(compares: readonly PublicCompare[]): ReadonlySet<string> {
   return new Set(compares.filter((compare) => compare.rerunOf !== undefined).flatMap((compare) => [
     ...compare.slots.flatMap((column) => [...column.missionIds, ...(column.retried ?? [])]),
-    ...(compare.judge?.missionIds ?? [])
+    ...(compare.judge?.missionIds ?? []),
+    ...(compare.judge?.panelMissionIds ?? [])
   ]))
 }
 
@@ -147,10 +160,18 @@ export function rerunRefusalOf(compare: PublicCompare): string | undefined {
 
 /** How long "what a good answer does" may be, as the person writes it for a judge. */
 export const MAX_JUDGE_CRITERIA = 1_000
+/** Judges beside the first, voting (0.765): three in all, so a point counts when two agree. */
+export const PANEL_JUDGES = 2
+
+/** The newest ask's judges' runs: the first judge's, then its panel's. */
+export function newestJudgeMissionIds(judge: PublicCompare['judge']): readonly string[] {
+  if (judge === undefined) return []
+  return [...judge.missionIds.slice(-1), ...(judge.panel ?? []).map((member) => member.missionId)]
+}
 
 /** Every judge's run, so the sidebar and the history never list one as a conversation (0.520). */
 export function judgeMissionIds(compares: readonly PublicCompare[]): ReadonlySet<string> {
-  return new Set(compares.flatMap((compare) => compare.judge?.missionIds ?? []))
+  return new Set(compares.flatMap((compare) => [...(compare.judge?.missionIds ?? []), ...(compare.judge?.panelMissionIds ?? [])]))
 }
 
 /** The run slot a column holds, so one teammate can run on two models at once. */

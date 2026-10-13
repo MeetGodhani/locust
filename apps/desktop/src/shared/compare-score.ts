@@ -21,6 +21,8 @@ export interface ScoreVerdict {
   readonly met: boolean
   /** Why, in the judge's words: one line. */
   readonly why: string
+  /** Three judges voting (0.765): how many of the judges that scored this said met, of how many did. */
+  readonly votes?: { readonly met: number; readonly of: number }
 }
 
 export interface Scorecard {
@@ -123,6 +125,37 @@ export function withoutScorecard(text: string): string {
     .join('\n')
     .replace(/\n{3,}/g, '\n\n')
     .trim()
+}
+
+/**
+ * THREE JUDGES VOTING (0.765), as the canvas has it: "A line counts when two of three agree." Each judge scored the
+ * same points, the person's, on its own. A point is met when more of the judges that scored it said met than not -- a
+ * split of two is not met -- and its why is the first agreeing judge's. A judge whose scorecard could not be read, or
+ * that scored other points, has no vote. Undefined when none could be read.
+ */
+export function panelVote(cards: readonly (Scorecard | undefined)[]): Scorecard | undefined {
+  const read = cards.filter((card): card is Scorecard => card !== undefined)
+  const first = read[0]
+  if (first === undefined) return undefined
+  const same = read.filter((card) => card.points.length === first.points.length && card.points.every((point, index) => point === first.points[index]))
+  const verdicts = Object.fromEntries(Object.keys(first.verdicts).map((slot) => [slot, first.points.map((_point, index): ScoreVerdict | undefined => {
+    const cast = same.flatMap((card) => {
+      const verdict = card.verdicts[slot]?.[index]
+      return verdict === undefined ? [] : [verdict]
+    })
+    if (cast.length === 0) return undefined
+    const met = cast.filter((verdict) => verdict.met).length
+    const passed = met * 2 > cast.length
+    return { met: passed, why: cast.find((verdict) => verdict.met === passed)?.why ?? '', votes: { met, of: cast.length } }
+  })]))
+  return { points: first.points, byJudge: first.byJudge, verdicts }
+}
+
+/** The judges' pick: the answer more than half of those that answered would keep, or none when they do not agree. */
+export function panelPick<T extends string>(picks: readonly (T | undefined)[], answered: number): T | undefined {
+  const counted = new Map<T, number>()
+  for (const pick of picks) if (pick !== undefined) counted.set(pick, (counted.get(pick) ?? 0) + 1)
+  return [...counted].find(([, count]) => count * 2 > answered)?.[0]
 }
 
 /** How many points a column met, of how many were scored. */

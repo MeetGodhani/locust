@@ -126,12 +126,11 @@ import { awayCounts, sinceYouWereAway } from '../../shared/away.js'
 import { WhatsNewSplash } from './components/WhatsNew.js'
 import type { SettingsPageId } from './settingsPages.js'
 import type { ComparePick, ComparePicking, RouteChoice } from './components/RoutePicker.js'
-import { CompareView } from './components/CompareView.js'
+import { CompareView, joinedNames } from './components/CompareView.js'
 import { comparisonOf, foldComparisons } from './compareRows.js'
-import type { CompareColumnView } from './components/CompareView.js'
+import type { CompareColumnView, JudgeView } from './components/CompareView.js'
 import { blindName, changesLine, compareMembership, compareRecord, compareNeedsCopy, compareRefusalOf, judgeMissionIds, judgePickOf, MAX_COMPARE_SLOTS, MIN_COMPARE_SLOTS, rerunMissionIds, rerunRefusalOf } from '../../shared/compare.js'
-import { criteriaLines, parseScorecard, scoreOf, withoutScorecard } from '../../shared/compare-score.js'
-import type { Scorecard } from '../../shared/compare-score.js'
+import { criteriaLines, panelPick, panelVote, parseScorecard, scoreOf, withoutScorecard } from '../../shared/compare-score.js'
 import type { CompareRoute, CompareSlotId, PublicCompare, RerunProgress } from '../../shared/compare.js'
 import { benchmarkChart, benchmarkRows, type BenchmarkRow, type BenchmarkRunInput } from './benchmark.js'
 import type { BenchmarkView } from './components/CompareBenchmark.js'
@@ -4529,13 +4528,18 @@ export default function App(): ReactElement {
 
   /** Ask one column again, on the same model (0.444): a provider that was down gets another go. */
   /** Ask a judge for its view of the answers (0.520): one read-only run on the model picked. */
-  const judgeCompare = async (compare: PublicCompare, choice: { readonly runtime: MissionRuntimeId; readonly model: string; readonly label: string }, criteria: string): Promise<void> => {
+  const judgeCompare = async (compare: PublicCompare, choice: { readonly runtime: MissionRuntimeId; readonly model: string; readonly label: string }, criteria: string, panel: readonly { readonly runtime: MissionRuntimeId; readonly model: string; readonly label: string }[] = []): Promise<void> => {
     const bridge = window.desktop
     if (!bridge) return
     setJudgingCompare(true)
     setCompareProblem(undefined)
     try {
-      const answer = await bridge.judgeCompare({ compareId: compare.compareId, route: { runtime: choice.runtime, model: choice.model, label: choice.label }, ...(criteria.trim().length === 0 ? {} : { criteria }) }).catch(() => undefined)
+      const answer = await bridge.judgeCompare({
+        compareId: compare.compareId,
+        route: { runtime: choice.runtime, model: choice.model, label: choice.label },
+        ...(criteria.trim().length === 0 ? {} : { criteria }),
+        ...(panel.length === 0 ? {} : { panel: panel.map((one) => ({ runtime: one.runtime, model: one.model, label: one.label })) })
+      }).catch(() => undefined)
       if (answer === undefined || !answer.ok) {
         setCompareProblem(answer?.ok === false ? answer.error.message : 'The judge could not be asked. Nothing was started.')
         return
@@ -4684,6 +4688,7 @@ export default function App(): ReactElement {
     const refusal = rerunRefusalOf(origin)
     return {
       ...(refusal === undefined ? {} : { refusal }),
+      ...((origin.judge?.panel ?? []).length > 0 ? { threeJudges: true } : {}),
       rows,
       ...(chart === undefined ? {} : { chart }),
       runs: runList,
@@ -4737,30 +4742,61 @@ export default function App(): ReactElement {
 
   /** The columns, from the live runs where they are going and the record where they are done. */
   /** The judge's view of a comparison, from its newest run (0.520). */
-  const judgeViewOf = (compare: PublicCompare): { readonly name: string; readonly running: boolean; readonly answer: string; readonly items: readonly ThreadItem[]; readonly pick?: CompareSlotId; readonly failed?: string; readonly scorecard?: Scorecard } | undefined => {
+  const judgeViewOf = (compare: PublicCompare): JudgeView | undefined => {
     const judge = compare.judge
     const missionId = judge?.missionIds.at(-1)
     if (judge === undefined || missionId === undefined) return undefined
-    const live = [...runs.values()].find((run) => run.data?.missionId === missionId)
-    const recorded = historyById.get(missionId)
-    const events = live !== undefined && live.events.length > 0 ? live.events : recorded?.events ?? []
-    const running = (live !== undefined && liveRunIsActive(live)) || (live === undefined && recorded === undefined)
-    // Its whole thread, drawn as every other reply is (0.554): its steps and its words as they come.
-    const items = buildThread(events, { running, trimmed: live !== undefined && live.events.length > 0 ? live.eventsTruncated === true : recorded?.eventsTruncated === true, mayEdit: false, ...(workspacePath === undefined ? {} : { workspacePath }) })
-    const answer = items
-      .flatMap((item) => (item.type === 'agent-message' && item.text.trim().length > 0 ? [item.text.trim()] : []))
-      .join('\n\n')
-    const name = judge.route.label ?? routeModelName(judge.route.runtime as MissionRuntimeId, judge.route.model, resolvedModels.get(`${judge.route.runtime}:${judge.route.model}`))
-    if (!running && answer.length === 0) return { name, running, answer, items, failed: 'The judge did not answer. Ask again, or pick another model.' }
-    const pick = running ? undefined : judgePickOf(answer, compare.slots.map((column) => column.slot))
-    // Its scorecard (0.759): read from what it said once it is done, and kept out of its words, which the table says.
-    const scorecard = running ? undefined : parseScorecard(answer, compare.slots.map((column) => column.slot), criteriaLines(judge.criteria))
-    const said = items.flatMap((item): ThreadItem[] => {
+    /** One judge's run: its whole thread, drawn as every other reply is (0.554), and what it said. */
+    const readOf = (id: string): { readonly running: boolean; readonly items: readonly ThreadItem[]; readonly answer: string } => {
+      const live = [...runs.values()].find((run) => run.data?.missionId === id)
+      const recorded = historyById.get(id)
+      const events = live !== undefined && live.events.length > 0 ? live.events : recorded?.events ?? []
+      const running = (live !== undefined && liveRunIsActive(live)) || (live === undefined && recorded === undefined)
+      const items = buildThread(events, { running, trimmed: live !== undefined && live.events.length > 0 ? live.eventsTruncated === true : recorded?.eventsTruncated === true, mayEdit: false, ...(workspacePath === undefined ? {} : { workspacePath }) })
+      const answer = items
+        .flatMap((item) => (item.type === 'agent-message' && item.text.trim().length > 0 ? [item.text.trim()] : []))
+        .join('\n\n')
+      return { running, items, answer }
+    }
+    const nameOf = (route: CompareRoute): string => route.label ?? routeModelName(route.runtime as MissionRuntimeId, route.model, resolvedModels.get(`${route.runtime}:${route.model}`))
+    // Its words without its scorecard lines, which the table says.
+    const saidOf = (items: readonly ThreadItem[]): readonly ThreadItem[] => items.flatMap((item): ThreadItem[] => {
       if (item.type !== 'agent-message') return [item]
       const text = withoutScorecard(item.text)
       return text.length === 0 ? [] : [{ ...item, text }]
     })
-    return { name, running, answer, items: said, ...(pick === undefined ? {} : { pick }), ...(scorecard === undefined ? {} : { scorecard }) }
+    const slots = compare.slots.map((column) => column.slot)
+    const name = nameOf(judge.route)
+    const first = readOf(missionId)
+    if ((judge.panel ?? []).length === 0) {
+      const { running, items, answer } = first
+      if (!running && answer.length === 0) return { name, running, answer, items, failed: 'The judge did not answer. Ask again, or pick another model.' }
+      const pick = running ? undefined : judgePickOf(answer, slots)
+      // Its scorecard (0.759): read from what it said once it is done.
+      const scorecard = running ? undefined : parseScorecard(answer, slots, criteriaLines(judge.criteria))
+      return { name, running, answer, items: saidOf(items), ...(pick === undefined ? {} : { pick }), ...(scorecard === undefined ? {} : { scorecard }) }
+    }
+    /*
+     * THREE JUDGES VOTING (0.765, compare-score.ts panelVote): each read the answers on its own, on the person's
+     * points. The scorecard is their vote, once all three are done; the words drawn are the first one's that said any,
+     * and a judge that did not answer has no vote.
+     */
+    // Each by its model, not "Codex CLI / GPT-6.1-Sol": three of those ran the heading onto two lines (the 0.765
+    // drive's frame). An account's default is its agent's name.
+    const shortOf = (route: CompareRoute): string => (route.model === 'account-default' ? runtimeNameOf(route.runtime) : routeModelName(route.runtime as MissionRuntimeId, route.model, resolvedModels.get(`${route.runtime}:${route.model}`)))
+    const all = [{ name: shortOf(judge.route), ...first }, ...(judge.panel ?? []).map((member) => ({ name: shortOf(member.route), ...readOf(member.missionId) }))]
+    const running = all.some((one) => one.running)
+    const answered = all.filter((one) => !one.running && one.answer.length > 0)
+    const shown = all.find((one) => one.answer.length > 0) ?? all[0]!
+    const judges = all.map((one) => one.name)
+    const silent = running ? [] : all.filter((one) => one.answer.length === 0).map((one) => one.name)
+    const panel = { judges, wordsOf: shown.name, silent }
+    const together = joinedNames(judges)
+    if (!running && answered.length === 0) return { name: together, running, answer: '', items: first.items, panel, failed: 'None of the judges answered. Ask again, or pick other models.' }
+    const points = criteriaLines(judge.criteria)
+    const scorecard = running ? undefined : panelVote(answered.map((one) => parseScorecard(one.answer, slots, points)))
+    const pick = running ? undefined : panelPick(answered.map((one) => judgePickOf(one.answer, slots)), answered.length)
+    return { name: together, running, answer: shown.answer, items: saidOf(shown.items), panel, ...(pick === undefined ? {} : { pick }), ...(scorecard === undefined ? {} : { scorecard }) }
   }
   /**
    * The models a judge can be (0.520): ready ones, a free model that has
@@ -8516,9 +8552,10 @@ export default function App(): ReactElement {
                       ...(judge === undefined ? {} : { judge }),
                       judgeChoices: choices,
                       judging: judgingCompare,
-                      onJudge: (key: string, criteria: string) => {
+                      onJudge: (key: string, criteria: string, others: readonly string[] = []) => {
                         const choice = choices.find((one) => one.key === key)
-                        if (choice !== undefined) void judgeCompare(comparing, choice, criteria)
+                        const panel = others.flatMap((other) => choices.filter((one) => one.key === other))
+                        if (choice !== undefined && panel.length === others.length) void judgeCompare(comparing, choice, criteria, panel)
                       }
                     }
                   })()}

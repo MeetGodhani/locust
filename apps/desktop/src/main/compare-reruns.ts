@@ -12,7 +12,7 @@
  * are removed once it is over, as Keep removes a comparison's other copies.
  */
 
-import { rerunRefusalOf, RERUN_TIMES, type CompareRoute, type PublicCompare, type RerunProgress } from '../shared/compare.js'
+import { newestJudgeMissionIds, rerunRefusalOf, RERUN_TIMES, type CompareRoute, type PublicCompare, type RerunProgress } from '../shared/compare.js'
 import type { CompareStore } from './compare-store.js'
 
 type RerunStep = RerunProgress['step']
@@ -35,8 +35,8 @@ export function createCompareReruns(options: {
   readonly compares: Pick<CompareStore, 'list' | 'get' | 'create' | 'addRerun' | 'settle'>
   /** Every column asked the question (index.ts askEveryColumn); a column that cannot start says so in its place. */
   readonly begin: (compare: PublicCompare) => Promise<void>
-  /** The judge asked (index.ts judgeCompare): undefined once it started, else why it did not. */
-  readonly judge: (compare: PublicCompare, route: CompareRoute, criteria: string | undefined) => Promise<string | undefined>
+  /** The judge asked (index.ts judgeCompare), with the two beside it when three vote (0.765): undefined once it started, else why it did not. */
+  readonly judge: (compare: PublicCompare, route: CompareRoute, criteria: string | undefined, panel: readonly CompareRoute[]) => Promise<string | undefined>
   /** Whether a mission's run is still going here. */
   readonly live: (missionId: string) => boolean
   /** How a mission ended, as its record says: `completed`, `failed`, `cancelled`. */
@@ -123,10 +123,11 @@ export function createCompareReruns(options: {
       if (answered && !batch.stopped && judge !== undefined) {
         batch.progress = { ...batch.progress, step: 'judging' }
         tell([await current()])
-        const why = await options.judge(await current(), judge.route, judge.criteria)
+        const why = await options.judge(await current(), judge.route, judge.criteria, (judge.panel ?? []).map((member) => member.route))
         if (why === undefined) {
           tell([await current()])
-          await settled(async () => (await current()).judge?.missionIds.slice(-1) ?? [], batch, until)
+          // Every judge of it: three voting are read only once all three are done.
+          await settled(async () => newestJudgeMissionIds((await current()).judge), batch, until)
         }
       }
     } finally {
@@ -166,7 +167,7 @@ export function createCompareReruns(options: {
       const running = new Set([...batches.values()].flatMap((batch) => (batch.progress.compareId === undefined ? [] : [batch.progress.compareId])))
       for (const compare of await store.list().catch(() => [] as readonly PublicCompare[])) {
         if (compare.rerunOf === undefined || compare.settled === true || running.has(compare.compareId)) continue
-        const ids = [...compare.slots.flatMap((column) => column.missionIds), ...(compare.judge?.missionIds ?? [])]
+        const ids = [...compare.slots.flatMap((column) => column.missionIds), ...(compare.judge?.missionIds ?? []), ...(compare.judge?.panelMissionIds ?? [])]
         // A turn that outlived Locust (a background run) is left to finish; the next start looks again.
         if (ids.some((id) => options.live(id))) continue
         await options.tidy(compare).catch(() => undefined)

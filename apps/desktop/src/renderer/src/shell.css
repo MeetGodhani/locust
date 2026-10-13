@@ -13432,6 +13432,32 @@ textarea.lc-compare__judgecriteria {
   color: var(--lc-red-text);
 }
 
+/* Three judges' votes (0.765): a dot a judge, filled for each that said met, beside the verdict they came to. */
+.lc-compare__votes {
+  display: inline-flex;
+  gap: 3px;
+  margin-left: var(--lc-space-2);
+  vertical-align: 1px;
+}
+
+.lc-compare__vote {
+  width: 6px;
+  height: 6px;
+  border: 1px solid var(--lc-border-strong);
+  border-radius: 50%;
+}
+
+.lc-compare__vote.is-met {
+  border-color: var(--lc-green-text);
+  background: var(--lc-green-text);
+}
+
+/* The two judges beside the first: their own row, "with" lining them up under the first. */
+.lc-compare__panelword {
+  color: var(--lc-text-muted);
+  font-size: 12px;
+}
+
 .lc-compare__verdict.is-unscored {
   color: var(--lc-text-muted);
   font-weight: 400;

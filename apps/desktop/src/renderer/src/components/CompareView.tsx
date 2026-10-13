@@ -153,7 +153,7 @@ export function CompareView({
   /** Once one is kept: every model's record across your decided comparisons (0.519). */
   readonly record?: readonly CompareRecordRow[]
   /** The judge's view, when one was asked (0.520): its model, and what it said or is saying. */
-  readonly judge?: { readonly name: string; readonly running: boolean; readonly answer: string; readonly items: readonly ThreadItem[]; readonly pick?: CompareSlotId; readonly failed?: string; readonly scorecard?: Scorecard }
+  readonly judge?: JudgeView
   /** The models a judge can be, the first the one offered (0.520). */
   readonly judgeChoices?: readonly ModelChoice[]
   /** A judge is being asked. */
@@ -292,7 +292,9 @@ export function CompareView({
               {!veiled && <RuntimeMark runtime={column.runtime} size={13} />}
               {/* Its runtime is in the hover too: a narrow head gives that word up first (2026-10-05). */}
               <span className="lc-compare__name" title={veiled ? column.name : `${column.name} · ${column.runtimeName}`}>{column.name}</span>
-              {judge?.pick === column.slot && <span className="lc-compare__judgebadge" title="The judge would keep this answer. Its view, not a decision.">Judge's pick</span>}
+              {judge?.pick === column.slot && (judge.panel === undefined
+                ? <span className="lc-compare__judgebadge" title="The judge would keep this answer. Its view, not a decision.">Judge's pick</span>
+                : <span className="lc-compare__judgebadge" title="Most of the judges would keep this answer. Their view, not a decision.">Judges' pick</span>)}
               {!veiled && (
               <span
                 className={`lc-compare__runtime lc-mono${column.copy === true ? ' is-copy' : ''}`}
@@ -405,7 +407,7 @@ export function CompareView({
           <div className="lc-compare__judge" aria-label="The judge's view">
             <span className="lc-compare__recordlabel lc-mono">
               {judge.running && <WorkingSpark />}
-              {`THE JUDGE'S VIEW · ${judge.name}${judge.running ? ' · reading' : ''}`}
+              {`${judge.panel === undefined ? "THE JUDGE'S VIEW" : "THE JUDGES' VIEW"} · ${judge.name}${judge.running ? ' · reading' : ''}`}
             </span>
             {/*
              * Drawn as every other reply (0.554). Colin, on 0.553: "very
@@ -415,6 +417,12 @@ export function CompareView({
              */}
             {/* Its scorecard first, the summary before the words (0.759): every answer on every point, then score, time and cost. */}
             {judge.scorecard !== undefined && <JudgeScorecard scorecard={judge.scorecard} columns={columns} veiled={veiled} />}
+            {/* Three judges (0.765): what the table is, and whose words follow it. */}
+            {judge.panel !== undefined && !judge.running && judge.failed === undefined && (
+              <p className="lc-compare__judgenote">
+                {`${judge.panel.silent.length === 0 ? `The ${String(judge.panel.judges.length)} judges` : `${joinedNames(judge.panel.silent)} did not answer, so the other ${judge.panel.judges.length - judge.panel.silent.length === 1 ? 'judge' : `${String(judge.panel.judges.length - judge.panel.silent.length)} judges`}`} scored every point on their own; a point counts when more of them say met than not. The dots are their votes. The words below are ${judge.panel.wordsOf}'s.`}
+              </p>
+            )}
             {judge.failed !== undefined ? (
               <p className="lc-compare__quiet">{judge.failed}</p>
             ) : judge.items.length === 0 ? (
@@ -433,13 +441,13 @@ export function CompareView({
                 </InComparisonCell.Provider>
               </div>
             )}
-            <p className="lc-compare__judgenote">It read the answers as Answer A, Answer B and so on, not by model. Its view, not a decision: you keep the answer.</p>
+            <p className="lc-compare__judgenote">{judge.panel === undefined ? 'It read the answers as Answer A, Answer B and so on, not by model. Its view, not a decision: you keep the answer.' : 'They read the answers as Answer A, Answer B and so on, not by model. Their view, not a decision: you keep the answer.'}</p>
           </div>
         )}
         {/* Your own benchmark (0.763): under the judge's view, once it has scored the answers. */}
         {benchmark !== undefined && <CompareBenchmark view={benchmark} />}
         {onJudge !== undefined && compare.rerunOf === undefined && (compare.reruns ?? []).length === 0 && judgeChoices.length > 0 && judge?.running !== true && columns.filter((column) => column.keepable).length >= 2 && !columns.some((column) => column.running) && (
-          <JudgeAsk choices={judgeChoices} again={judge !== undefined} busy={judging} onJudge={onJudge} />
+          <JudgeAsk choices={judgeChoices} compared={compare.slots.map((column) => `${column.route.runtime}:${column.route.model}`)} again={judge !== undefined} busy={judging} onJudge={onJudge} />
         )}
         {onAddModel !== undefined && compare.rerunOf === undefined && addChoices.length > 0 && columns.length < 3 && compare.changes !== true && !columns.some((column) => column.running) && columns.every((column) => column.turns.length <= 1) && (
           <AddModelAsk choices={addChoices} busy={adding} onAdd={onAddModel} />
@@ -598,24 +606,45 @@ function ModelOptions({ choices }: { readonly choices: readonly ModelChoice[] })
  * does if the person wants to say. One line under the answers, once at
  * least two have finished; nothing runs until Judge is pressed.
  */
-function JudgeAsk({ choices, again, busy, onJudge }: {
+function JudgeAsk({ choices, compared = [], again, busy, onJudge }: {
   readonly choices: readonly ModelChoice[]
+  /** The compared models' keys: a judge is never one of them while another model can judge. */
+  readonly compared?: readonly string[]
   readonly again: boolean
   readonly busy: boolean
-  readonly onJudge: (choiceKey: string, criteria: string) => void
+  readonly onJudge: (choiceKey: string, criteria: string, others?: readonly string[]) => void
 }): ReactElement {
-  const [choice, setChoice] = useChosenModel(choices)
+  const [picked, setChoice] = useChosenModel(choices)
   const [criteria, setCriteria] = useState('')
+  /*
+   * THREE JUDGES (0.765), the canvas's call -- "three cheap models voting, or one stronger judge" -- left to the
+   * person: one row more, two pickers, each offered a model the others are not. They vote on the points written
+   * here, so Judge waits for one.
+   */
+  const [three, setThree] = useState(false)
+  const [pickedOthers, setOthers] = useState<readonly (string | undefined)[]>([undefined, undefined])
+  // The two beside the first are offered free models first -- the canvas's "three cheap models voting" -- and the
+  // compared ones last of all. The menu's own order is no guard: before an agent's catalogue arrives its models sort
+  // to the top, and the 0.765 drive had the two compared models offered as their own judges.
+  const ranked = [...choices.filter((one) => !compared.includes(one.key)), ...choices.filter((one) => compared.includes(one.key))]
+  const judges = threeJudges(ranked, [picked, ...pickedOthers], three ? 3 : 1, (key) => key.endsWith('-free') && !compared.includes(key))
+  const choice = judges[0] ?? ''
+  const others = judges.slice(1)
+  const pointsWritten = criteria.split(/\r?\n/).some((line) => line.trim().length > 0)
+  const ready = choice.length > 0 && (!three || (others.length === 2 && pointsWritten))
+  const pickerOf = (index: number, value: string, onPick: (key: string) => void, label: string): ReactElement => (
+    <span className="lc-compare__select" key={`judge:${String(index)}`}>
+      <select className="lc-input lc-compare__judgepick" aria-label={label} value={value} onChange={(event) => onPick(event.target.value)}>
+        <ModelOptions choices={choices.filter((one) => one.key === value || !judges.includes(one.key))} />
+      </select>
+      <ChevronGlyph />
+    </span>
+  )
   return (
     <div className="lc-compare__judgeask">
-      <span className="lc-compare__recordlabel lc-mono">{again ? 'ASK ANOTHER JUDGE' : 'ASK A JUDGE'}</span>
+      <span className="lc-compare__recordlabel lc-mono">{three ? (again ? 'ASK THREE OTHER JUDGES' : 'ASK THREE JUDGES') : again ? 'ASK ANOTHER JUDGE' : 'ASK A JUDGE'}</span>
       <div className="lc-compare__judgerow">
-        <span className="lc-compare__select">
-          <select className="lc-input lc-compare__judgepick" aria-label="The model that judges" value={choice} onChange={(event) => setChoice(event.target.value)}>
-            <ModelOptions choices={choices} />
-          </select>
-          <ChevronGlyph />
-        </span>
+        {pickerOf(0, choice, setChoice, three ? 'The first judge' : 'The model that judges')}
         {/* One point a line, each a row of the judge's scorecard (0.759); it grows with them. */}
         <textarea
           className="lc-input lc-compare__judgecriteria"
@@ -626,13 +655,66 @@ function JudgeAsk({ choices, again, busy, onJudge }: {
           value={criteria}
           onChange={(event) => setCriteria(event.target.value)}
         />
-        <button type="button" className="lc-button" disabled={busy || choice.length === 0} onClick={() => onJudge(choice, criteria)}>
+        <button type="button" className="lc-button" disabled={busy || !ready} title={three && !pointsWritten ? 'Write the points they vote on first' : undefined} onClick={() => onJudge(choice, criteria, three ? others : [])}>
           {busy ? 'Asking…' : 'Judge'}
         </button>
       </div>
-      <p className="lc-compare__judgenote">It reads the answers without the models&rsquo; names, scores each on every point, and says which it would keep. With no points written, it sets three from your request. It keeps nothing itself.</p>
+      {three && (
+        <div className="lc-compare__judgerow">
+          <span className="lc-compare__panelword">with</span>
+          {others.map((key, index) => pickerOf(index + 1, key, (next) => setOthers((current) => current.map((one, at) => (at === index ? next : one))), index === 0 ? 'The second judge' : 'The third judge'))}
+          <button type="button" className="lc-linkbutton" onClick={() => setThree(false)}>One judge</button>
+        </div>
+      )}
+      <p className="lc-compare__judgenote">
+        {three
+          ? 'Each reads the answers without the models’ names and scores every point on its own; a point counts when two of the three agree. They vote on the points you write. Nothing is kept.'
+          : 'It reads the answers without the models’ names, scores each on every point, and says which it would keep. With no points written, it sets three from your request. It keeps nothing itself.'}
+        {!three && choices.length >= 3 && (
+          <>
+            {' '}
+            <button type="button" className="lc-linkbutton" onClick={() => setThree(true)}>Ask three judges to vote</button>
+          </>
+        )}
+      </p>
     </div>
   )
+}
+
+/**
+ * The judges asked, in order: each the one the person picked when it is still offered and not another's, else the
+ * first offered that no other judge is -- for the judges after the first, one `preferred` first when there is one.
+ * Fewer than `count` when there are not that many models.
+ */
+export function threeJudges(choices: readonly ModelChoice[], picked: readonly (string | undefined)[], count: number, preferred: (key: string) => boolean = () => false): readonly string[] {
+  const chosen: string[] = []
+  for (let index = 0; index < count; index += 1) {
+    const want = picked[index]
+    const free = (one: ModelChoice): boolean => !chosen.includes(one.key) && !picked.slice(index + 1).includes(one.key)
+    const offered = (index > 0 ? choices.find((one) => free(one) && preferred(one.key)) : undefined) ?? choices.find(free) ?? choices.find((one) => !chosen.includes(one.key))
+    const held = want !== undefined && choices.some((one) => one.key === want) && !chosen.includes(want) ? want : offered?.key
+    if (held !== undefined) chosen.push(held)
+  }
+  return chosen
+}
+
+/** "Codex", "Codex and Ling 3.1", "Codex, Ling 3.1 and Muse Spark". */
+export function joinedNames(names: readonly string[]): string {
+  if (names.length <= 1) return names[0] ?? ''
+  return `${names.slice(0, -1).join(', ')} and ${names.at(-1)!}`
+}
+
+/** What the comparison shows of its judge, or of its three (0.765). */
+export interface JudgeView {
+  readonly name: string
+  readonly running: boolean
+  readonly answer: string
+  readonly items: readonly ThreadItem[]
+  readonly pick?: CompareSlotId
+  readonly failed?: string
+  readonly scorecard?: Scorecard
+  /** Three judges voting: who they are, whose words are drawn, and any that did not answer. */
+  readonly panel?: { readonly judges: readonly string[]; readonly wordsOf: string; readonly silent: readonly string[] }
 }
 
 /**
@@ -671,7 +753,14 @@ function JudgeScorecard({ scorecard, columns, veiled }: {
                       <span className="lc-compare__verdict is-unscored">not scored</span>
                     ) : (
                       <>
-                        <span className={`lc-compare__verdict ${verdict.met ? 'is-met' : 'is-missed'}`}>{verdict.met ? 'met' : 'not met'}</span>
+                        <span className={`lc-compare__verdict ${verdict.met ? 'is-met' : 'is-missed'}`}>
+                          {verdict.met ? 'met' : 'not met'}
+                          {verdict.votes !== undefined && verdict.votes.of > 1 && (
+                            <span className="lc-compare__votes" role="img" aria-label={`${String(verdict.votes.met)} of ${String(verdict.votes.of)} judges said met`} title={`${String(verdict.votes.met)} of ${String(verdict.votes.of)} judges said met`}>
+                              {Array.from({ length: verdict.votes.of }, (_unused, at) => <span key={at} className={`lc-compare__vote${at < verdict.votes!.met ? ' is-met' : ''}`} />)}
+                            </span>
+                          )}
+                        </span>
                         {verdict.why.length > 0 && <span className="lc-compare__why">{verdict.why}</span>}
                       </>
                     )}

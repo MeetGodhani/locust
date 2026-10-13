@@ -32,7 +32,8 @@ import { createRuntimeCommands } from './runtime-commands.js'
 import { createCursorDefaultModel } from './cursor-default-model.js'
 import { listWorkspaceFiles } from './workspace-files.js'
 import { MAX_TAGGED, taggedPrompt } from '../shared/tagging.js'
-import { COMPARE_SLOTS, COMPARE_TREES_DIRECTORY, comparesGoneWith, compareNeedsCopy, compareRefusalOf, compareSlotKey, compareTreeId, MAX_COMPARE_SLOTS, MAX_JUDGE_CRITERIA, MIN_COMPARE_SLOTS } from '../shared/compare.js'
+import { COMPARE_SLOTS, COMPARE_TREES_DIRECTORY, comparesGoneWith, compareNeedsCopy, compareRefusalOf, compareSlotKey, compareTreeId, MAX_COMPARE_SLOTS, MAX_JUDGE_CRITERIA, MIN_COMPARE_SLOTS, PANEL_JUDGES } from '../shared/compare.js'
+import { criteriaLines } from '../shared/compare-score.js'
 import { reverseChanges } from '../shared/reverse-diff.js'
 import { createCloudTaskService, launchRunner } from './cloud-task-service.js'
 import { environmentOf, githubRepoOf, leavingNoLog } from './cloud-tasks.js'
@@ -6524,12 +6525,20 @@ if (!ownsSingleInstanceLock) {
     const judgeCompare = async (
       compare: PublicCompare,
       route: CompareRoute,
-      criteria: string | undefined
+      criteria: string | undefined,
+      panel: readonly CompareRoute[] = []
     ): Promise<{ readonly ok: true; readonly compare: PublicCompare } | { readonly ok: false; readonly message: string }> => {
       const refused = (message: string) => ({ ok: false as const, message })
-      if (!isMissionRuntime(route.runtime) || route.model.length === 0 || route.model.length > 200) return refused('Pick a model to judge.')
-      const cannot = compareRefusalOf(route.runtime, antigravityProbe.cliPath() !== undefined)
-      if (cannot !== undefined) return refused(cannot.replace('a comparison', 'a judge'))
+      for (const one of [route, ...panel]) {
+        if (!isMissionRuntime(one.runtime) || one.model.length === 0 || one.model.length > 200) return refused('Pick a model to judge.')
+        const cannot = compareRefusalOf(one.runtime, antigravityProbe.cliPath() !== undefined)
+        if (cannot !== undefined) return refused(cannot.replace('a comparison', 'a judge'))
+      }
+      // Three judges voting (0.765): three models, on the points the person wrote -- a judge left to set its own would
+      // score points the others never saw, and there would be nothing to vote on.
+      if (panel.length > PANEL_JUDGES) return refused('Three judges at most.')
+      if (new Set([route, ...panel].map((one) => `${one.runtime}:${one.model}`)).size !== panel.length + 1) return refused('Three judges are three different models: pick another for each.')
+      if (panel.length > 0 && criteriaLines(criteria).length === 0) return refused('Three judges vote on the points you write: say what a good answer does, one point a line.')
       const answers: JudgedAnswer[] = []
       for (const column of compare.slots) {
         const newest = column.missionIds.at(-1)
@@ -6564,11 +6573,11 @@ if (!ownsSingleInstanceLock) {
           return refused('The answers are too long to hand a judge, and they could not be written for it to read.')
         }
       }
-      const response = await codexMissions.start(
+      const startJudge = (one: CompareRoute, key: string) => codexMissions.start(
         brief,
-        runtime,
+        one.runtime as MissionRuntimeId,
         'ask',
-        { ...(model === 'account-default' ? {} : { model }), ...(typeof route.effort === 'string' ? { effort: route.effort } : {}) },
+        { ...(one.model === 'account-default' ? {} : { model: one.model }), ...(typeof one.effort === 'string' ? { effort: one.effort } : {}) },
         sendToWindow,
         undefined,
         undefined,
@@ -6576,24 +6585,33 @@ if (!ownsSingleInstanceLock) {
         undefined,
         undefined,
         undefined,
-        { key: `judge:${compare.compareId}` }
+        { key }
       )
+      const routeKept = (one: CompareRoute): CompareRoute => ({ runtime: one.runtime, model: one.model, ...(typeof one.effort === 'string' ? { effort: one.effort } : {}), ...(typeof one.label === 'string' && one.label.trim().length > 0 ? { label: one.label.trim() } : {}) })
+      const response = await startJudge({ ...route, runtime, model }, `judge:${compare.compareId}`)
       if (!response.ok) return refused(response.error.code === 'RUN_ALREADY_ACTIVE' ? 'The judge is still reading. Ask again when it has finished.' : response.error.message)
-      if (compare.rerunOf !== undefined) rerunRunIds.set(response.data.missionId, response.data.runId)
-      const judged = await compares.judge(
-        compare.compareId,
-        { runtime, model, ...(typeof route.effort === 'string' ? { effort: route.effort } : {}), ...(typeof route.label === 'string' && route.label.trim().length > 0 ? { label: route.label.trim() } : {}) },
-        response.data.missionId,
-        criteria
-      )
-      sendToWindow({
-        kind: 'mission-started',
-        runId: response.data.runId,
-        missionId: response.data.missionId,
-        prompt: 'Judge the answers',
-        data: response.data,
-        startedBy: { kind: 'judge', compareId: compare.compareId }
-      })
+      const started = [response.data]
+      // The panel, each on its own key so all three read at once; one that cannot start has no vote, and says so by
+      // its absence from the panel -- the first judge's run is already going.
+      const members: { route: CompareRoute; missionId: string }[] = []
+      for (const [index, one] of panel.entries()) {
+        const begun = await startJudge(one, `judge:${compare.compareId}:${String(index + 2)}`).catch(() => undefined)
+        if (begun?.ok !== true) continue
+        started.push(begun.data)
+        members.push({ route: routeKept(one), missionId: begun.data.missionId })
+      }
+      if (compare.rerunOf !== undefined) for (const run of started) rerunRunIds.set(run.missionId, run.runId)
+      const judged = await compares.judge(compare.compareId, routeKept({ ...route, runtime, model }), response.data.missionId, criteria, members)
+      for (const run of started) {
+        sendToWindow({
+          kind: 'mission-started',
+          runId: run.runId,
+          missionId: run.missionId,
+          prompt: 'Judge the answers',
+          data: run,
+          startedBy: { kind: 'judge', compareId: compare.compareId }
+        })
+      }
       return { ok: true, compare: judged }
     }
     ipcMain.handle(COMPARE_JUDGE_CHANNEL, async (event, request: unknown) => {
@@ -6605,6 +6623,12 @@ if (!ownsSingleInstanceLock) {
       const route = (typeof input.route === 'object' && input.route !== null ? input.route : {}) as Record<string, unknown>
       if (!isMissionRuntime(route.runtime) || typeof route.model !== 'string' || route.model.length === 0 || route.model.length > 200) return compareRefused('Pick a model to judge.')
       const criteria = typeof input.criteria === 'string' ? input.criteria.trim().slice(0, MAX_JUDGE_CRITERIA) : undefined
+      const panel: CompareRoute[] = []
+      for (const member of Array.isArray(input.panel) ? input.panel.slice(0, PANEL_JUDGES + 1) : []) {
+        const one = (typeof member === 'object' && member !== null ? member : {}) as Record<string, unknown>
+        if (!isMissionRuntime(one.runtime) || typeof one.model !== 'string' || one.model.length === 0 || one.model.length > 200) return compareRefused('Pick a model for each judge.')
+        panel.push({ runtime: one.runtime, model: one.model, ...(typeof one.effort === 'string' ? { effort: one.effort } : {}), ...(typeof one.label === 'string' && one.label.trim().length > 0 ? { label: one.label.trim() } : {}) })
+      }
       const judged = await judgeCompare(
         compare,
         {
@@ -6613,7 +6637,8 @@ if (!ownsSingleInstanceLock) {
           ...(typeof route.effort === 'string' ? { effort: route.effort } : {}),
           ...(typeof route.label === 'string' && route.label.trim().length > 0 ? { label: route.label.trim() } : {})
         },
-        criteria
+        criteria,
+        panel
       )
       return judged.ok ? ({ ok: true, data: { compare: judged.compare, refused: [] } } as const) : compareRefused(judged.message)
     })
@@ -6628,8 +6653,8 @@ if (!ownsSingleInstanceLock) {
       begin: async (compare) => {
         await askEveryColumn(compare, compare.prompt, false)
       },
-      judge: async (compare, route, criteria) => {
-        const judged = await judgeCompare(compare, route, criteria)
+      judge: async (compare, route, criteria, panel) => {
+        const judged = await judgeCompare(compare, route, criteria, panel)
         return judged.ok ? undefined : judged.message
       },
       live: (missionId) => codexMissions.hasMission(missionId),

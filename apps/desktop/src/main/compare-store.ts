@@ -3,7 +3,7 @@ import { constants as fsConstants } from 'node:fs'
 import { mkdir, open, readFile, unlink } from 'node:fs/promises'
 import { isAbsolute, join } from 'node:path'
 
-import { COMPARE_SLOTS, compareTreeId, MAX_COMPARE_SLOTS, MAX_JUDGE_CRITERIA, MIN_COMPARE_SLOTS } from '../shared/compare.js'
+import { COMPARE_SLOTS, compareTreeId, MAX_COMPARE_SLOTS, MAX_JUDGE_CRITERIA, MIN_COMPARE_SLOTS, PANEL_JUDGES } from '../shared/compare.js'
 import type { CompareRoute, CompareSlotId, PublicCompare, PublicCompareSlot } from '../shared/compare.js'
 import { replaceFile } from './replace-file.js'
 
@@ -67,8 +67,11 @@ export interface CompareStore {
   keep(compareId: string, slot: CompareSlotId, brought?: readonly string[]): Promise<PublicCompare>
   /** Another model joins (0.523): a new column, the next letter, nothing asked yet. */
   addColumn(compareId: string, route: CompareRoute): Promise<PublicCompare>
-  /** A judge was asked (0.520): its run, newest last, on this route and with these words. */
-  judge(compareId: string, route: CompareRoute, missionId: string, criteria?: string): Promise<PublicCompare>
+  /**
+   * A judge was asked (0.520): its run, newest last, on this route and with these words -- and, for three judges
+   * voting (0.765), the other two's runs, which replace the last ask's panel.
+   */
+  judge(compareId: string, route: CompareRoute, missionId: string, criteria?: string, panel?: readonly { readonly route: CompareRoute; readonly missionId: string }[]): Promise<PublicCompare>
   /** A run of it again began (0.763): that comparison's id, newest last. */
   addRerun(compareId: string, rerunId: string): Promise<PublicCompare>
   /** A run again is over (0.763): its models and judge have finished, and its copies are gone. */
@@ -118,9 +121,27 @@ function parsedCompare(value: unknown): PublicCompare | undefined {
   const judgeRecord = typeof record.judge === 'object' && record.judge !== null ? (record.judge as Record<string, unknown>) : undefined
   const judgeRoute = judgeRecord === undefined ? undefined : parsedSlot({ slot: 'a', route: judgeRecord.route, missionIds: judgeRecord.missionIds })
   const judgeCriteria = text(judgeRecord?.criteria, MAX_JUDGE_CRITERIA)
+  // Its panel (0.765): each member checked as a judge is, its one run a mission id.
+  const panel = Array.isArray(judgeRecord?.panel)
+    ? judgeRecord.panel.flatMap((member: unknown) => {
+        const held = (typeof member === 'object' && member !== null ? member : {}) as Record<string, unknown>
+        const parsed = parsedSlot({ slot: 'a', route: held.route, missionIds: [held.missionId] })
+        const missionId = parsed?.missionIds[0]
+        return parsed === undefined || missionId === undefined ? [] : [{ route: parsed.route, missionId }]
+      }).slice(0, PANEL_JUDGES)
+    : []
+  const panelMissionIds = Array.isArray(judgeRecord?.panelMissionIds)
+    ? judgeRecord.panelMissionIds.filter((id): id is string => typeof id === 'string' && id.length > 0 && id.length <= 200).slice(-MAX_JUDGES * PANEL_JUDGES)
+    : []
   const judge = judgeRoute === undefined || judgeRoute.missionIds.length === 0
     ? undefined
-    : { route: judgeRoute.route, missionIds: judgeRoute.missionIds.slice(-MAX_JUDGES), ...(judgeCriteria === undefined ? {} : { criteria: judgeCriteria }) }
+    : {
+        route: judgeRoute.route,
+        missionIds: judgeRoute.missionIds.slice(-MAX_JUDGES),
+        ...(judgeCriteria === undefined ? {} : { criteria: judgeCriteria }),
+        ...(panel.length === 0 ? {} : { panel }),
+        ...(panelMissionIds.length === 0 ? {} : { panelMissionIds })
+      }
   // Your own benchmark (0.763): the commit it started from, the comparison it runs again, its own runs again.
   const base = typeof record.base === 'string' && COMMIT.test(record.base) ? record.base : undefined
   const rerunOf = text(record.rerunOf, 80)
@@ -317,15 +338,23 @@ export function createCompareStore(options: {
         }
       }),
 
-    judge: (compareId, route, missionId, criteria) =>
-      change(compareId, (compare) => ({
-        ...compare,
-        judge: {
-          route: { runtime: route.runtime, model: route.model, ...(route.effort === undefined ? {} : { effort: route.effort }), ...(route.label === undefined ? {} : { label: route.label.slice(0, 120) }) },
-          missionIds: [...(compare.judge?.missionIds ?? []), missionId].slice(-MAX_JUDGES),
-          ...(criteria === undefined || criteria.trim().length === 0 ? {} : { criteria: criteria.trim().slice(0, MAX_JUDGE_CRITERIA) })
+    judge: (compareId, route, missionId, criteria, panel = []) =>
+      change(compareId, (compare) => {
+        const routeOf = (one: CompareRoute): CompareRoute => ({ runtime: one.runtime, model: one.model, ...(one.effort === undefined ? {} : { effort: one.effort }), ...(one.label === undefined ? {} : { label: one.label.slice(0, 120) }) })
+        const members = panel.slice(0, PANEL_JUDGES).map((member) => ({ route: routeOf(member.route), missionId: member.missionId }))
+        // Every panel run stays the comparison's, so one asked over never turns up as a conversation.
+        const heard = [...(compare.judge?.panelMissionIds ?? []), ...members.map((member) => member.missionId)].slice(-MAX_JUDGES * PANEL_JUDGES)
+        return {
+          ...compare,
+          judge: {
+            route: routeOf(route),
+            missionIds: [...(compare.judge?.missionIds ?? []), missionId].slice(-MAX_JUDGES),
+            ...(criteria === undefined || criteria.trim().length === 0 ? {} : { criteria: criteria.trim().slice(0, MAX_JUDGE_CRITERIA) }),
+            ...(members.length === 0 ? {} : { panel: members }),
+            ...(heard.length === 0 ? {} : { panelMissionIds: heard })
+          }
         }
-      })),
+      }),
 
     addRerun: (compareId, rerunId) =>
       change(compareId, (compare) => ({ ...compare, reruns: [...(compare.reruns ?? []).filter((id) => id !== rerunId), rerunId].slice(-MAX_RERUNS) })),

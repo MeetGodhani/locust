@@ -1282,8 +1282,10 @@ export interface CompareAddModelRequest {
 export interface CompareJudgeRequest {
   readonly compareId: string
   readonly route: { readonly runtime: MissionRuntimeId; readonly model: string; readonly effort?: string; readonly label?: string }
-  /** What the person says a good answer does; optional. */
+  /** What the person says a good answer does; optional, and needed for three judges. */
   readonly criteria?: string
+  /** Two more judges, voting with the first (0.765): a point counts when two of the three agree. */
+  readonly panel?: readonly { readonly runtime: MissionRuntimeId; readonly model: string; readonly effort?: string; readonly label?: string }[]
 }
 export interface CompareStartRequest {
   /** Whose conversation; absent to compare with nobody. */

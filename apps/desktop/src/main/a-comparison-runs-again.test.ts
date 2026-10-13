@@ -33,15 +33,16 @@ describe('a comparison run again', { timeout: 20_000 }, () => {
   })
 
   /** A scored comparison in a fresh store, and the runner around it, with every outside step a recorded fake. */
-  const setUp = async (options: { readonly changes?: boolean; readonly refuseJudge?: string; readonly neverSettles?: boolean; readonly failFirst?: boolean } = {}) => {
+  const setUp = async (options: { readonly changes?: boolean; readonly refuseJudge?: string; readonly neverSettles?: boolean; readonly failFirst?: boolean; readonly panel?: readonly CompareRoute[]; readonly slowPanel?: boolean } = {}) => {
     let id = 0
     const compares = createCompareStore({ rootDirectory: folder, createId: () => `cmp_${String(++id).padStart(4, '0')}` })
     let origin = await compares.create({ teammateId: 'tm_wren', prompt: 'Explain the date bug.', routes: ROUTES, ...(options.changes === true ? { changes: true, base: BASE } : {}) })
     origin = await compares.addTurn(origin.compareId, 'a', 'mission_a1')
     origin = await compares.addTurn(origin.compareId, 'b', 'mission_b1')
-    origin = await compares.judge(origin.compareId, JUDGE, 'mission_j1', 'Names the cause\nFixes the test')
+    origin = await compares.judge(origin.compareId, JUDGE, 'mission_j1', 'Names the cause\nFixes the test', (options.panel ?? []).map((route, index) => ({ route, missionId: `mission_p1_${String(index)}` })))
     const calls: string[] = []
     const live = new Set<string>()
+    const looks = new Map<string, number>()
     const told: { compares: readonly PublicCompare[]; progress: readonly RerunProgress[] }[] = []
     let missions = 0
     // The first answer of the first run fails, as OpenCode's own storage made one fail on the first 0.763 drive.
@@ -56,13 +57,25 @@ describe('a comparison run again', { timeout: 20_000 }, () => {
           if (options.neverSettles === true) live.add(missionId)
         }
       },
-      judge: async (compare, route, criteria) => {
+      judge: async (compare, route, criteria, panel) => {
         calls.push(`judge:${compare.compareId}:${route.model}:${criteria ?? ''}`)
+        if (panel.length > 0) calls.push(`panel:${compare.compareId}:${panel.map((one) => one.model).join(',')}`)
         if (options.refuseJudge !== undefined) return options.refuseJudge
-        await compares.judge(compare.compareId, route, `mission_judge_${String(++missions)}`, criteria)
+        const members = panel.map((one) => ({ route: one, missionId: `mission_panel_${String(++missions)}` }))
+        // A slow panel judge: still reading after the first is done, until the runner has looked twice.
+        if (options.slowPanel === true) for (const member of members) live.add(member.missionId)
+        await compares.judge(compare.compareId, route, `mission_judge_${String(++missions)}`, criteria, members)
         return undefined
       },
-      live: (missionId) => live.has(missionId),
+      live: (missionId) => {
+        if (options.slowPanel === true && missionId.startsWith('mission_panel_')) {
+          const looked = (looks.get(missionId) ?? 0) + 1
+          looks.set(missionId, looked)
+          if (looked === 1) calls.push(`waited:${missionId}`)
+          if (looked > 2) live.delete(missionId)
+        }
+        return live.has(missionId)
+      },
       phaseOf: async (missionId) => (options.failFirst === true && missionId === failing ? 'failed' : 'completed'),
       retry: async (compare, slot) => {
         calls.push(`retry:${compare.compareId}:${slot}`)
@@ -105,6 +118,25 @@ describe('a comparison run again', { timeout: 20_000 }, () => {
     // One after another: each run begins only once the last one's judge was asked.
     const order = calls.filter((call) => call.startsWith('begin:') || call.startsWith('judge:')).map((call) => call.split(':')[0])
     expect(order).toEqual(['begin', 'judge', 'begin', 'judge', 'begin', 'judge'])
+  })
+
+  it('judges each run again by the same three judges when three voted, and waits for all three before the next run', async () => {
+    const LING: CompareRoute = { runtime: 'opencode', model: 'opencode/ling-3.1-flash-free', label: 'Ling 3.1' }
+    const NEMO: CompareRoute = { runtime: 'opencode', model: 'opencode/nemotron-3-ultra-free', label: 'Nemotron' }
+    const { compares, origin, reruns, calls, finished } = await setUp({ panel: [LING, NEMO], slowPanel: true })
+    await reruns.start(origin.compareId, 3)
+    await finished()
+    const ids = (await compares.get(origin.compareId))?.reruns ?? []
+    expect(ids).toHaveLength(3)
+    for (const rerunId of ids) {
+      expect(calls).toContain(`panel:${rerunId}:${LING.model},${NEMO.model}`)
+      expect((await compares.get(rerunId))?.judge?.panel?.map((member) => member.route.model)).toEqual([LING.model, NEMO.model])
+    }
+    // The second run begins only after the first run's slow panel judges were waited for.
+    const begins = calls.flatMap((call, index) => (call.startsWith('begin:') ? [index] : []))
+    const firstWait = calls.findIndex((call) => call.startsWith('waited:'))
+    expect(firstWait).toBeGreaterThan(-1)
+    expect(firstWait).toBeLessThan(begins[1] ?? -1)
   })
 
   it('starts a run again of a comparison that changes files from the commit the first one started on', async () => {
