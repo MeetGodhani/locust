@@ -6649,6 +6649,8 @@ if (!ownsSingleInstanceLock) {
       },
       tell: (update) => sendToWindow({ kind: 'compare-reruns', compares: update.compares, progress: update.progress })
     })
+    // A run again Locust closed on is over now (0.764): its chip said "waiting" for good.
+    void compareReruns.settleLeftover().catch(() => undefined)
     ipcMain.handle(COMPARE_RERUN_CHANNEL, async (event, compareId: unknown, times: unknown) => {
       if (!fromOwnWindow(event)) return { ok: false, message: 'The request was rejected.' }
       if (typeof compareId !== 'string' || typeof times !== 'number') return { ok: false, message: 'That comparison cannot be run again.' }

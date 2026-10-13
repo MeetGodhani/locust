@@ -23,10 +23,16 @@ export interface CompareReruns {
   /** The runs stop: the one under way is stopped where it is, and no more begin. */
   stop(originId: string): void
   progress(): readonly RerunProgress[]
+  /**
+   * At a start (0.764): a batch is held in memory only, so a run Locust closed on was neither running nor over -- its
+   * chip said "waiting" for good. Each run again not yet over, with nothing of it running here, is over now: its copies
+   * removed and settled, so it reads as scored, or as not scored and why.
+   */
+  settleLeftover(): Promise<void>
 }
 
 export function createCompareReruns(options: {
-  readonly compares: Pick<CompareStore, 'get' | 'create' | 'addRerun' | 'settle'>
+  readonly compares: Pick<CompareStore, 'list' | 'get' | 'create' | 'addRerun' | 'settle'>
   /** Every column asked the question (index.ts askEveryColumn); a column that cannot start says so in its place. */
   readonly begin: (compare: PublicCompare) => Promise<void>
   /** The judge asked (index.ts judgeCompare): undefined once it started, else why it did not. */
@@ -155,6 +161,18 @@ export function createCompareReruns(options: {
       const batch = batches.get(originId)
       if (batch !== undefined) batch.stopped = true
     },
-    progress
+    progress,
+    settleLeftover: async () => {
+      const running = new Set([...batches.values()].flatMap((batch) => (batch.progress.compareId === undefined ? [] : [batch.progress.compareId])))
+      for (const compare of await store.list().catch(() => [] as readonly PublicCompare[])) {
+        if (compare.rerunOf === undefined || compare.settled === true || running.has(compare.compareId)) continue
+        const ids = [...compare.slots.flatMap((column) => column.missionIds), ...(compare.judge?.missionIds ?? [])]
+        // A turn that outlived Locust (a background run) is left to finish; the next start looks again.
+        if (ids.some((id) => options.live(id))) continue
+        await options.tidy(compare).catch(() => undefined)
+        const over = await store.settle(compare.compareId).catch(() => undefined)
+        if (over !== undefined) tell([over])
+      }
+    }
   }
 }

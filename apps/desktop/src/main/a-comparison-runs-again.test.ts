@@ -177,6 +177,20 @@ describe('a comparison run again', { timeout: 20_000 }, () => {
     expect(rerunRefusalOf(origin)).toBeUndefined()
   })
 
+  it('settles at a start a run Locust closed on, but not one whose turn is still going', async () => {
+    const { compares, origin, reruns, calls, live } = await setUp()
+    // As a batch left them when Locust closed: two runs again begun, neither over.
+    const left = await compares.create({ teammateId: 'tm_wren', prompt: origin.prompt, routes: ROUTES, rerunOf: origin.compareId })
+    const going = await compares.create({ teammateId: 'tm_wren', prompt: origin.prompt, routes: ROUTES, rerunOf: origin.compareId })
+    await compares.addTurn(going.compareId, 'a', 'mission_still_going')
+    live.add('mission_still_going')
+    await reruns.settleLeftover()
+    expect((await compares.get(left.compareId))?.settled).toBe(true)
+    expect(calls).toContain(`tidy:${left.compareId}`)
+    expect((await compares.get(going.compareId))?.settled).toBeUndefined()
+    expect((await compares.get(origin.compareId))?.settled).toBeUndefined()
+  })
+
   it('keeps its runs again out of the conversation list, and a settled one claims no copies', async () => {
     const { compares, origin, reruns, finished } = await setUp({ changes: true })
     await reruns.start(origin.compareId, 1)
