@@ -137,7 +137,7 @@ export function CompareBenchmark({ view }: { readonly view: BenchmarkView }): Re
       <div className="lc-benchmark__runs" aria-label="Its runs">
         {view.runs.map((run, index) => (
           <button key={run.compareId} type="button" className="lc-benchmark__run" onClick={() => view.onOpenRun(run.compareId)}>
-            <span className="lc-benchmark__runname">{index === 0 ? 'Run 1 · this one' : `Run ${String(index + 1)}`}</span>
+            <span>{index === 0 ? 'Run 1 · this one' : `Run ${String(index + 1)}`}</span>
             <span className="lc-benchmark__runstate lc-mono">{run.state}</span>
           </button>
         ))}
