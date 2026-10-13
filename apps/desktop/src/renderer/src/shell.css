@@ -21932,10 +21932,32 @@ textarea.lc-compare__judgecriteria {
   color: var(--lc-text-muted);
 }
 
+/* The message's label, and Write it from the changes at the row's end (0.771, shared/commit-draft.ts). */
+.lc-commit__labelrow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--lc-space-3);
+}
+
+.lc-commit__labelrow .lc-commit__link {
+  font-size: var(--lc-text-description);
+}
+
+.lc-commit__link:disabled {
+  color: var(--lc-text-muted);
+  text-decoration: none;
+  cursor: default;
+}
+
 .lc-commit__message {
   width: 100%;
   box-sizing: border-box;
   resize: vertical;
+  /* As tall as the message (0.771): one written from the changes is read whole, not scrolled in four rows. */
+  field-sizing: content;
+  min-height: calc(4lh + 18px);
+  max-height: min(50vh, calc(18lh + 18px));
   padding: 8px 10px;
   border: 1px solid var(--lc-border-card);
   border-radius: var(--lc-radius-button);

@@ -484,6 +484,8 @@ import { decideRoutineRecovery } from './routine-recovery-ipc.js'
 import { parsedMissionMode } from './mission-mode.js'
 import { createPdfReadings, isPdfPath } from './pdf-reading.js'
 import { createViewPdfReader } from './pdf-window.js'
+import { createCommitDraftRuns } from './commit-draft-runs.js'
+import { COMMIT_DRAFT_CHANNEL, COMMIT_DRAFT_RUNS_CHANNEL, commitDraftPrompt, draftedCommitMessage, type CommitDraftResponse } from '../shared/commit-draft.js'
 import { createViewDiagramDrawer, diagramViewOn } from './diagram-view.js'
 import { keptDiagrams } from './diagrams.js'
 import { DIAGRAM_DRAW_CHANNEL } from '../shared/diagram.js'
@@ -2784,6 +2786,55 @@ if (!ownsSingleInstanceLock) {
     )
     // Commit (0.680): the open folder only -- no path crosses the bridge, and the commit is the person's press.
     const folderCommits = createFolderCommits()
+    /*
+     * A COMMIT MESSAGE WRITTEN FROM THE CHANGES (0.771, shared/commit-draft.ts): one short read-only run on the route
+     * of the conversation's latest turn -- the teammate that made the changes -- given what a commit would take,
+     * in a slot of its own, never a conversation (commit-draft-runs.ts). Answered once it is done, with the message
+     * for the box; the commit is still the person's press.
+     */
+    const commitDraftRuns = createCommitDraftRuns(join(app.getPath('userData'), 'commit-draft-runs.json'))
+    ipcMain.handle(COMMIT_DRAFT_RUNS_CHANNEL, async (event) => (fromOwnWindow(event) ? commitDraftRuns.list().catch(() => []) : []))
+    ipcMain.handle(COMMIT_DRAFT_CHANNEL, async (event, of: unknown, asks: unknown): Promise<CommitDraftResponse> => {
+      const kept = 'The message you had is still in the box.'
+      const no = (why: string): CommitDraftResponse => ({ ok: false, message: `${why} ${kept}` })
+      if (!fromOwnWindow(event)) return no('That request was not from this window.')
+      const ofId = typeof of === 'string' ? of : undefined
+      const turn = ofId === undefined ? undefined : await missionLedger.getMission(ofId).catch(() => undefined)
+      if (ofId === undefined || turn === undefined) return no('That conversation is not in the record.')
+      const pending = await folderCommits.pending(workspacePath).catch(() => undefined)
+      if (pending === undefined) return no('There is nothing here to commit now.')
+      const words = Array.isArray(asks) ? asks.filter((ask): ask is string => typeof ask === 'string').slice(-5) : []
+      const effort = (turn.metadata as { readonly effort?: unknown }).effort
+      const response = await codexMissions.start(
+        commitDraftPrompt(pending, words),
+        turn.metadata.runtime,
+        'ask',
+        { ...(turn.metadata.model === 'account-default' ? {} : { model: turn.metadata.model }), ...(typeof effort === 'string' ? { effort } : {}) },
+        sendToWindow,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        { key: `commit-draft:${ofId}` }
+      )
+      if (!response.ok) return no(response.error.code === 'RUN_ALREADY_ACTIVE' ? 'A message is being written already.' : response.error.message)
+      const { missionId, runId } = response.data
+      // Kept before it is drawn anywhere, so the window never lists it among the conversations.
+      await commitDraftRuns.add(missionId).catch(() => undefined)
+      sendToWindow({ kind: 'mission-started', runId, missionId, prompt: 'Write the commit message', data: response.data, startedBy: { kind: 'commit-draft' } })
+      for (let waited = 0; waited < 180 && codexMissions.hasMission(missionId); waited += 1) await new Promise((done) => setTimeout(done, 1_000))
+      if (codexMissions.hasMission(missionId)) {
+        codexMissions.cancel(runId)
+        return no('It took too long to write.')
+      }
+      const recorded = await missionLedger.getMission(missionId).catch(() => undefined)
+      const tracker = createTranscriptTracker()
+      tracker.track(recorded?.events ?? [])
+      const message = draftedCommitMessage(tracker.latestFinal ?? '')
+      return message === undefined ? no('It did not answer with a message.') : { ok: true, message }
+    })
     ipcMain.handle(FOLDER_CHANGES_CHANNEL, (event) =>
       fromOwnWindow(event)
         ? folderCommits.changes(workspacePath).catch((): FolderChanges => ({ kind: 'none', why: 'not-a-repository' }))

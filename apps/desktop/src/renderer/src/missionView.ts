@@ -5771,6 +5771,8 @@ export type LiveStarter =
   | { readonly kind: 'judge'; readonly compareId: string }
   // One of Scout's looks (0.756): its answer fills in the cards on Home, never a conversation.
   | { readonly kind: 'scout' }
+  // A commit message written from the changes (0.771): its answer fills the Commit box, never a conversation.
+  | { readonly kind: 'commit-draft' }
 
 /**
  * What the person ASKED FOR, when a button sent a brief in their name (A1.2).

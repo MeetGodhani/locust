@@ -12,6 +12,10 @@ import { Icon } from './Icon.js'
  * conversation's header, only while the folder has something uncommitted and nothing is running: the files
  * a commit would take, a message drafted from what was asked, and Commit -- or Commit and push, or Commit
  * and open a pull request, when the folder can. main/folder-commit.ts does the git, as the person.
+ *
+ * WRITE IT FROM THE CHANGES (0.771, shared/commit-draft.ts): the teammate that made them writes the message from
+ * the diff instead -- the subject a pull request takes as its title, the body as its description -- into the box,
+ * to be read and changed before Commit.
  */
 const SHOWN_FILES = 6
 const STATUS_LETTER = { added: 'A', modified: 'M', deleted: 'D', renamed: 'R' } as const
@@ -19,7 +23,8 @@ const STATUS_LETTER = { added: 'A', modified: 'M', deleted: 'D', renamed: 'R' } 
 export function CommitChanges({
   running,
   asks,
-  teammate
+  teammate,
+  of
 }: {
   /** A run is live in this conversation: nothing is offered until it ends, so half a turn is never committed. */
   readonly running: boolean
@@ -27,6 +32,8 @@ export function CommitChanges({
   readonly asks: readonly string[]
   /** The teammate whose conversation this is, named in the draft. */
   readonly teammate?: string
+  /** The conversation's latest turn: its teammate writes the message from the changes (0.771). */
+  readonly of?: string
 }): ReactElement | null {
   const [changes, setChanges] = useState<FolderChanges>()
   const [open, setOpen] = useState(false)
@@ -35,8 +42,22 @@ export function CommitChanges({
   const [result, setResult] = useState<CommitResult>()
   /** Every file listed, not the first six (Sol's review: the rest could not be seen before committing). */
   const [allShown, setAllShown] = useState(false)
+  const [drafting, setDrafting] = useState(false)
+  /** Why the teammate's message is not in the box, when it is not. */
+  const [draftSaid, setDraftSaid] = useState<string>()
   const panel = useRef<HTMLDivElement>(null)
 
+  const draft = async (): Promise<void> => {
+    const bridge = window.desktop
+    if (of === undefined || bridge?.draftCommitMessage === undefined) return
+    setDrafting(true)
+    setDraftSaid(undefined)
+    const answer = await bridge.draftCommitMessage(of, asks).catch(() => ({ ok: false as const, message: 'Locust could not ask for it. The message you had is still in the box.' }))
+    setDrafting(false)
+    // Who made the changes stays on the commit, as the drafted message says it (commitDraft's trailer).
+    if (answer.ok) setMessage(teammate === undefined ? answer.message : `${answer.message}\n\nLocust-Teammate: ${teammate}`)
+    else setDraftSaid(answer.message)
+  }
   const read = useCallback(async (): Promise<void> => {
     const answer = await window.desktop?.folderChanges().catch(() => undefined)
     setChanges(answer)
@@ -53,7 +74,7 @@ export function CommitChanges({
   useEffect(() => {
     if (!open) return
     const away = (event: MouseEvent): void => {
-      if (working !== undefined) return
+      if (working !== undefined || drafting) return
       const target = event.target as Node | null
       if (target !== null && panel.current?.parentElement?.contains(target) === true) return
       setOpen(false)
@@ -98,6 +119,7 @@ export function CommitChanges({
           }
           setResult(undefined)
           setAllShown(false)
+          setDraftSaid(undefined)
           setMessage(commitDraft({ asks, ...(teammate === undefined ? {} : { teammate }) }))
           setOpen(true)
           void read()
@@ -138,27 +160,35 @@ export function CommitChanges({
                   </li>
                 )}
               </ul>
-              <label className="lc-commit__label" htmlFor="lc-commit-message">Message</label>
+              <div className="lc-commit__labelrow">
+                <label className="lc-commit__label" htmlFor="lc-commit-message">Message</label>
+                {of !== undefined && (
+                  <button type="button" className="lc-commit__link" disabled={drafting || working !== undefined} onClick={() => void draft()}>
+                    {drafting ? `${teammate ?? 'Your teammate'} is writing it…` : 'Write it from the changes'}
+                  </button>
+                )}
+              </div>
               <textarea
                 id="lc-commit-message"
                 className="lc-commit__message"
                 rows={4}
                 value={message}
                 spellCheck
-                disabled={working !== undefined}
+                disabled={working !== undefined || drafting}
                 onChange={(event) => setMessage(event.target.value)}
               />
+              {draftSaid !== undefined && <p className="lc-commit__said lc-commit__said--refused">{draftSaid}</p>}
               <div className="lc-commit__actions">
-                <button type="button" className="lc-primarybutton" disabled={working !== undefined || message.trim().length === 0} onClick={() => void go('commit')}>
+                <button type="button" className="lc-primarybutton" disabled={working !== undefined || drafting || message.trim().length === 0} onClick={() => void go('commit')}>
                   {working === 'commit' ? 'Committing…' : 'Commit'}
                 </button>
                 {changes.remote !== undefined && (
-                  <button type="button" className="lc-button" disabled={working !== undefined || message.trim().length === 0} onClick={() => void go('push')}>
+                  <button type="button" className="lc-button" disabled={working !== undefined || drafting || message.trim().length === 0} onClick={() => void go('push')}>
                     {working === 'push' ? 'Pushing…' : 'Commit and push'}
                   </button>
                 )}
                 {changes.remote?.pullRequests === true && (
-                  <button type="button" className="lc-button" disabled={working !== undefined || message.trim().length === 0} onClick={() => void go('pull-request')}>
+                  <button type="button" className="lc-button" disabled={working !== undefined || drafting || message.trim().length === 0} onClick={() => void go('pull-request')}>
                     {working === 'pull-request' ? 'Opening…' : 'Open a pull request'}
                   </button>
                 )}

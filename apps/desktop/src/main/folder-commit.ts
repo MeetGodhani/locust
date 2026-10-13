@@ -9,6 +9,7 @@ import { blockedSentence } from '../shared/folder-commit.js'
 import { githubRepoOf } from './cloud-tasks.js'
 import { PULL_REQUEST_FIELDS, pullRequestOf, type FolderPullRequest } from '../shared/pull-request.js'
 import { FOLDER_DIFF_MAX_BYTES, FOLDER_DIFF_MAX_NEW_FILE_BYTES, FOLDER_DIFF_MAX_NEW_FILES, type FolderCommitRow, type FolderDiff } from '../shared/folder-diff.js'
+import { MAX_DRAFT_DIFF_CHARS, type PendingChanges } from '../shared/commit-draft.js'
 
 /**
  * COMMIT, PUSH, PULL REQUEST (0.680): the folder's changes, saved in git by
@@ -367,7 +368,45 @@ export function createFolderCommits(options: FolderCommitOptions = {}) {
     return { kind: 'diff', base, branch, text: over ? text.slice(0, text.lastIndexOf('\ndiff --git ', FOLDER_DIFF_MAX_BYTES) + 1 || FOLDER_DIFF_MAX_BYTES) : text, truncated: over || cut, commits, showing: one ?? 'all' }
   }
 
-  return { changes, commit, diff, forgetSignIn, pullRequest }
+  /**
+   * What a commit would take, as text a model can read (0.771, shared/commit-draft.ts): the uncommitted changes
+   * against HEAD, new files whole, `.locust/` never; every file changed, even when the changes are cut; and the
+   * subjects of the last commits, so a drafted message is written as this project writes its own.
+   */
+  const pending = async (folder: string): Promise<PendingChanges | undefined> => {
+    const now = await changes(folder)
+    if (now.kind !== 'changes') return undefined
+    const printed = (args: readonly string[]): Promise<string> =>
+      runGit(args, folder).catch((error: unknown) => String((error as { stdout?: unknown }).stdout ?? ''))
+    const plainPaths = ['-c', 'core.quotePath=false'] as const
+    const born = await runGit(['rev-parse', '--verify', '-q', 'HEAD'], folder).then(() => true, () => false)
+    let text = born ? await printed([...plainPaths, 'diff', '--no-color', '--no-ext-diff', '-M', 'HEAD', ...NOT_LOCUST]) : ''
+    const counted = born ? (await printed([...plainPaths, 'diff', '--stat=100', '--no-color', '-M', 'HEAD', ...NOT_LOCUST])).trimEnd() : ''
+    const others = (await runGit(['ls-files', '--others', '--exclude-standard', '-z', ...NOT_LOCUST], folder).catch(() => ''))
+      .split('\0')
+      .filter((path) => path.length > 0)
+    const shown = others.slice(0, FOLDER_DIFF_MAX_NEW_FILES)
+    for (const path of shown) {
+      if (text.length >= MAX_DRAFT_DIFF_CHARS) break
+      const size = await stat(join(folder, path)).then((info) => info.size, () => Infinity)
+      if (size > FOLDER_DIFF_MAX_NEW_FILE_BYTES) continue
+      text += await readFile(join(folder, path)).then((bytes) => newFileDiff(path, bytes), () => '')
+    }
+    const cut = text.length > MAX_DRAFT_DIFF_CHARS || others.length > shown.length
+    const recent = (await runGit(['log', '--max-count=8', '--format=%s'], folder).catch(() => ''))
+      .split('\n')
+      .map((subject) => subject.trim())
+      .filter((subject) => subject.length > 0)
+    const fresh = others.map((path) => ` ${path} (new)`)
+    return {
+      diff: cut ? text.slice(0, MAX_DRAFT_DIFF_CHARS) : text,
+      stat: [counted, ...fresh].filter((line) => line.length > 0).join('\n'),
+      cut,
+      recent
+    }
+  }
+
+  return { changes, commit, diff, forgetSignIn, pending, pullRequest }
 }
 
 export type FolderCommits = ReturnType<typeof createFolderCommits>

@@ -3308,6 +3308,8 @@ export type CodexMissionUpdate =
         | { readonly kind: 'judge'; readonly compareId: string }
         /** One of Scout's looks (0.756): its answer fills in the cards on Home, never drawn as a conversation. */
         | { readonly kind: 'scout' }
+        /** A commit message written from the changes (0.771): its answer fills the Commit box, never a conversation. */
+        | { readonly kind: 'commit-draft' }
       /**
        * Present when this run is the newest turn of the teammate's hub (see
        * `PublicTeammate.hubMissionId`), so the roster on screen learns it
@@ -3881,6 +3883,10 @@ export interface DesktopApi {
   pageUrlFor(path: string, column?: { readonly compareId: string; readonly slot: string }): Promise<WorkspacePageResponse>
   /** The address a reply's whole web page runs at (0.553). */
   replyPageUrl(html: string): Promise<WorkspacePageResponse>
+  /** A commit message written from the changes by the teammate of conversation `of` (0.771, shared/commit-draft.ts). */
+  draftCommitMessage(of: string, asks: readonly string[]): Promise<import('./commit-draft.js').CommitDraftResponse>
+  /** The runs that wrote commit messages: never listed as conversations. */
+  commitDraftRuns(): Promise<readonly string[]>
   /** A reply's Mermaid diagram as a picture, drawn in a view no one sees (0.770, shared/diagram.ts). */
   drawDiagram(source: string): Promise<DiagramResponse>
   /** Each runtime's own slash commands, as its CLI last listed them (0.426). */

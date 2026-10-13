@@ -1864,13 +1864,18 @@ export default function App(): ReactElement {
   const scout = useScoutState()
   const scoutLookKey = (scout?.lookIds ?? []).join(' ')
   // A comparison's runs again (0.763) too: the comparison they run again shows them, as its benchmark.
+  // And the runs that wrote commit messages (0.771): their answer is the Commit box's.
+  const [commitDraftIds, setCommitDraftIds] = useState<readonly string[]>([])
+  useEffect(() => {
+    void window.desktop?.commitDraftRuns?.().then(setCommitDraftIds).catch(() => undefined)
+  }, [])
   const hiddenRunIds = useMemo(
-    () => new Set([...judgeMissionIds(compares), ...rerunMissionIds(compares), ...(scoutLookKey.length === 0 ? [] : scoutLookKey.split(' '))]),
-    [compares, scoutLookKey]
+    () => new Set([...judgeMissionIds(compares), ...rerunMissionIds(compares), ...(scoutLookKey.length === 0 ? [] : scoutLookKey.split(' ')), ...commitDraftIds]),
+    [compares, scoutLookKey, commitDraftIds]
   )
   const rerunCompareIds = useMemo(() => new Set(compares.flatMap((compare) => (compare.rerunOf === undefined ? [] : [compare.compareId]))), [compares])
   const isHiddenRun = (startedBy: { readonly kind: string } | undefined, missionId: string | undefined): boolean =>
-    startedBy?.kind === 'judge' || startedBy?.kind === 'scout' || (missionId !== undefined && hiddenRunIds.has(missionId)) ||
+    startedBy?.kind === 'judge' || startedBy?.kind === 'scout' || startedBy?.kind === 'commit-draft' || (missionId !== undefined && hiddenRunIds.has(missionId)) ||
     (startedBy?.kind === 'compare' && rerunCompareIds.has((startedBy as { readonly compareId?: string }).compareId ?? ''))
   const [compareProblem, setCompareProblem] = useState<string>()
   /** Home's Compare models opens the composer's picker (0.442). */
@@ -3017,6 +3022,11 @@ export default function App(): ReactElement {
         // A routine that started on its own: the Team card's run count and
         // next run moved on disk, and nobody pressed anything to refresh them.
         if (update.startedBy?.kind === 'routine') void reloadRoutines()
+        // A commit message being written (0.771): hidden from this moment, and once it is in the record.
+        if (update.startedBy?.kind === 'commit-draft') {
+          const drafted = update.missionId
+          setCommitDraftIds((ids) => (ids.includes(drafted) ? ids : [...ids, drafted]))
+        }
         /*
          * A room start, so re-read the rooms NOW.
          *
@@ -9086,6 +9096,7 @@ export default function App(): ReactElement {
                   {workspacePath !== undefined && pickedTeammate?.worktree !== true && liveRun !== undefined && (
                     <CommitChanges
                       running={running}
+                      {...((liveRun.data?.missionId ?? liveRun.restoredMission?.missionId) === undefined ? {} : { of: (liveRun.data?.missionId ?? liveRun.restoredMission?.missionId)! })}
                       asks={[...(liveRun.earlierTurns ?? []).map((turn) => turn.prompt), liveRun.prompt].map((prompt) => splitAttachments(prompt).text).slice(-5)}
                       {...(pickedTeammate === undefined ? {} : { teammate: pickedTeammate.name })}
                     />
