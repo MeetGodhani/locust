@@ -11,6 +11,12 @@ Settings shows this file as What's new. An entry may group its changes under
 about when they arrive on it carries `<!-- big -->` on the line under its
 heading: the home screen then shows it once, as a splash.
 
+## 0.772.0 - 2026-10-14
+
+### Fixed
+
+- **Muse Code says when it can't run commands.** On a computer where Muse Code's own Windows sandbox was never set up, every command it tried failed before it started, and all you saw was a row of failures. The conversation now says so once, in a sentence, with the command that sets it up: `muse sandbox windows setup`.
+
 ## 0.771.0 - 2026-10-13
 
 ### New
