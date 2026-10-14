@@ -14,6 +14,8 @@
 // voxel (2026-10-13, Colin: "yeah we can run those areana runs"; the lineup and prompt from Beta/Promo): six models
 // at Max -- claude = Opus 5.5, Sonnet 5.5, Fable 5.1; muse-sol = Muse Wonder 1.0 (Muse Code) + GPT-6.1-Sol; astra =
 // GPT-6-Astra beside Muse Spark Free, the filler a Blind compare needs, whose work is NOT counted. Run with --effort max.
+// argon = Gemini 4 Argon through Cursor (on Colin's Cursor plan, "nah its just plan usage"), at High, the most it
+// offers there, beside the same filler. A Cursor run rewrites Cursor's default model: save it before, put it back after.
 //
 // trails (the bot tournament): the folder every column starts from is a fresh copy of the kit's files, no git,
 // each checked against LOCKED.md first; the other rounds start from an empty folder.
@@ -31,7 +33,7 @@ const packaged = arg('--packaged')
 const SEND = process.argv.includes('--send')
 const SET = arg('--set')
 const ROUND = arg('--round')
-const SETS = ['trio', 'pair', 'fable', 'claude', 'muse-sol', 'astra']
+const SETS = ['trio', 'pair', 'fable', 'claude', 'muse-sol', 'astra', 'argon']
 if (!SETS.includes(SET ?? '')) throw new Error(`--set ${SETS.join(', ')}`)
 /** The effort every column is set to: High, as the earlier rounds ran, or Max. */
 const EFFORT = arg('--effort') ?? 'high'
@@ -75,13 +77,18 @@ const WANT = SET === 'trio'
           ]
         : SET === 'muse-sol'
           ? [
-              { search: 'muse wonder', row: /^Muse Wonder 1\.0$/i, runtime: /^Muse/i },
+              { search: 'muse wonder', row: /^(Muse )?Wonder 1\.0$/i, runtime: /^Muse/i },
               { search: 'sol', row: /^GPT-6\.1-Sol$/i, runtime: /^Codex/i }
             ]
-          : [
-              { search: 'astra', row: /^GPT-6-Astra$/i, runtime: /^Codex/i },
-              { search: 'muse spark', row: /^Muse Spark 1\.3 Contributor Free$/i, runtime: /^OpenCode/i }
-            ]
+          : SET === 'astra'
+            ? [
+                { search: 'astra', row: /^GPT-6-Astra$/i, runtime: /^Codex/i },
+                { search: 'muse spark', row: /^Muse Spark 1\.3 Contributor Free$/i, runtime: /^OpenCode/i }
+              ]
+            : [
+                { search: 'argon', row: /^Gemini 4 Argon$/i, runtime: /^Cursor/i },
+                { search: 'muse spark', row: /^Muse Spark 1\.3 Contributor Free$/i, runtime: /^OpenCode/i }
+              ]
 
 const notes = []
 const note = (line) => { notes.push(line); say(`  ${line}`) }
@@ -102,7 +109,8 @@ if (ROUND === 'trails') {
 }
 
 const drive = await startDrive({
-  name: `arena-${ROUND}-${SET}-${SEND ? 'run' : 'look'}`, port: 9876, workspace, outPath: OUT,
+  // A port of each set's own, so one set can be looked at while another runs.
+  name: `arena-${ROUND}-${SET}-${SEND ? 'run' : 'look'}`, port: 9876 + SETS.indexOf(SET), workspace, outPath: OUT,
   ...(packaged === undefined ? {} : { packaged }),
   ...(SEND ? { spends: true } : { sendsNothing: true }),
   seed: { schemaVersion: 1, teammates: [], missionOwners: {}, settings: { swarm: false, relay: false, relayHopCap: 2, memoryMode: 'off', autoMode: false } }
@@ -160,7 +168,9 @@ try {
       return JSON.stringify({ picked: row === undefined ? null : row.group + ' / ' + row.label + ' / ' + row.detail, all: all.map(({ el, ...rest }) => rest) })
     })()`)))
   let pending = [...WANT.entries()]
-  for (let pass = 1; pass <= 2 && pending.length > 0; pass += 1) {
+  // Up to four passes, ten seconds apart: an agent's catalogue can still be loading (Muse Code's was, 2026-10-13).
+  for (let pass = 1; pass <= 4 && pending.length > 0; pass += 1) {
+    if (pass > 1) await sleep(10_000)
     const still = []
     for (const [index, want] of pending) {
       const one = await pickColumn(index, want)
@@ -220,7 +230,7 @@ try {
   note(`columns as set: ${JSON.stringify(columns)}`)
   await shot('set-up.png')
   // Nothing is spent unless every column is exactly what was asked, and no limit is used up.
-  const ok = columns.length === WANT.length && WANT.every((want, at) => want.row.test(columns[at]?.model ?? '') && want.runtime.test(columns[at]?.title ?? '') && (new RegExp(`: ${EFFORT_WORD}$`).test(columns[at]?.effort ?? '') || (want.runtime.test('OpenCode') && (columns[at]?.effort ?? '') === ''))) && /^Auto/.test(JSON.parse(mode).mode) && /Blind/.test(JSON.parse(mode).chat)
+  const ok = columns.length === WANT.length && WANT.every((want, at) => want.row.test(columns[at]?.model ?? '') && want.runtime.test(columns[at]?.title ?? '') && (new RegExp(`: ${EFFORT_WORD}$`).test(columns[at]?.effort ?? '') || (want.runtime.test('OpenCode') && (EFFORT === 'max' || (columns[at]?.effort ?? '') === '')))) && /^Auto/.test(JSON.parse(mode).mode) && /Blind/.test(JSON.parse(mode).chat)
   const spent = columns.some((column) => /limit is used up/i.test(column.title))
   note(ok ? 'SET UP AS ASKED' : 'NOT SET UP AS ASKED: nothing sent')
   if (spent) note('A LIMIT IS USED UP: nothing sent')
@@ -239,8 +249,9 @@ try {
     const doneAt = {}
     const denied = []
     let shotRunning = false
-    // Two hours at most: a bot's author may test for a long time.
-    for (let second = 0; second < 7200; second += 2) {
+    // Two hours at most at High, six at Max: a column is never stopped halfway (Colin, 2026-10-13: "certainly dont
+    // stop halfway through"); the voxel round's Claude columns at Max were still testing at 90 min.
+    for (let second = 0; second < (EFFORT === 'max' ? 6 * 3600 : 7200); second += 2) {
       await sleep(2000)
       const view = JSON.parse(String(await drive.evaluate(`JSON.stringify({
         states: [...document.querySelectorAll('.lc-compare__state')].map((el) => el.textContent.trim()),
