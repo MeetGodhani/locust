@@ -12,7 +12,8 @@
 // before Keep and before anything opens a page.
 //
 // voxel (2026-10-13, Colin: "yeah we can run those areana runs"; the lineup and prompt from Beta/Promo): six models
-// at Max -- claude = Opus 5.5, Sonnet 5.5, Fable 5.1; muse-sol = Muse Wonder 1.0 (Muse Code) + GPT-6.1-Sol; astra =
+// at Max -- claude = Opus 5.5, Sonnet 5.5 (it held Fable 5.1 too in that round, which was wrong: a correction sent
+// three hours before the run said High and no Fable, and was missed); muse-sol = Muse Wonder 1.0 (Muse Code) + GPT-6.1-Sol; astra =
 // GPT-6-Astra beside Muse Spark Free, the filler a Blind compare needs, whose work is NOT counted. Run with --effort max.
 // argon = Gemini 4 Argon through Cursor (on Colin's Cursor plan, "nah its just plan usage"), at High, the most it
 // offers there, beside the same filler. A Cursor run rewrites Cursor's default model: save it before, put it back after.
@@ -72,8 +73,7 @@ const WANT = SET === 'trio'
       : SET === 'claude'
         ? [
             { search: 'opus', row: /^Opus 5\.5$/i, runtime: /^Claude Code/i },
-            { search: 'sonnet', row: /^Sonnet 5\.5$/i, runtime: /^Claude Code/i },
-            { search: 'fable', row: /^Fable 5\.1$/i, runtime: /^Claude Code/i }
+            { search: 'sonnet', row: /^Sonnet 5\.5$/i, runtime: /^Claude Code/i }
           ]
         : SET === 'muse-sol'
           ? [
@@ -89,6 +89,12 @@ const WANT = SET === 'trio'
                 { search: 'argon', row: /^Gemini 4 Argon$/i, runtime: /^Cursor/i },
                 { search: 'muse spark', row: /^Muse Spark 1\.3 Contributor Free$/i, runtime: /^OpenCode/i }
               ]
+
+// Fable never shares a compare with another Claude model (Colin, 2026-10-13: "swore that we agreed to not run fable
+// with the other agent"). The voxel round's claude set did, from a relayed lineup; no set may again.
+if (WANT.some((one) => one.search === 'fable') && WANT.some((one) => one.search !== 'fable' && one.runtime.test('Claude Code'))) {
+  throw new Error(`set ${SET} puts Fable beside another Claude model`)
+}
 
 const notes = []
 const note = (line) => { notes.push(line); say(`  ${line}`) }
