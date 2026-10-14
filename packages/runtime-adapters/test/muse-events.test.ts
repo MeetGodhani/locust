@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-import { createMuseEventNormalizer, MUSE_BILLING_SENTENCE, museSessionIdOf, museTaskIsInternal } from "../src/muse-events.js";
+import { createMuseEventNormalizer, MUSE_BILLING_SENTENCE, MUSE_SANDBOX_SENTENCE, museSessionIdOf, museTaskIsInternal } from "../src/muse-events.js";
 import type { NormalizedRuntimeEvent } from "../src/codex-events.js";
 import type { RuntimeProcessCompletion } from "../src/process-runner.js";
 
@@ -217,6 +217,38 @@ describe("a Muse task that is not Muse's own machinery", () => {
     expect(
       (events.find((event) => event.type === "tool.failed")!.payload as { status?: string }).status,
     ).toBe("permission denied");
+  });
+
+  it("says once, in a sentence, that Muse's own sandbox is not set up (2026-10-13, the voxel round)", () => {
+    // Muse Wonder's real reason, as its run's tool.failed rows carried it.
+    const REASON = "environment failure: sandbox enforcement unavailable: windows_elevated setup_required: sandbox users are not ready\nThe execution environment is broken: the command was never started and every later command will fail the same way.";
+    const muse = normalizer();
+    const events = [
+      ...muse.accept(lifecycle("proposed", { task_kind: "tool.powershell" }, 1)),
+      ...muse.accept(lifecycle("started", {}, 2)),
+      ...muse.accept(lifecycle("failed", { reason: REASON }, 3)),
+      ...muse.accept(lifecycle("started", {}, 4)),
+      ...muse.accept(lifecycle("failed", { reason: REASON }, 5)),
+      ...muse.accept(record("run.terminal.completed", { terminal: "completed", text: "done", reason: null }, 6)),
+      ...muse.finish(completion()),
+    ];
+    // Each row still fails with Muse's own words, and the run that finished is still a finished run.
+    expect(typesOf(events).filter((type) => type === "tool.failed")).toHaveLength(2);
+    expect(typesOf(events)).toContain("run.completed");
+    const said = events.filter((event) => event.type === "adapter.diagnostic" && (event.payload as { code: string }).code === "muse.sandbox_not_set_up");
+    expect(said).toHaveLength(1);
+    expect((said[0]!.payload as { level: string; message: string }).level).toBe("warning");
+    expect((said[0]!.payload as { message: string }).message).toBe(MUSE_SANDBOX_SENTENCE);
+    expect(MUSE_SANDBOX_SENTENCE).toContain("muse sandbox windows setup");
+  });
+
+  it("says nothing about the sandbox for a command that failed some other way", () => {
+    const muse = normalizer();
+    const events = [
+      ...muse.accept(lifecycle("proposed", { task_kind: "tool.powershell" }, 1)),
+      ...muse.accept(lifecycle("failed", { reason: "exit code 1" }, 2)),
+    ];
+    expect(codesOf(events)).not.toContain("muse.sandbox_not_set_up");
   });
 
   it("keeps a long failure reason within what the ledger keeps (2026-10-10 sweep)", () => {

@@ -141,6 +141,20 @@ const MUSE_BILLING_REFUSAL = /\bbilling_error\b|\bAPI error 402\b|billing verifi
 export const MUSE_BILLING_SENTENCE =
   "Meta will not run Muse Code until the account's payment method is verified (API error 402, billing_error), so nothing in this run happened. That is settled in your Meta account, not in Locust.";
 
+/**
+ * Muse's own Windows sandbox, never set up on this computer.
+ *
+ * MEASURED 2026-10-13, muse 1.4.7, Muse Wonder 1.0 in a Blind compare on Auto: every shell command's task failed
+ * "environment failure: sandbox enforcement unavailable: windows_elevated setup_required: sandbox users are not
+ * ready", and `muse sandbox windows check` said `status=setup_required`. The model wrote its page without running
+ * anything, and the person saw only a column of failed rows. Each row keeps Muse's own reason; this says once, in a
+ * sentence, what it means and what fixes it. Whether `setup` asks for an administrator's OK was not tried here.
+ */
+const MUSE_SANDBOX_NOT_SET_UP = /sandbox enforcement unavailable|sandbox users are not ready/i;
+
+export const MUSE_SANDBOX_SENTENCE =
+  "Muse Code can't run commands on this computer yet: its Windows sandbox isn't set up, so every command fails before it starts. Run `muse sandbox windows setup` once in a terminal to set it up; it may ask for an administrator's OK.";
+
 export function createMuseEventNormalizer(
   context: MuseInvocationContext,
 ): MuseEventNormalizer {
@@ -166,6 +180,8 @@ export function createMuseEventNormalizer(
   const taskOperations = new Map<string, string>();
   /** The model calls already said to be tried again, by attempt: each said once. */
   const retriesSaid = new Set<number>();
+  /** Whether the missing sandbox has been said: once a run, however many commands it stops. */
+  let sandboxSaid = false;
 
   const MESSAGE_ITEM = "msg_0";
 
@@ -270,15 +286,16 @@ export function createMuseEventNormalizer(
           ),
         ];
       }
-      return [
-        emit("tool.failed", {
-          ...toolRow(taskId),
-          // The ledger keeps a status of 512 at most; longer, it refused the event and the run ended (2026-10-10 sweep).
-          ...(reason === undefined ? {} : { status: reason.slice(0, 512) }),
-          phase: "completed",
-          evidence,
-        }),
-      ];
+      const failed = emit("tool.failed", {
+        ...toolRow(taskId),
+        // The ledger keeps a status of 512 at most; longer, it refused the event and the run ended (2026-10-10 sweep).
+        ...(reason === undefined ? {} : { status: reason.slice(0, 512) }),
+        phase: "completed",
+        evidence,
+      });
+      if (sandboxSaid || reason === undefined || !MUSE_SANDBOX_NOT_SET_UP.test(reason)) return [failed];
+      sandboxSaid = true;
+      return [failed, diagnostic("warning", "muse.sandbox_not_set_up", MUSE_SANDBOX_SENTENCE, evidence)];
     }
     /*
      * THE REST OF A REAL RUN (MEASURED 2026-10-12, muse 1.4.6, Muse Wonder 1.0 on a paid plan): every one of these
