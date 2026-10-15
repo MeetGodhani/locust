@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
+import { ACP_AGENTS_LIST_CHANNEL, ACP_AGENTS_REMOVE_CHANNEL, ACP_AGENTS_SAVE_CHANNEL, ACP_AGENTS_TEST_CHANNEL } from '../shared/acp-agents.js'
 import { PHONE_FORGET_CHANNEL, PHONE_SET_ENABLED_CHANNEL, PHONE_SETTINGS_CHANNEL } from '../shared/phone.js'
 import { LOCUST_MCP_CLAUDE_APP, LOCUST_MCP_CLAUDE_APP_RESTART, LOCUST_MCP_CLAUDE_APP_SET, LOCUST_MCP_GET, LOCUST_MCP_SET, LOCUST_MCP_SET_OWN_MODE } from '../shared/locust-mcp.js'
 import { VOICE_READY, VOICE_DOWNLOAD, VOICE_TRANSCRIBE, VOICE_CANCEL, VOICE_PROGRESS, VOICE_SETTINGS_READ, VOICE_SETTINGS_SAVE, VOICE_OPENAI_CONSENT } from '../shared/voice.js'
@@ -435,6 +436,12 @@ export type {
 import type { CloudAgent, CloudFolderState, PublicCloudTurn } from '../shared/cloud-computer.js'
 
 const desktopApi: DesktopApi = {
+  acpAgents: {
+    list: () => ipcRenderer.invoke(ACP_AGENTS_LIST_CHANNEL),
+    test: (commandLine) => ipcRenderer.invoke(ACP_AGENTS_TEST_CHANNEL, commandLine),
+    save: (name, commandLine) => ipcRenderer.invoke(ACP_AGENTS_SAVE_CHANNEL, name, commandLine),
+    remove: (id) => ipcRenderer.invoke(ACP_AGENTS_REMOVE_CHANNEL, id)
+  },
   phone: {
     settings: () => ipcRenderer.invoke(PHONE_SETTINGS_CHANNEL),
     setEnabled: (enabled) => ipcRenderer.invoke(PHONE_SET_ENABLED_CHANNEL, enabled),

@@ -27,6 +27,7 @@ import type {
   RuntimeDiagnostic,
   RuntimeDiscovery,
   RuntimeFeature,
+  DiscoveredRuntimeId,
   RuntimeIntegrationId,
   RuntimeIntegrationKind,
   RuntimeModelHints,
@@ -35,7 +36,7 @@ import type {
 import { parseRuntimeVersion } from "./version.js";
 
 interface IntegrationDefinition {
-  readonly id: RuntimeIntegrationId;
+  readonly id: DiscoveredRuntimeId;
   readonly kind: RuntimeIntegrationKind;
   readonly displayName: string;
   readonly commandName: string;
@@ -953,7 +954,7 @@ export async function discoverInstalledRuntimes(
  * checked -- because the one cheap step, finding the executable, is already done.
  */
 export interface RuntimeCheck {
-  readonly id: RuntimeIntegrationId;
+  readonly id: DiscoveredRuntimeId;
   /** The runtime's answer, exactly as `discoverInstalledRuntimes` would carry it. */
   readonly result: Promise<RuntimeDiscovery>;
   /**

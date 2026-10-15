@@ -13,6 +13,7 @@ import type { MissionRuntimeId } from '@teammate/runtime-adapters'
 import { VoiceSettings } from './VoiceSettings.js'
 import { LocustMcpSettings } from './LocustMcpSettings.js'
 import { PhoneSettings } from './PhoneSettings.js'
+import { AcpAgentsSettings } from './AcpAgentsSettings.js'
 import { SETTINGS_PAGES, matchedHeadings, pageMatches } from '../settingsPages.js'
 import { agentCapabilityHeading, agentCapabilityLines } from '../agentCapabilities.js'
 import { AddConnector } from './AddConnector.js'
@@ -2535,6 +2536,30 @@ export function SettingsScreen({
           </div>
           </div>
           </More>
+        </section>
+        )}
+        {shownPage === 'runtimes' && (
+        <section className="lc-settings__section" data-setting="acp-agents">
+          <h2 className="lc-settings__heading">Your own agents</h2>
+          <p className="lc-settings__lede">
+            Any agent that speaks the Agent Client Protocol, added by the command that starts it. It joins every
+            teammate&rsquo;s model list, in a group of its own.
+          </p>
+          <More>
+            <p>
+              Goose, Qwen Code, Kimi CLI, Mistral Vibe, Factory Droid and many more start in this protocol with a
+              command like <span className="lc-mono">goose acp</span> or <span className="lc-mono">qwen --acp</span>;
+              each says which in its own documentation. Install the agent and sign in to it as it asks first.
+            </p>
+            <p>
+              Test starts it in an empty folder, asks its name and the models it offers, and stops it. No message is
+              sent, so nothing is spent. It runs in Approve each: every action it asks to take is a card you answer.
+              Which actions it asks about is the agent&rsquo;s own setting &mdash; OpenCode, for one, changes files
+              without asking unless its permission settings say ask. Locust offers it no files and no terminal of its
+              own, and runs the command directly, never through a shell.
+            </p>
+          </More>
+          <AcpAgentsSettings onChanged={() => onOwnModelsChanged?.()} />
         </section>
         )}
 

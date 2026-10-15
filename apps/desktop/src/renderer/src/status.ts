@@ -833,7 +833,14 @@ export const RUNTIME_CAPABILITIES: Readonly<Record<MissionRuntimeId, RuntimeCapa
    * command failed before it started. A Locust user is never asked to run an
    * elevated setup to get a teammate that can run commands.
    */
-  muse: { modes: [...EVERY_ORDINARY_MODE], evidence: 'measured' }
+  muse: { modes: [...EVERY_ORDINARY_MODE], evidence: 'measured' },
+  /*
+   * AN AGENT THE PERSON ADDED (0.777): Approve each and nothing else. It is the one mode the Agent Client Protocol
+   * itself makes true -- every action the agent asks to take arrives as session/request_permission, answered on a card
+   * -- whatever the agent is. Its own modes (OpenCode's build and plan, Goose's auto) are its own ids with its own
+   * meanings, never measured here, so none is claimed. Measured by _tools/drive-your-own-acp-agent.mjs.
+   */
+  acp: { modes: ['approve-each'], evidence: 'measured' }
 }
 
 export function modeRunsOn(

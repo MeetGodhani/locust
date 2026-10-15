@@ -44,6 +44,16 @@ export type RuntimeIntegrationId =
    * it; this package only normalizes the transcript it leaves behind.
    */
   | "antigravity"
+  /**
+   * AN AGENT THE PERSON ADDED (0.777): any program that speaks the Agent Client
+   * Protocol -- Goose, Qwen Code, Kimi CLI, Mistral Vibe and the rest of the
+   * list at agentclientprotocol.com -- by the command line the person gave it.
+   * Never discovered: Locust knows only what that command answers over the
+   * protocol. Which agent a mission ran on is its route's model, never this id.
+   * It runs only in Approve each, the one mode the protocol itself makes true:
+   * every action the agent asks to take is a card.
+   */
+  | "acp"
   | "omniroute";
 
 /**
@@ -52,6 +62,9 @@ export type RuntimeIntegrationId =
  * construction instead of by remembering to exclude it at each use.
  */
 export type MissionRuntimeId = Exclude<RuntimeIntegrationId, "omniroute">;
+
+/** What discovery can find: everything but an agent the person added, which is known only by its command line. */
+export type DiscoveredRuntimeId = Exclude<RuntimeIntegrationId, "acp">;
 
 export type RuntimeIntegrationKind = "agent-runtime" | "provider-gateway";
 
@@ -203,7 +216,7 @@ export interface RuntimeModelName {
 }
 
 export interface RuntimeDiscovery {
-  readonly id: RuntimeIntegrationId;
+  readonly id: DiscoveredRuntimeId;
   readonly kind: RuntimeIntegrationKind;
   readonly displayName: string;
   readonly optional: boolean;

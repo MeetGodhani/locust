@@ -117,6 +117,8 @@ function spellOut(id: string): string {
  * id, spelled, and never the internal half.
  */
 const ownModelNames = new Map<string, string>()
+/** An agent the person added (0.777), by the route's model: its name, and the model picked on it. */
+const acpRouteNames = new Map<string, string>()
 const OWN_ROUTE_MODEL = /^own-[a-f0-9]{8}\/(.+)$/
 
 /**
@@ -136,8 +138,13 @@ const catalogSpellings = new Map<string, string>()
 const claudeAliasNames = new Map<string, string>()
 const sameName = (a: string): string => a.toLowerCase().replace(/[\s-]+/g, ' ').trim()
 
-export function rememberOwnModels(models: readonly { readonly id: string; readonly displayName: string; readonly own?: true; readonly runtime?: string; readonly older?: boolean }[]): void {
+export function rememberOwnModels(models: readonly { readonly id: string; readonly displayName: string; readonly own?: true; readonly runtime?: string; readonly older?: boolean; readonly agentName?: string }[]): void {
   ownModelNames.clear()
+  acpRouteNames.clear()
+  for (const model of models) {
+    if (model.runtime !== 'acp' || model.agentName === undefined) continue
+    acpRouteNames.set(model.id, model.id.includes('::') ? `${model.agentName} · ${model.displayName}` : model.agentName)
+  }
   catalogSpellings.clear()
   claudeAliasNames.clear()
   for (const model of models) {
@@ -185,6 +192,13 @@ export function routeChrome(runtime: MissionRuntimeId, modelId: string, model: s
 }
 
 export function modelDisplayName(runtime: string, modelId: string): string {
+  // An agent the person added (0.777): its own name, then the model picked on it -- never `acp_goose::...`.
+  if (runtime === 'acp') {
+    const known = acpRouteNames.get(modelId)
+    if (known !== undefined) return known
+    const parsed = /^acp_([a-z0-9-]+)(?:::(.+))?$/.exec(modelId)
+    if (parsed !== null) return parsed[2] === undefined ? spellOut(parsed[1]!) : `${spellOut(parsed[1]!)} · ${modelDisplayName('opencode', parsed[2])}`
+  }
   const own = OWN_ROUTE_MODEL.exec(modelId)
   if (own !== null) return ownModelNames.get(modelId) ?? spellOut(own[1]!)
   // `auto` is the runtime choosing its own model (Copilot's, Cursor's). Said

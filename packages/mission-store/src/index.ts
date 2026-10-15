@@ -26,7 +26,7 @@ import type { CheckpointReason, ReconciledCheckpoint } from './checkpoint.js'
  */
 export type MissionRecordedMode = "ask" | "plan" | "accept-edits" | "approve-each" | "auto";
 
-export const MISSION_LEDGER_SCHEMA_VERSION = 24 as const
+export const MISSION_LEDGER_SCHEMA_VERSION = 25 as const
 
 /**
  * Versions this reader accepts, each a strict subset of the next, so all are
@@ -167,7 +167,7 @@ export const MISSION_LEDGER_SCHEMA_VERSION = 24 as const
 // Earlier readers must refuse that origin rather than call it a person's own turn.
 // v24 records a turn Locust started because the agent before it ran out of its plan (0.774, `carry-on`): nobody
 // typed it. A v23 reader stops at a starter it does not know, so the number moves for the reason it moved at v23.
-export const SUPPORTED_MISSION_LEDGER_SCHEMA_VERSIONS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24] as const
+export const SUPPORTED_MISSION_LEDGER_SCHEMA_VERSIONS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25] as const
 
 export type MissionLedgerSchemaVersion =
   (typeof SUPPORTED_MISSION_LEDGER_SCHEMA_VERSIONS)[number]
@@ -808,7 +808,9 @@ const MISSION_RUNTIMES = {
   opencode: true,
   copilot: true,
   antigravity: true,
-  muse: true
+  muse: true,
+  // An agent the person added, by its command line (0.777, LEDGER v25).
+  acp: true
 } as const satisfies Record<MissionRuntimeId, true>
 
 function isMissionRuntime(value: unknown): value is MissionRuntimeId {
@@ -1147,6 +1149,8 @@ function parsedMetadata(
   if (schemaVersion < 23 && candidate.startedBy?.kind === 'mcp') return undefined
   // And no writer before v24 carried a turn on after a plan ran out.
   if (schemaVersion < 24 && candidate.startedBy?.kind === 'carry-on') return undefined
+  // And no writer before v25 ran an agent the person added (0.777).
+  if (schemaVersion < 25 && candidate.runtime === 'acp') return undefined
   // And no writer before v7 knew Cursor Agent or Gemini CLI.
   if (schemaVersion < 7 && candidate.runtime !== 'codex' && candidate.runtime !== 'claude') {
     return undefined

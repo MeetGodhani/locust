@@ -225,6 +225,26 @@ function buildRows(
       })
     }
   }
+  /*
+   * YOUR OWN AGENTS (0.777): each a group of its own, named by the agent, with the models its Test listed -- or one
+   * row, its own default, when it offered none. Never discovered, so there is no status to read: an agent that will
+   * not start says so when the turn is sent, in its own words.
+   */
+  for (const model of models) {
+    if (model.runtime !== 'acp') continue
+    const isActive = active.runtime === 'acp' && active.model === model.id
+    rows.push({
+      key: `acp:${model.id}`,
+      group: `${model.agentName ?? 'Your agent'} · your own agent`,
+      runtime: 'acp',
+      model: model.id,
+      label: model.displayName,
+      detail: model.description,
+      fullDetail: model.description,
+      tag: isActive ? 'ACTIVE' : 'READY',
+      selectable: true
+    })
+  }
   // Within each runtime: what this person has run, then the flagship
   // families, then the rest as the runtime listed them. The routes they move
   // between are then lifted to a group of their own at the top, because the

@@ -169,7 +169,8 @@ describe('a turn whose plan ran out is carried on', () => {
     expect(answer.ok && answer.data.mission.startedBy).toEqual({ kind: 'carry-on', from: 'codex' })
     const file = join(directory, 'mission_2.jsonl')
     const header = JSON.parse((await readFile(file, 'utf8')).split('\n')[0]!)
-    expect(header.schemaVersion).toBe(24)
+    // v24 or later: a carry-on needs v24, and the record is now v25 (0.777, an agent the person added).
+    expect(header.schemaVersion).toBeGreaterThanOrEqual(24)
     header.schemaVersion = 23
     await writeFile(file, JSON.stringify(header) + '\n')
     // A v23 writer never carried a turn on, so a v23 file that says so is not believed.

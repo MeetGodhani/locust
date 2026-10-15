@@ -2512,6 +2512,8 @@ export interface PublicModel {
    * a group of their own, first.
    */
   readonly own?: true
+  /** An agent the person added (0.777, shared/acp-agents.ts): its name, which is its group in the picker. */
+  readonly agentName?: string
 }
 
 /**
@@ -3641,6 +3643,8 @@ export interface DesktopApi {
   readonly locustMcp?: import('./locust-mcp.js').LocustMcpApi
   /** Your phone (0.775): a page on the home network, paired by a QR code. */
   readonly phone?: import('./phone.js').PhoneApi
+  /** Your own agents (0.777): any Agent Client Protocol agent, by its command line. */
+  readonly acpAgents?: import('./acp-agents.js').AcpAgentsApi
   readQueuedMessages(): Promise<QueuedMessagesResponse>
   writeQueuedMessages(rows: readonly SavedQueuedMessage[]): Promise<QueuedMessagesResponse>
   readonly platform: string

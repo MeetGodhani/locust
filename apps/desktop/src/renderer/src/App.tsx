@@ -5782,7 +5782,7 @@ export default function App(): ReactElement {
     .filter((status) => runtimeIsUsable(status) && integrationOf(status.id) !== 'planned')
     .filter((status) => status.id !== 'antigravity' || status.throughCli === true)
     .map((status) => status.id)
-    .filter(isMissionRuntime)
+    .filter((id): id is Exclude<typeof id, 'omniroute'> => isMissionRuntime(id))
   const carryOnReady = new Set<MissionRuntimeId>(carryOnAgents.filter((runtime) => !limitedRuntimes.has(runtime)))
   // What Settings offers to carry work on with: every agent that can run a turn here, the chosen one even when it cannot right now.
   const carryOnChoices: readonly { readonly runtime: MissionRuntimeId; readonly label: string }[] = (() => {

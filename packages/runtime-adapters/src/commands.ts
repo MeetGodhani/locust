@@ -1979,6 +1979,21 @@ export function createCopilotAcpCommand(
 }
 
 /**
+ * An agent the person added (0.777): their own command line, run as an Agent
+ * Client Protocol server in the folder. Nothing of Locust's goes on the argv --
+ * the prompt, the session and the model all travel over the protocol -- and the
+ * person's own arguments meet the same refusals every runtime's do, so a flag
+ * that would skip the agent's asking is not run.
+ */
+export function createAcpAgentCommand(
+  executable: ExecutableLaunch,
+  args: readonly string[],
+  workspacePath: string,
+): RuntimeCommandSpec {
+  return baseSpec("acp", executable, workspacePath, args.map((arg) => requireText(arg, "Argument")), { stdin: "protocol", sandbox: "workspace-write" });
+}
+
+/**
  * What an Approve-each session on Copilot must be, by Copilot's own ids
  * (session/new, copilot 1.0.88): its Agent mode -- which asks -- never Plan or
  * Autopilot ("enables allow-all"), and its `allow_all` switch off. A loaded

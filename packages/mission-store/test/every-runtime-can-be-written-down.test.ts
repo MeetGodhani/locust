@@ -38,7 +38,8 @@ const EVERY_RUNTIME = {
   opencode: true,
   copilot: true,
   antigravity: true,
-  muse: true
+  muse: true,
+  acp: true
 } as const satisfies Record<MissionRuntimeId, true>
 
 const NOW = '2026-09-21T23:00:00.000Z'

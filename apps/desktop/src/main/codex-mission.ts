@@ -9,6 +9,7 @@ import {
   createCodexAppServerCommand,
   createCodexEventNormalizer,
   createCodexExecCommand,
+  createAcpAgentCommand,
   createCopilotAcpCommand,
   createCopilotEventNormalizer,
   createCopilotPromptCommand,
@@ -86,6 +87,8 @@ import { recordableCommand } from './command-record.js'
 import { commandTooLong } from './command-length.js'
 import { MAX_LIVE_MISSIONS } from '../shared/live-missions.js'
 import { hostReadsEventsOf, runtimeDisplayName } from '../shared/runtimes.js'
+import { parsedAcpRouteModel, type AcpAgent } from '../shared/acp-agents.js'
+import type { AcpLaunch } from './acp-agents.js'
 
 /**
  * The model and effort to hand `agy` (0.540). The app route chose a TIER
@@ -453,6 +456,8 @@ interface CodexMissionServiceOptions {
    */
   /** What an ACP agent said it can do, at the start of its run (W12): kept for Settings. */
   readonly onAcpCapabilities?: (runtime: 'copilot', capabilities: AcpCapabilities) => void
+  /** The agents the person added (0.777, main/acp-agents.ts): an agent's command, found by the rule its Test used. */
+  readonly acpAgents?: { readonly resolve: (agentId: string) => Promise<{ readonly agent: AcpAgent; readonly found: AcpLaunch } | { readonly message: string }> }
   readonly acpSpawn?: (
     executablePath: string,
     args: readonly string[],
@@ -1358,6 +1363,10 @@ export function createCodexMissionService(options: CodexMissionServiceOptions): 
     if (mode === 'auto' && !(await (options.autoModeAllowed ?? (async () => false))())) return AUTO_OFF_REFUSAL
     const readOnly = mode !== 'auto' && mode !== 'accept-edits' && mode !== 'approve-each'
     if (runtime === 'cursor' && readOnly && !cursorCanEnforceReadOnly(hostPlatform)) return CURSOR_READ_ONLY_REFUSAL
+    if (runtime === 'acp') {
+      const found = await acpAgentFor(mode, chosenModel)
+      return 'refusal' in found ? found.refusal : undefined
+    }
     let runtimes: readonly RuntimeDiscovery[]
     try {
       runtimes = await options.discover(runtime)
@@ -1370,6 +1379,23 @@ export function createCodexMissionService(options: CodexMissionServiceOptions): 
     }
     if (!hostReadsEventsOf(runtime)) return unreadableRuntimeRefusal(runtime)
     return undefined
+  }
+
+  /**
+   * An agent the person added (0.777): runs only in Approve each, needs the protocol's transport, and is found by its
+   * own command line. The route's model names it, with the model picked on it after `::` (shared/acp-agents.ts).
+   */
+  const acpAgentFor = async (mode: MissionMode, routeModel: string | undefined): Promise<{ readonly agent: AcpAgent; readonly found: AcpLaunch; readonly model?: string } | { readonly refusal: string }> => {
+    const named = parsedAcpRouteModel(routeModel)
+    if (named === undefined || options.acpAgents === undefined || options.acpSpawn === undefined) {
+      return { refusal: 'Pick one of your own agents in the model picker, or add one in Settings > AI agents > Your own agents.' }
+    }
+    const resolved = await options.acpAgents.resolve(named.agentId)
+    if ('message' in resolved) return { refusal: resolved.message }
+    if (mode !== 'approve-each') {
+      return { refusal: `${resolved.agent.name} runs in Approve each, where every action it asks to take is a card. Pick Approve each and send again.` }
+    }
+    return { agent: resolved.agent, found: resolved.found, ...(named.model === undefined ? {} : { model: named.model }) }
   }
 
   const service: CodexMissionService = {
@@ -1553,15 +1579,23 @@ export function createCodexMissionService(options: CodexMissionServiceOptions): 
         const startLifecycleVersion = lifecycleVersion
         starting.add(claimKey)
         claimed = true
-        let runtimes: readonly RuntimeDiscovery[]
+        let runtimes: readonly RuntimeDiscovery[] = []
         say('looking')
-        try {
-          runtimes = await options.discover(runtime)
-        } catch {
-          return error(
-            'CODEX_UNAVAILABLE',
-            'Codex readiness could not be verified. Check the local runtime and try again.'
-          ) as CodexMissionStartResponse
+        /** An agent the person added (0.777): found by its own command line, never by discovery. */
+        let acpAgentRun: { readonly agent: AcpAgent; readonly found: AcpLaunch; readonly model?: string } | undefined
+        if (runtime === 'acp') {
+          const found = await acpAgentFor(mode, chosenModel)
+          if ('refusal' in found) return error('RUNTIME_START_FAILED', found.refusal) as CodexMissionStartResponse
+          acpAgentRun = found
+        } else {
+          try {
+            runtimes = await options.discover(runtime)
+          } catch {
+            return error(
+              'CODEX_UNAVAILABLE',
+              'Codex readiness could not be verified. Check the local runtime and try again.'
+            ) as CodexMissionStartResponse
+          }
         }
 
         if (startLifecycleVersion !== lifecycleVersion) {
@@ -1571,7 +1605,14 @@ export function createCodexMissionService(options: CodexMissionServiceOptions): 
           ) as CodexMissionStartResponse
         }
 
-        const chosen = runtimes.find((entry) => entry.id === runtime)
+        const chosen: Pick<RuntimeDiscovery, 'availability' | 'readiness' | 'executable'> & { readonly version?: { readonly version: string } } | undefined = acpAgentRun !== undefined
+          ? {
+              availability: 'available',
+              readiness: 'ready',
+              executable: acpAgentRun.found.launch,
+              ...(acpAgentRun.agent.answer?.version === undefined ? {} : { version: { version: acpAgentRun.agent.answer.version } })
+            }
+          : runtimes.find((entry) => entry.id === runtime)
         if (
           chosen?.availability !== 'available'
           || chosen.readiness !== 'ready'
@@ -1579,7 +1620,7 @@ export function createCodexMissionService(options: CodexMissionServiceOptions): 
         ) {
           return error(
             'CODEX_UNAVAILABLE',
-            notReadyRefusal(runtime, chosen)
+            notReadyRefusal(runtime, runtimes.find((entry) => entry.id === runtime))
           ) as CodexMissionStartResponse
         }
         if (!hostReadsEventsOf(runtime)) {
@@ -1934,6 +1975,8 @@ export function createCodexMissionService(options: CodexMissionServiceOptions): 
         // Copilot asks only over the Agent Client Protocol (0.377); every
         // other Copilot mode stays on `-p`, which is what they were measured on.
         const copilotAcp = runtime === 'copilot' && mode === 'approve-each' && options.acpSpawn !== undefined
+        // An agent the person added speaks only the protocol (0.777); acpAgentFor refused it without acpSpawn.
+        const ownAcp = acpAgentRun !== undefined && options.acpSpawn !== undefined
         // What the run has announced it will change, by item id. Read off the
         // stream so a file-change tool row can carry its diff, and so an
         // approval card for that item can show what it is about.
@@ -1968,10 +2011,10 @@ export function createCodexMissionService(options: CodexMissionServiceOptions): 
             ? createCursorEventNormalizer(normalizerContext)
             : runtime === 'opencode'
               ? createOpenCodeEventNormalizer(normalizerContext)
-              : copilotAcp
+              : copilotAcp || ownAcp
                 // The session is the agent's to name on a first run; the
                 // stream's first record says it (acp-events.ts).
-                ? createAcpEventNormalizer({ ...normalizerContext, runtime: 'copilot', ...(resumeThreadId === undefined ? {} : { sessionId: resumeThreadId }) })
+                ? createAcpEventNormalizer({ ...normalizerContext, runtime: ownAcp ? 'acp' : 'copilot', ...(resumeThreadId === undefined ? {} : { sessionId: resumeThreadId }) })
               : runtime === 'copilot'
                 ? createCopilotEventNormalizer({ ...normalizerContext, sessionId: copilotSessionId! })
                 : runtime === 'muse'
@@ -2119,6 +2162,10 @@ export function createCodexMissionService(options: CodexMissionServiceOptions): 
               prompt: promptText,
               ...choice
             })
+          }
+          if (runtime === 'acp' && acpAgentRun !== undefined) {
+            // The person's own command line (0.777); the prompt, the session and the model travel over the protocol.
+            return createAcpAgentCommand(executable, acpAgentRun.found.args, runCwd)
           }
           if (runtime === 'copilot' && copilotAcp) {
             // The prompt and the session travel over the protocol, not the argv.
@@ -2607,6 +2654,29 @@ ${sentPrompt.trim()}`
               signal: controller.signal,
               now
             })
+          } else if (ownAcp && acpAgentRun !== undefined) {
+            say('starting-runtime')
+            // Every action the agent asks to take is a card; nothing is answered for the person (0.777).
+            const handler = options.approvals?.requestHandlerFor({ runId, missionId, cwd: runCwd, changesByItem, runtime: 'acp' })
+            const modelOption = acpAgentRun.agent.answer?.modelOption
+            const acp = startAcpRun({
+              spawn: options.acpSpawn!,
+              command,
+              prompt: runtimePrompt,
+              ...(resumeThreadId === undefined ? {} : { resumeSessionId: resumeThreadId }),
+              // The model picked for it, by the option its own Test named; nothing else of the agent's is changed.
+              ...(acpAgentRun.model === undefined || modelOption === undefined ? {} : { requiredConfig: { [modelOption.id]: acpAgentRun.model } }),
+              ...(handler === undefined
+                ? {}
+                : { onPermission: async (asked) => {
+                  await flushBeforeApproval()
+                  return acpAnswerFor(await handler(acpPermissionRequest(asked, runCwd)))
+                } }),
+              signal: controller.signal,
+              now
+            })
+            process = acp
+            steer = acp.steer
           } else if (copilotAcp) {
             say('starting-runtime')
             // Each thing Copilot asks becomes the same card Codex's do. A

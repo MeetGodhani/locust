@@ -1,3 +1,4 @@
+import { parsedAcpRouteModel } from '../shared/acp-agents.js'
 /**
  * A window a test drive opened may start runs on free routes only.
  *
@@ -51,6 +52,15 @@ export function freeRoutesOnly(
  * none of them.
  */
 export function isFreeRoute(runtime: string, model: string | undefined): boolean {
+  /*
+   * An agent the person added (0.777) bills however it bills; Locust cannot know. The one exception is OpenCode
+   * itself added that way (`opencode acp`), on one of the same free models by OpenCode's own id -- which is what
+   * the drive of added agents runs, and the only `opencode/...-free` an ACP agent offers.
+   */
+  if (runtime === 'acp') {
+    const picked = parsedAcpRouteModel(model)?.model
+    return picked !== undefined && /^opencode\/[a-z0-9.-]+-free$/i.test(picked)
+  }
   return runtime === 'opencode' && model !== undefined && /(^|[-/])free$/i.test(model)
 }
 

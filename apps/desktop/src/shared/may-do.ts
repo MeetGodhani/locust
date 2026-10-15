@@ -136,6 +136,14 @@ export function whatItMayDo(runtime: MissionRuntimeId, sandbox: MissionSandbox, 
       if (sandbox === 'full-access') return rows(ANY_COMMAND, THE_WEB)
       if (sandbox === 'read-only') return rows(NO_COMMANDS, THE_WEB)
       return rows(OPEN_COMMANDS, THE_WEB, NOT_OUTSIDE)
+    case 'acp':
+      // An agent the person added (0.777) runs only in Approve each, and Locust offers it no files and no terminal of
+      // its own: it acts with its own tools and asks over the protocol first. WHICH acts it asks about is the agent's
+      // choice -- the protocol does not make it ask before reading -- so that is said rather than promised.
+      return {
+        rows: [READ, { verdict: 'allow', text: "change files and run commands when it asks and you approve; which actions it asks about is the agent's own choice" }],
+        rest
+      }
     case 'muse':
       // Read-only: `--disable-write --disable-shell`. Edit: approval `never`
       // with Muse's sandbox left on ("shell filesystem/network sandboxing",

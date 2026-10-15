@@ -122,6 +122,8 @@ import { createRunEnd } from './run-end.js'
 import { createCarryOn, type CarryOn } from './carry-on.js'
 import { CARRY_ON_CHANNEL, parsedCarryOnRoute } from '../shared/carry-on.js'
 import { createPhoneHost } from './phone-host.js'
+import { acpScratch, createAcpAgents } from './acp-agents.js'
+import { acpCatalog, ACP_AGENTS_LIST_CHANNEL, ACP_AGENTS_REMOVE_CHANNEL, ACP_AGENTS_SAVE_CHANNEL, ACP_AGENTS_TEST_CHANNEL } from '../shared/acp-agents.js'
 import { phonePage } from './phone-page.js'
 import { PHONE_FORGET_CHANNEL, PHONE_SET_ENABLED_CHANNEL, PHONE_SETTINGS_CHANNEL, phoneConversations, phoneTurns } from '../shared/phone.js'
 import { createKeepAwake, KEEP_AWAKE_BEAT_MS } from './keep-awake.js'
@@ -2384,6 +2386,23 @@ if (!ownsSingleInstanceLock) {
       note: (what) => note('cursor-default-model', what)
     })
     void cursorDefaultModel.recover().catch(() => undefined)
+    /*
+     * YOUR OWN AGENTS (0.777, shared/acp-agents.ts): any program speaking the Agent Client Protocol, by the command
+     * line the person gave it, found by the same locator as the agents Locust knows.
+     */
+    const acpAgents = createAcpAgents({
+      directory: app.getPath('userData'),
+      locate: (command) => executableLocator.find(command),
+      spawn: (executablePath, args, env, cwd) => spawnAppServer(executablePath, args, env, cwd),
+      scratch: acpScratch(join(app.getPath('temp'), 'locust-acp-tests'))
+    })
+    ipcMain.handle(ACP_AGENTS_LIST_CHANNEL, (event) => (fromOwnWindow(event) ? acpAgents.list() : { ok: false, message: 'Only Locust’s own window can read these.' }))
+    ipcMain.handle(ACP_AGENTS_TEST_CHANNEL, (event, commandLine: unknown) =>
+      fromOwnWindow(event) && typeof commandLine === 'string' ? acpAgents.test(commandLine) : { ok: false, message: 'That is not a command line.' })
+    ipcMain.handle(ACP_AGENTS_SAVE_CHANNEL, (event, name: unknown, commandLine: unknown) =>
+      fromOwnWindow(event) ? acpAgents.save(name, commandLine) : { ok: false, message: 'Only Locust’s own window can add an agent.' })
+    ipcMain.handle(ACP_AGENTS_REMOVE_CHANNEL, (event, id: unknown) =>
+      fromOwnWindow(event) ? acpAgents.remove(id) : { ok: false, message: 'Only Locust’s own window can remove an agent.' })
     const codexMissions = createCodexMissionService({
       workspacePath,
       // 0.458: the window's folder now, and a conversation's own folder by id.
@@ -2436,6 +2455,8 @@ if (!ownsSingleInstanceLock) {
       acpSpawn: (executablePath, args, env, cwd) => spawnAppServer(executablePath, args, env, cwd),
       // W12: what it said it can do, said in Settings; the next sweep reads it.
       onAcpCapabilities: (runtime, capabilities) => acpCapabilities.record(runtime, capabilities),
+      // 0.777: the agents the person added, each by its own command line.
+      acpAgents: { resolve: (agentId) => acpAgents.resolve(agentId) },
       // A3.3: the person's check for THIS folder, after a turn that changed files.
       afterEdits: (cwd) => editCheck.after(cwd),
       // 0.439: a commit per turn on the teammate's own branch (turn-checkpoint.ts).
@@ -3021,9 +3042,11 @@ if (!ownsSingleInstanceLock) {
       // The person's own, first, read fresh: adding one must show at once,
       // not after the catalogue's ten-minute cache (0.357).
       const own = await ownModels.catalog().catch(() => [])
-      if (own.length === 0) return read
+      // And the agents the person added (0.777), read fresh as their own models are.
+      const added = await acpAgents.list().then((listed) => (listed.ok ? acpCatalog(listed.agents) : [])).catch(() => [])
+      if (own.length === 0 && added.length === 0) return read
       // The usage reading rides along with the models it was read beside (0.390).
-      return { ok: true, data: { ...(read.ok ? read.data : {}), models: [...own, ...(read.ok ? read.data.models : [])] } } as const
+      return { ok: true, data: { ...(read.ok ? read.data : {}), models: [...own, ...added, ...(read.ok ? read.data.models : [])] } } as const
     })
 
     ipcMain.handle(OWN_MODEL_LIST_CHANNEL, async (event) => {
@@ -8436,13 +8459,13 @@ if (!ownsSingleInstanceLock) {
         }
       }
       // Codex asks through its app-server, OpenCode through its own server
-      // (A6.7), Copilot through the Agent Client Protocol (0.377).
-      if (mode === 'approve-each' && runtime !== 'codex' && runtime !== 'opencode' && runtime !== 'copilot') {
+      // (A6.7), Copilot and the agents the person added through the Agent Client Protocol (0.377, 0.777).
+      if (mode === 'approve-each' && runtime !== 'codex' && runtime !== 'opencode' && runtime !== 'copilot' && runtime !== 'acp') {
         return {
           ok: false,
           error: {
             code: 'RUNTIME_START_FAILED',
-            message: `Per-action approvals run on Codex CLI, OpenCode and Copilot CLI only. Pick another mode for ${runtimeDisplayName(runtime)}, or switch the route.`
+            message: `Per-action approvals run on Codex CLI, OpenCode, Copilot CLI and your own agents only. Pick another mode for ${runtimeDisplayName(runtime)}, or switch the route.`
           }
         } as const
       }

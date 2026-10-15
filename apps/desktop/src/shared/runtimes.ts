@@ -14,7 +14,9 @@ const DISPLAY_NAMES: Readonly<Record<MissionRuntimeId, string>> = {
   opencode: 'OpenCode',
   copilot: 'Copilot CLI',
   antigravity: 'Antigravity',
-  muse: 'Muse Code'
+  muse: 'Muse Code',
+  // An agent the person added (0.777): its own name, from Settings, wherever one is known (shared/acp-agents.ts).
+  acp: 'Your own agent'
 }
 
 export function isMissionRuntime(value: unknown): value is MissionRuntimeId {
@@ -84,10 +86,12 @@ export function agentNamed(name: string | undefined): string | undefined {
  * the note at the top of `muse-events.ts` for what that does and does not
  * establish.
  */
-export function hostReadsEventsOf(runtime: MissionRuntimeId): runtime is 'codex' | 'claude' | 'cursor' | 'opencode' | 'copilot' | 'muse' | 'antigravity' {
+export function hostReadsEventsOf(runtime: MissionRuntimeId): runtime is 'codex' | 'claude' | 'cursor' | 'opencode' | 'copilot' | 'muse' | 'antigravity' | 'acp' {
   return (
+    // An agent the person added, over the Agent Client Protocol, read as Copilot's is (0.777).
+    runtime === 'acp'
     // Antigravity through its CLI, `agy` (0.540); the runner refuses the app's own server.
-    runtime === 'antigravity'
+    || runtime === 'antigravity'
     || runtime === 'codex'
     || runtime === 'claude'
     || runtime === 'cursor'

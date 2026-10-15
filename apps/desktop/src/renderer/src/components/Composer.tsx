@@ -893,7 +893,9 @@ export function Composer({
         ? `${usageWindowSentence(usageReading)}. Long runs may be cut short.`
         : usageWindowSentence(usageReading)
   const usagePressing = usagePercentNow !== undefined && usagePercentNow >= 80
-  const selectedReady = selected !== undefined && runtimeIsUsable(selected)
+  // An agent the person added (0.777) is never discovered: the host finds it when the message goes, and says in the
+  // thread, in words, when it cannot start it -- the chat box does not hold the message back on a check it cannot make.
+  const selectedReady = route.runtime === 'acp' || (selected !== undefined && runtimeIsUsable(selected))
   // A runtime that could run this message even though the route does not
   // point at it. Only consulted when the selected one cannot.
   const readyElsewhere = selectedReady
