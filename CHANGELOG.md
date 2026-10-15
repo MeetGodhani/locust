@@ -11,6 +11,12 @@ Settings shows this file as What's new. An entry may group its changes under
 about when they arrive on it carries `<!-- big -->` on the line under its
 heading: the home screen then shows it once, as a splash.
 
+## 0.776.0 - 2026-10-15
+
+### Improved
+
+- **Notes on a change, from the Changes panel too.** Hover a changed line in the Changes panel and press its +, as you could in a conversation's own changes. Your note goes to the teammate with your next message, with its file, its line and the line itself. It works the same in Review changes when it's that teammate's conversation on screen.
+
 ## 0.775.0 - 2026-10-15
 <!-- big -->
 
