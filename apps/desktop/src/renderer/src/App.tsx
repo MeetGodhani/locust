@@ -3103,7 +3103,7 @@ export default function App(): ReactElement {
                     at: new Date().toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }),
                     unsettledCount: switched.unsettledCount,
                     omittedBriefing: switched.omittedBriefing,
-                    ...(update.startedBy.kind === 'carry-on' ? { carriedOn: true as const } : {})
+                    ...(update.startedBy?.kind === 'carry-on' ? { carriedOn: true as const } : {})
                   }
                 })
           }
@@ -3118,7 +3118,7 @@ export default function App(): ReactElement {
           setShownKey(update.runId)
         }
         // A press of Carry on is answered by the turn it started (0.774).
-        if (update.startedBy.kind === 'carry-on') setCarryingOn(undefined)
+        if (update.startedBy?.kind === 'carry-on') setCarryingOn(undefined)
         // A turn a call with a teammate started (0.747): kept with the call, so its words go around it.
         if (update.startedBy?.kind === 'mcp' && update.startedBy.via === 'voice' && update.teammateId !== undefined && update.teammateId === liveCall()?.teammateId) {
           addLiveCallTurn(update.missionId)

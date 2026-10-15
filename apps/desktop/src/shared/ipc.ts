@@ -3298,8 +3298,9 @@ export type CodexMissionUpdate =
        * being replayed, or a person's post to a room. The room kind lives
        * only in this live update and the window -- the ledger records a
        * room post's missions as ordinary missions of their teammates.
+       * Absent: the person's own next message, sent from their phone (0.775) -- as their record says it.
        */
-      readonly startedBy:
+      readonly startedBy?:
         | { readonly kind: 'mcp'; readonly via?: 'voice' }
         | { readonly kind: 'relay'; readonly hop: number }
         | { readonly kind: 'routine'; readonly routineId: string; readonly step: number }
@@ -3638,6 +3639,8 @@ export interface DesktopApi {
   /** Scout, a teammate that keeps watch (0.756). */
   readonly scout?: import('./scout.js').ScoutApi
   readonly locustMcp?: import('./locust-mcp.js').LocustMcpApi
+  /** Your phone (0.775): a page on the home network, paired by a QR code. */
+  readonly phone?: import('./phone.js').PhoneApi
   readQueuedMessages(): Promise<QueuedMessagesResponse>
   writeQueuedMessages(rows: readonly SavedQueuedMessage[]): Promise<QueuedMessagesResponse>
   readonly platform: string

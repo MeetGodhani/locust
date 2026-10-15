@@ -12,6 +12,7 @@ import type { PlanRunsOut } from '../../../shared/carry-on.js'
 import type { MissionRuntimeId } from '@teammate/runtime-adapters'
 import { VoiceSettings } from './VoiceSettings.js'
 import { LocustMcpSettings } from './LocustMcpSettings.js'
+import { PhoneSettings } from './PhoneSettings.js'
 import { SETTINGS_PAGES, matchedHeadings, pageMatches } from '../settingsPages.js'
 import { agentCapabilityHeading, agentCapabilityLines } from '../agentCapabilities.js'
 import { AddConnector } from './AddConnector.js'
@@ -3144,6 +3145,22 @@ export function SettingsScreen({
         {shownPage === 'app' && (
         <section className="lc-settings__section lc-settings__section--line" data-setting="locust-mcp">
           <LocustMcpSettings heading={<h2 className="lc-settings__heading">Let your other AI apps use Locust</h2>} />
+        </section>
+        )}
+        {shownPage === 'app' && (
+        <section className="lc-settings__section lc-settings__section--line" data-setting="phone">
+          <PhoneSettings
+            heading={<h2 className="lc-settings__heading">Your phone</h2>}
+            more={
+              <More>
+                Locust opens one small page on this computer for your home network. The code holds its address and a
+                key; your phone keeps the key, and nothing on the page shows or changes until it is checked. A message
+                you send from your phone is your next message in that conversation, on the same teammate and mode, as
+                if you typed it here. Turning this off closes the page and unpairs every phone. It does not reach your
+                phone away from home, and nothing goes through anyone else’s server.
+              </More>
+            }
+          />
         </section>
         )}
         {shownPage === 'app' && (

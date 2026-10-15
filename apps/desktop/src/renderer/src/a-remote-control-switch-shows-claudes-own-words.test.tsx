@@ -35,7 +35,9 @@ it('The switch is disabled while ending and states when later output was omitted
   const html = view({ ...off, phase: 'stopping', truncated: true })
   expect(html).toContain('disabled=""'); expect(html).toContain('Waiting for Claude Code to end'); expect(html).toContain('the rest was left out')
 })
-it('Settings search finds Remote Control, phone, and claude.ai under AI agents.', () => {
+it('Settings search finds Remote Control and claude.ai under AI agents, and phone at Your phone (0.775).', () => {
   const page = SETTINGS_PAGES.find((page) => page.id === 'runtimes')!
-  for (const word of ['remote control', 'phone', 'claude.ai']) expect(pageMatches(page, word)).toBe(true)
+  for (const word of ['remote control', 'claude.ai']) expect(pageMatches(page, word)).toBe(true)
+  // Locust's own phone page is what "phone" finds now; Remote Control is still found by its name.
+  expect(pageMatches(SETTINGS_PAGES.find((page) => page.id === 'app')!, 'phone')).toBe(true)
 })

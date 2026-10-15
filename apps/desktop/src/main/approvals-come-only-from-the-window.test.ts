@@ -16,6 +16,11 @@ import { describe, expect, it } from 'vitest'
  * This keeps it that way: every call of `.decide(` in the main process is in
  * the modules that hold approvals, or in that one handler. A new caller -- a
  * relay path, a block parser -- fails here and has to say why it may.
+ *
+ * 0.775, YOUR PHONE: the person's own tap on their own phone is the one other
+ * place, and it says why it may -- the phone host checks the key the person
+ * scanned before it reads anything (phone-host.ts), and its `decide` goes down
+ * the window's own path, `decideApproval`, with every guard the window's has.
  */
 const MAIN = new URL('.', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')
 const HOLDERS = new Set(['approval-channel.ts', 'permission-host.ts', 'antigravity-mission.ts', 'codex-mission.ts'])
@@ -25,7 +30,12 @@ describe('who may answer an approval', () => {
     const callers = readdirSync(MAIN)
       .filter((name) => name.endsWith('.ts') && !name.endsWith('.test.ts'))
       .filter((name) => /\.decide\(/.test(readFileSync(join(MAIN, name), 'utf8')))
-    expect(callers.filter((name) => !HOLDERS.has(name) && name !== 'index.ts')).toEqual([])
+    expect(callers.filter((name) => !HOLDERS.has(name) && name !== 'index.ts' && name !== 'phone-host.ts')).toEqual([])
+    // The phone's one call, and only after its key was checked against the person's.
+    const phone = readFileSync(join(MAIN, 'phone-host.ts'), 'utf8')
+    expect(phone.match(/\.decide\(/g)).toHaveLength(1)
+    expect(phone.indexOf('timingSafeEqual(')).toBeGreaterThan(-1)
+    expect(phone.indexOf('timingSafeEqual(')).toBeLessThan(phone.indexOf('calls.decide('))
     // In index.ts, one funnel -- `answerApproval` -- and nothing else calls decide.
     const index = readFileSync(join(MAIN, 'index.ts'), 'utf8').split('\n')
     const decides = index.map((line, at) => ({ line, at })).filter(({ line }) => /\.decide\(/.test(line))
@@ -46,12 +56,15 @@ describe('who may answer an approval', () => {
     expect(calls).toHaveLength(4)
     const enclosing = (at: number): string => {
       for (let line = at; line >= 0; line -= 1) {
-        const opened = /ipcMain\.handle\((\w+)|const (answerByDecision) = /.exec(index[line] ?? '')
+        const opened = /ipcMain\.handle\((\w+)|const (answerByDecision|decideApproval) = /.exec(index[line] ?? '')
         if (opened !== null) return opened[1] ?? opened[2] ?? ''
       }
       return ''
     }
-    expect(calls.map(({ at }) => enclosing(at)).sort()).toEqual(['APPROVAL_RULE_FROM_CARD_CHANNEL', 'MISSION_APPROVAL_DECIDE_CHANNEL', 'answerByDecision', 'answerByDecision'])
+    expect(calls.map(({ at }) => enclosing(at)).sort()).toEqual(['APPROVAL_RULE_FROM_CARD_CHANNEL', 'answerByDecision', 'answerByDecision', 'decideApproval'])
+    // decideApproval is the person's: their click in the window, or their tap on their paired phone (0.775).
+    const decideCalls = index.map((line, at) => ({ line, at })).filter(({ line }) => /decideApproval\(/.test(line))
+    expect(decideCalls.map(({ at }) => (/ipcMain\.handle\(MISSION_APPROVAL_DECIDE_CHANNEL/.test(index[at - 2] ?? '') ? 'window' : /decide: async \(approvalId, approve\)/.test(index[at - 1] ?? '') ? 'phone' : `line ${String(at + 1)}`))).toEqual(['window', 'phone'])
     for (const channel of ['MISSION_APPROVAL_DECIDE_CHANNEL', 'APPROVAL_RULE_FROM_CARD_CHANNEL']) {
       const handler = index.findIndex((line) => line.includes(`ipcMain.handle(${channel}`))
       expect(index[handler + 1], channel).toContain('fromOwnWindow(event)')

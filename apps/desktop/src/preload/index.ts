@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
+import { PHONE_FORGET_CHANNEL, PHONE_SET_ENABLED_CHANNEL, PHONE_SETTINGS_CHANNEL } from '../shared/phone.js'
 import { LOCUST_MCP_CLAUDE_APP, LOCUST_MCP_CLAUDE_APP_RESTART, LOCUST_MCP_CLAUDE_APP_SET, LOCUST_MCP_GET, LOCUST_MCP_SET, LOCUST_MCP_SET_OWN_MODE } from '../shared/locust-mcp.js'
 import { VOICE_READY, VOICE_DOWNLOAD, VOICE_TRANSCRIBE, VOICE_CANCEL, VOICE_PROGRESS, VOICE_SETTINGS_READ, VOICE_SETTINGS_SAVE, VOICE_OPENAI_CONSENT } from '../shared/voice.js'
 import { CALLS_LIST, CALLS_SAVE } from '../shared/calls.js'
@@ -434,6 +435,11 @@ export type {
 import type { CloudAgent, CloudFolderState, PublicCloudTurn } from '../shared/cloud-computer.js'
 
 const desktopApi: DesktopApi = {
+  phone: {
+    settings: () => ipcRenderer.invoke(PHONE_SETTINGS_CHANNEL),
+    setEnabled: (enabled) => ipcRenderer.invoke(PHONE_SET_ENABLED_CHANNEL, enabled),
+    forget: () => ipcRenderer.invoke(PHONE_FORGET_CHANNEL)
+  },
   locustMcp: {
     settings: () => ipcRenderer.invoke(LOCUST_MCP_GET),
     setEnabled: (enabled) => ipcRenderer.invoke(LOCUST_MCP_SET, enabled),

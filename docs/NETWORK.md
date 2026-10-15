@@ -215,6 +215,17 @@ reads of your folder stays on this machine.
   is asked to that listener from wherever it was asked: with OpenClaw's line
   (0.754), a message you send OpenClaw from a chat app on your phone reaches
   your teammates, through OpenClaw's own connections, not Locust's.
+- **Your phone** (Settings > General) is off by default, and it is the one
+  listener that is not on `127.0.0.1` only. When enabled, Locust listens for
+  your home network on port 47740 (any free port when that one is taken), and
+  Windows may ask you once whether it can. It serves one page, which holds
+  nothing; everything that page shows or does needs the key in the code you
+  scanned, sent with each request and checked before the request body is read.
+  An address that sends 20 wrong keys in ten minutes is refused for a while,
+  and a request that names this computer by anything but its address is
+  refused. It is plain HTTP on your own network, with no server in between:
+  use it on a network you trust. New code mints a new key and unpairs every
+  phone; turning the switch off closes the listener and forgets the key.
 - **The spellchecker downloads no dictionary.**
 - **Memory recall** runs a small model that ships with Locust.
 - **A report reaches Locust's makers only when you send it.** Send feedback,

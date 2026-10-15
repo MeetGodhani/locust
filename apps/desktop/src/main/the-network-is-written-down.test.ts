@@ -42,6 +42,10 @@ const LISTED: Readonly<Record<string, { readonly places: number; readonly said: 
   'voice-openai.ts': { places: 1, said: ['OpenAI voice typing', 'api.openai.com/v1/audio/transcriptions', 'No redirects are followed'] },
   'permission-host.ts': { places: 1, said: ['Locust\'s permission host listens on `127.0.0.1` only'] },
   'locust-mcp-host.ts': { places: 1, said: ['Let your other AI apps use Locust', 'authenticates the token before reading the request body'] },
+  // Your phone (0.775): the one listener on the home network, not 127.0.0.1.
+  'phone-host.ts': { places: 1, said: ['**Your phone** (Settings > General) is off by default', 'listener that is not on `127.0.0.1` only', 'checked before the request body is read'] },
+  // The page it serves, whose requests go back to that one listener and nowhere else (its CSP allows only 'self').
+  'phone-page.ts': { places: 1, said: ['It serves one page, which holds', 'nothing; everything that page shows or does needs the key'] },
   'antigravity-cascade.ts': { places: 1, said: ['Antigravity\'s own local server, at `127.0.0.1`'] },
   // Test: the models the address serves, then one capped chat request with a tool.
   'own-models.ts': { places: 2, said: ['Testing one of your own models', 'When you press Test'] },

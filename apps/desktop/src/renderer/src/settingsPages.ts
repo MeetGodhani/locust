@@ -86,9 +86,11 @@ export const SETTINGS_PAGES: readonly SettingsPage[] = [
     label: 'General',
     group: 'Locust',
     icon: 'settings',
-    headings: ['Let your other AI apps use Locust', 'Voice typing', 'Talk from any app', 'Scout keeps watch', 'Startup', 'Updates', 'Report a problem', 'Help'],
+    headings: ['Let your other AI apps use Locust', 'Your phone', 'Voice typing', 'Talk from any app', 'Scout keeps watch', 'Startup', 'Updates', 'Report a problem', 'Help'],
     alsoKnownAs: {
       'Let your other AI apps use Locust': ['MCP server', 'stdio', 'Claude Code', 'Codex', 'Cursor', 'other apps'],
+      // A page on the home network, paired by a QR code (0.775).
+      'Your phone': ['phone', 'mobile', 'QR code', 'iPhone', 'Android', 'away from your desk'],
       'Voice typing': ['dictation', 'microphone', 'speech', 'whisper', 'transcription'],
       // The keys that start Talk from any app (0.755).
       'Talk from any app': ['shortcut', 'hotkey', 'keyboard shortcut', 'voice call', 'Ctrl+Alt+Space'],
@@ -186,7 +188,7 @@ export const SETTINGS_PAGES: readonly SettingsPage[] = [
       // "node" and "npm" are what a person types after the first screen has
       // just talked to them about Node. This is the page about the CLIs that
       // are installed with them.
-      'AI agents & accounts': ['runtime', 'runtimes', 'node', 'node.js', 'npm', 'install', 'cli', 'model', 'models', 'sign in', 'account', 'api key', 'remote control', 'phone', 'claude.ai'],
+      'AI agents & accounts': ['runtime', 'runtimes', 'node', 'node.js', 'npm', 'install', 'cli', 'model', 'models', 'sign in', 'account', 'api key', 'remote control', 'claude.ai'],
       // R9 (0.617): which agents ask first, so which a card can stop.
       // Not 'approve', 'permission', 'ask first' or 'always': Teammates has those.
       'What Locust can stop': ['approval', 'approvals', 'permissions', 'card', 'cards', 'gate', 'stop', 'safety', 'security'],

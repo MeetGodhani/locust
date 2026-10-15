@@ -23020,3 +23020,9 @@ textarea.lc-compare__judgecriteria {
   font-size: var(--lc-text-mono-caption);
   color: var(--lc-text-muted);
 }
+
+/* Your phone (0.775): the code to scan beside what to know about it; stacked when the window is narrow. */
+.lc-phone { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; margin-top: 12px; }
+.lc-phone__qr { width: 176px; height: 176px; flex: none; border-radius: 10px; }
+.lc-phone__side { flex: 1 1 220px; min-width: 0; display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.lc-phone__side .lc-settings__note { margin: 0; }

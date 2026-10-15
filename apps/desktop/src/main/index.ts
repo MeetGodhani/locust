@@ -121,6 +121,9 @@ import { createBriefSessions } from './brief-sessions.js'
 import { createRunEnd } from './run-end.js'
 import { createCarryOn, type CarryOn } from './carry-on.js'
 import { CARRY_ON_CHANNEL, parsedCarryOnRoute } from '../shared/carry-on.js'
+import { createPhoneHost } from './phone-host.js'
+import { phonePage } from './phone-page.js'
+import { PHONE_FORGET_CHANNEL, PHONE_SET_ENABLED_CHANNEL, PHONE_SETTINGS_CHANNEL, phoneConversations, phoneTurns } from '../shared/phone.js'
 import { createKeepAwake, KEEP_AWAKE_BEAT_MS } from './keep-awake.js'
 import { attentionDot, needsYouCountFrom, taskbarAttention } from './taskbar-attention.js'
 import { CLOSE_BUTTONS, closeQuestion, hideToTrayOnClose, shouldAskBeforeClosing, trayLine, trayMenuLabels } from './quit-guard.js'
@@ -3168,10 +3171,14 @@ if (!ownsSingleInstanceLock) {
 
     ipcMain.handle(MISSION_APPROVAL_DECIDE_CHANNEL, async (event, answer: unknown) => {
       if (!fromOwnWindow(event)) return { ok: false } as const
+      return { ok: await decideApproval(answer) } as const
+    })
+    /** A card answered from the window, or from the person's phone (0.775): one path, with every guard. */
+    const decideApproval = async (answer: unknown): Promise<boolean> => {
       // A decision, or a question's answers -- see approvalAnswerFrom, and why
       // the answers used to be dropped right here.
       const decided = approvalAnswerFrom(answer)
-      if (decided === undefined) return { ok: false } as const
+      if (decided === undefined) return false
       // Whichever host is holding this id. A Codex approval lives in the
       // mission service's approval channel; a Claude Code connector permission
       // in the permission host; an Antigravity question in its mission
@@ -3193,8 +3200,8 @@ if (!ownsSingleInstanceLock) {
       if (remembers) runAlways.add(raised!.request.runId, alwaysKey)
       const answered = await answerApproval(enforced.answer, undefined, enforced.note)
       if (remembers && !answered) runAlways.remove(raised!.request.runId, alwaysKey)
-      return { ok: answered } as const
-    })
+      return answered
+    }
 
     const teammates = createTeammateStore({ rootDirectory: app.getPath('userData') })
     missionServiceForShutdown = codexMissions
@@ -8574,6 +8581,74 @@ if (!ownsSingleInstanceLock) {
     app.once('will-quit', () => { void voiceCallHost.dispose() })
     mcpForShutdown = mcpHost
     void mcpHost.load().catch(() => note('locust-mcp', 'The local MCP listener could not start. It is off.'))
+    /*
+     * YOUR PHONE (0.775, shared/phone.ts). What the phone shows is what the window's history shows; a card it answers
+     * goes down the window's own path (decideApproval); a message it sends is the person's next turn, started as the
+     * MCP tools start one -- on the teammate's own route and mode -- and recorded as the person's, because it is.
+     */
+    const phoneNames = async () => {
+      const owners = await teammates.missionOwners().catch(() => ({} as Readonly<Record<string, string>>))
+      const listed = await teammates.list().catch(() => [])
+      return (missionId: string) => listed.find((mate) => mate.teammateId === owners[missionId])?.name
+    }
+    const phoneHistory = async () => {
+      const history = await readMissionHistory(missionLedger, undefined, workspacePath)
+      const live = [...codexMissions.liveMissionIds(), ...antigravityMissions.liveMissionIds()]
+      const names = await phoneNames()
+      return { ...phoneConversations(history.ok ? history.data.missions : [], live, names), live, names }
+    }
+    const phoneSending = new Set<string>()
+    const phoneHost = createPhoneHost({
+      directory: app.getPath('userData'),
+      page: phonePage,
+      calls: {
+        state: async () => ({
+          waiting: await Promise.all(raisedApprovals.waiting().map(async ({ request, teammateId }) => {
+            const name = await scoutNameOf(teammateId)
+            return { approvalId: request.approvalId, missionId: request.missionId, summary: request.summary, requestedAt: request.requestedAt, ...(name === undefined ? {} : { name }) }
+          })),
+          conversations: (await phoneHistory()).list
+        }),
+        turns: async (missionId) => {
+          const { chains, live, names } = await phoneHistory()
+          return phoneTurns(chains, missionId, live, names)
+        },
+        decide: async (approvalId, approve) => {
+          const answered = await decideApproval({ approvalId, decision: approve ? 'approve-once' : 'deny' })
+          // The window's card comes down, as one answered in Antigravity's own window does.
+          const target = approvalWindow
+          if (answered && target && !target.isDestroyed() && !target.webContents.isDestroyed()) target.webContents.send(MISSION_APPROVAL_WITHDRAWN_CHANNEL, approvalId)
+          return answered
+        },
+        send: async (missionId, text) => {
+          const newest = await newestTurnOf(missionLedger, missionId)
+          // Two presses, or the phone and the window at once, must not both continue the same turn.
+          if (phoneSending.has(newest)) return { ok: false, message: 'That message is already on its way.' }
+          if (codexMissions.hasMission(newest) || antigravityMissions.liveMissionIds().includes(newest)) {
+            return { ok: false, message: 'This conversation is still working. Send when it finishes.' }
+          }
+          phoneSending.add(newest)
+          try {
+            const owner = (await teammates.missionOwners().catch(() => ({} as Readonly<Record<string, string>>)))[newest]
+            if (owner === undefined) return { ok: false, message: 'This conversation no longer has a teammate in Locust. Nothing was sent.' }
+            const list = await listTeammates()
+            const mode = (list.ok ? list.data.teammates.find((mate) => mate.teammateId === owner)?.route?.mode : undefined) ?? 'ask'
+            const response = await startMission({ prompt: text, teammateId: owner, followUpOf: newest, mode, keepSavedRoute: true } as CodexMissionStartRequest, sendToWindow)
+            if (!response.ok) return { ok: false, message: response.error.message }
+            rememberSentByPerson(response.data.missionId)
+            sendToWindow({ kind: 'mission-started', runId: response.data.runId, missionId: response.data.missionId, teammateId: owner, prompt: text, data: response.data })
+            return { ok: true }
+          } finally {
+            phoneSending.delete(newest)
+          }
+        }
+      }
+    })
+    app.once('will-quit', () => { void phoneHost.dispose() })
+    void phoneHost.load().catch(() => note('phone', 'The page for your phone could not start. It is off.'))
+    ipcMain.handle(PHONE_SETTINGS_CHANNEL, (event) => fromOwnWindow(event) ? phoneHost.settings() : { enabled: false, addresses: [] })
+    ipcMain.handle(PHONE_SET_ENABLED_CHANNEL, (event, enabled: unknown) => fromOwnWindow(event) ? phoneHost.setEnabled(enabled) : { enabled: false, addresses: [] })
+    ipcMain.handle(PHONE_FORGET_CHANNEL, (event) => fromOwnWindow(event) ? phoneHost.forget() : { enabled: false, addresses: [] })
     ipcMain.handle(LOCUST_MCP_GET, event => fromOwnWindow(event) ? mcpHost.settings() : { enabled: false, ownMode: false })
     ipcMain.handle(LOCUST_MCP_SET, (event, enabled: unknown) => fromOwnWindow(event) ? mcpHost.setEnabled(enabled) : { enabled: false, ownMode: false })
     ipcMain.handle(LOCUST_MCP_SET_OWN_MODE, (event, ownMode: unknown) => fromOwnWindow(event) ? mcpHost.setOwnMode(ownMode) : { enabled: false, ownMode: false })
