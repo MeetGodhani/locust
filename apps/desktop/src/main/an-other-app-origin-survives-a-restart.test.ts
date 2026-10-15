@@ -9,7 +9,7 @@ import { LEFT_OUT, BACKED_UP_FILES } from './profile-backup.js'
 const roots: string[] = []
 afterEach(async () => { for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }) })
 describe('an other-app origin survives a restart', () => {
-  it('records schema 23, recovers the origin, and projects it into history without forgetting Ask mode', async () => {
+  it('records schema 23 or later, recovers the origin, and projects it into history without forgetting Ask mode', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'locust-mcp-ledger-')); roots.push(directory)
     const metadata: MissionLedgerMetadata = { missionId: 'mission_1', runId: 'run_1', prompt: 'Review this', runtime: 'codex', model: 'account-default', requestedRouteId: 'codex', resolvedRouteId: 'codex-account:default', cliVersion: null, workspaceId: 'ws_test', sandbox: 'read-only', mode: 'ask', executionPolicyVersion: 1, createdAt: '2026-10-07T00:00:00Z', startedBy: { kind: 'mcp' } }
     const ledger = createFileMissionLedger({ rootDirectory: directory })
@@ -20,7 +20,8 @@ describe('an other-app origin survives a restart', () => {
     expect(answer.ok && answer.data.mission.mode).toBe('ask')
     const file = join(directory, 'mission_1.jsonl')
     const header = JSON.parse((await readFile(file, 'utf8')).split('\n')[0]!)
-    expect(header.schemaVersion).toBe(23)
+    // v23 added this origin; v24 (0.774) another, so a file is written at whatever is current.
+    expect(header.schemaVersion).toBeGreaterThanOrEqual(23)
     header.schemaVersion = 22
     await writeFile(file, JSON.stringify(header) + '\n')
     const old = await createFileMissionLedger({ rootDirectory: directory }).getMission('mission_1')
@@ -34,7 +35,7 @@ describe('an other-app origin survives a restart', () => {
     const answer = await readOneMission(createFileMissionLedger({ rootDirectory: directory }), undefined, 'mission_2')
     expect(answer.ok && answer.data.mission.startedBy).toEqual({ kind: 'mcp', via: 'voice' })
     // Still the same schema: an older Locust reads it as "another app", which is still true.
-    expect(JSON.parse((await readFile(join(directory, 'mission_2.jsonl'), 'utf8')).split('\n')[0]!).schemaVersion).toBe(23)
+    expect(JSON.parse((await readFile(join(directory, 'mission_2.jsonl'), 'utf8')).split('\n')[0]!).schemaVersion).toBeGreaterThanOrEqual(23)
   })
   it('makes the external origin visible in the thread and keeps the actual ask as a message', async () => {
     const thread = await readFile(fileURLToPath(new URL('../renderer/src/components/Thread.tsx', import.meta.url)), 'utf8')

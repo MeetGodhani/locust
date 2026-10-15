@@ -6,6 +6,7 @@ import { DIAGRAM_DRAW_CHANNEL, type DiagramResponse } from '../shared/diagram.js
 import { COMMIT_DRAFT_CHANNEL, type CommitDraftResponse } from '../shared/commit-draft.js'
 import { PANEL_RUNS_CHANNEL } from '../shared/panel-runs.js'
 import { WALKTHROUGH_CHANNEL, type WalkthroughResponse } from '../shared/walkthrough.js'
+import { CARRY_ON_CHANNEL, type CarryOnResponse, type CarryOnRoute } from '../shared/carry-on.js'
 import { VOICE_CALL_ANSWER, VOICE_CALL_AVAILABLE, VOICE_CALL_EVENT, VOICE_CALL_PREVIEW, VOICE_CALL_SET_VOICE, VOICE_CALL_START, VOICE_CALL_STOP, VOICE_CALL_VOICES, VOICE_PREVIEW_SAVE, VOICE_PREVIEW_SAVED, VOICE_PREVIEW_TRIGGER } from '../shared/voice-call.js'
 import type { VoiceCallEvent } from '../shared/voice-call.js'
 import { TALK_SHORTCUT_PENDING, TALK_SHORTCUT_PRESSED, TALK_SHORTCUT_READ, TALK_SHORTCUT_SET, type TalkShortcutPress } from '../shared/talk-shortcut.js'
@@ -815,6 +816,7 @@ const desktopApi: DesktopApi = {
     ipcRenderer.invoke(TEAMMATE_FOLDER_CHANNEL, { teammateId, clear: clear === true }) as Promise<TeammateFolderResponse>,
   listWorktrees: () => ipcRenderer.invoke(WORKTREE_LIST_CHANNEL) as Promise<WorktreeListResponse>,
   readMission: (missionId: string) => ipcRenderer.invoke(MISSION_READ_CHANNEL, missionId) as Promise<MissionReadResponse>,
+  carryOn: (missionId: string, route: CarryOnRoute) => ipcRenderer.invoke(CARRY_ON_CHANNEL, missionId, route) as Promise<CarryOnResponse>,
   removeWorktree: (teammateId: string, discard?: readonly string[]) => ipcRenderer.invoke(WORKTREE_REMOVE_CHANNEL, teammateId, discard) as Promise<WorktreeListResponse>,
   reviewBranch: (teammateId: string) => ipcRenderer.invoke(WORKTREE_REVIEW_CHANNEL, teammateId) as Promise<BranchReviewResponse>,
   turnDiff: (teammateId: string, sha: string) => ipcRenderer.invoke(WORKTREE_TURN_DIFF_CHANNEL, teammateId, sha) as Promise<TurnDiffResponse>,

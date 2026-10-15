@@ -26,7 +26,7 @@ import type { CheckpointReason, ReconciledCheckpoint } from './checkpoint.js'
  */
 export type MissionRecordedMode = "ask" | "plan" | "accept-edits" | "approve-each" | "auto";
 
-export const MISSION_LEDGER_SCHEMA_VERSION = 23 as const
+export const MISSION_LEDGER_SCHEMA_VERSION = 24 as const
 
 /**
  * Versions this reader accepts, each a strict subset of the next, so all are
@@ -165,7 +165,9 @@ export const MISSION_LEDGER_SCHEMA_VERSION = 23 as const
  */
 // v23 records an Ask-only conversation started from another app through MCP.
 // Earlier readers must refuse that origin rather than call it a person's own turn.
-export const SUPPORTED_MISSION_LEDGER_SCHEMA_VERSIONS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23] as const
+// v24 records a turn Locust started because the agent before it ran out of its plan (0.774, `carry-on`): nobody
+// typed it. A v23 reader stops at a starter it does not know, so the number moves for the reason it moved at v23.
+export const SUPPORTED_MISSION_LEDGER_SCHEMA_VERSIONS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24] as const
 
 export type MissionLedgerSchemaVersion =
   (typeof SUPPORTED_MISSION_LEDGER_SCHEMA_VERSIONS)[number]
@@ -325,6 +327,15 @@ export type MissionStarter =
       readonly of: string
       /** Which side question on that conversation this is, counting from 1. */
       readonly question: number
+    }
+  | {
+      /**
+       * The turn before ran out of its agent's plan, and Locust carried the work on with the agent the person
+       * chose (v24, 0.774). Its prompt is Locust's, never the person's.
+       */
+      readonly kind: 'carry-on'
+      /** The runtime whose plan ran out. */
+      readonly from: MissionRuntimeId
     }
 
 /**
@@ -885,11 +896,12 @@ function validateMetadata(metadata: MissionLedgerMetadata): MissionLedgerMetadat
                 ? starter.question
                 : undefined
     if (
-      (starter.kind !== 'relay' && starter.kind !== 'resume' && starter.kind !== 'routine' && starter.kind !== 'terminal' && starter.kind !== 'side' && starter.kind !== 'mcp')
-      || (starter.kind !== 'mcp' && (counter === undefined || !Number.isSafeInteger(counter) || counter < 1))
+      (starter.kind !== 'relay' && starter.kind !== 'resume' && starter.kind !== 'routine' && starter.kind !== 'terminal' && starter.kind !== 'side' && starter.kind !== 'mcp' && starter.kind !== 'carry-on')
+      || (starter.kind !== 'mcp' && starter.kind !== 'carry-on' && (counter === undefined || !Number.isSafeInteger(counter) || counter < 1))
     ) {
       throw new Error('Mission starter is invalid')
     }
+    if (starter.kind === 'carry-on' && !isMissionRuntime(starter.from)) throw new Error('Mission starter is invalid')
     if (starter.kind === 'routine') requireText(starter.routineId, 'startedBy.routineId', 200)
     if (starter.kind === 'side') requireSafeId(starter.of, 'startedBy.of')
   }
@@ -1133,6 +1145,8 @@ function parsedMetadata(
     return undefined
   }
   if (schemaVersion < 23 && candidate.startedBy?.kind === 'mcp') return undefined
+  // And no writer before v24 carried a turn on after a plan ran out.
+  if (schemaVersion < 24 && candidate.startedBy?.kind === 'carry-on') return undefined
   // And no writer before v7 knew Cursor Agent or Gemini CLI.
   if (schemaVersion < 7 && candidate.runtime !== 'codex' && candidate.runtime !== 'claude') {
     return undefined

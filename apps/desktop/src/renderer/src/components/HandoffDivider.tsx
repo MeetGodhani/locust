@@ -29,7 +29,8 @@ export function HandoffDivider({
   at,
   unsettledCount,
   omittedBriefing,
-  leftOutByYou = []
+  leftOutByYou = [],
+  carriedOn
 }: {
   readonly from: MissionRuntimeId
   readonly to: MissionRuntimeId
@@ -38,6 +39,8 @@ export function HandoffDivider({
   readonly omittedBriefing: readonly string[]
   /** What the person chose to leave out of it (0.527): their choice, so said plainly, not as a warning. */
   readonly leftOutByYou?: readonly string[]
+  /** Locust made the switch because `from`'s plan ran out (0.774): said first, since nobody typed the turn below. */
+  readonly carriedOn?: true
 }): ReactElement {
   // Every runtime by its name. Only three were listed, so a switch to
   // OpenCode read "Codex -> opencode" (drive-runtime-switch, packaged 0.309).
@@ -56,6 +59,7 @@ export function HandoffDivider({
           <span className="lc-handoff__to">{toLabel}</span>
           {at !== undefined && <span className="lc-handoff__time">· {at}</span>}
         </span>
+        {carriedOn === true && <span className="lc-handoff__note">{`${fromLabel} ran out of its plan, so Locust carried the work on with ${toLabel}.`}</span>}
         <span className="lc-handoff__note">
           {unsettledCount === 0
             ? `Nothing was in flight, so ${toLabel} picked up from a clean stop.`

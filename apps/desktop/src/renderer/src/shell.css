@@ -3300,6 +3300,19 @@ textarea {
   border-left-color: var(--lc-border-control);
 }
 
+/* Who carries the work on when a plan runs out (0.774): one choice of up to eight agents, so a row that wraps
+   rather than a segmented bar that would run off the pane. */
+.lc-carryon {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--lc-space-2);
+  margin: 0 0 var(--lc-space-4);
+}
+.lc-carryon > .lc-button {
+  height: 26px;
+  padding: 0 var(--lc-space-3);
+}
+
 /*
  * MONO IS FOR THE NUMBERS ONLY, and that limit is deliberate.
  *

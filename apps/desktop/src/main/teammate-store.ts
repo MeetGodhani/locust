@@ -11,6 +11,7 @@ import { isMissionRuntime } from '../shared/runtimes.js'
 import { isMonthlyLimit } from '../shared/spend.js'
 import { isChatGptVoice } from '../shared/voice-call.js'
 import { parsedAboutYou, parsedAboutYouSuggestions } from '../shared/about-you.js'
+import { parsedPlanRunsOut } from '../shared/carry-on.js'
 import { aboutYouSecretRefusal, secretIn } from '../shared/secrets.js'
 import { replaceFile } from './replace-file.js'
 
@@ -609,7 +610,14 @@ function parsedFile(text: string): StoredFile {
     })(),
     ...(typeof rawSettings === 'object' && rawSettings !== null && isTeammateRoute((rawSettings as Record<string, unknown>).newChatRoute)
       ? { newChatRoute: (rawSettings as Record<string, unknown>).newChatRoute as TeammateRoute }
-      : {})
+      : {}),
+    // Who carries the work on when a plan runs out (0.774); anything but a known agent is no choice.
+    ...(() => {
+      const planRunsOut = typeof rawSettings === 'object' && rawSettings !== null
+        ? parsedPlanRunsOut((rawSettings as Record<string, unknown>).planRunsOut)
+        : undefined
+      return planRunsOut === undefined ? {} : { planRunsOut }
+    })()
   }
 
   // Pins, read as untrusted as titles are: ids only, each once, no more than the cap (0.729).
@@ -1096,7 +1104,12 @@ export function createTeammateStore(options: { readonly rootDirectory: string })
           // The model a new chat with nobody starts on (0.552); anything but a route is dropped.
           ...(isTeammateRoute((settings as Record<string, unknown>).newChatRoute)
             ? { newChatRoute: (settings as Record<string, unknown>).newChatRoute as TeammateRoute }
-            : {})
+            : {}),
+          // Kept across every write that does not name it; null clears it (0.774).
+          ...(() => {
+            const planRunsOut = parsedPlanRunsOut((settings as Record<string, unknown>).planRunsOut)
+            return planRunsOut === undefined ? {} : { planRunsOut }
+          })()
         }
         await write({ ...stored, settings: next })
         return next

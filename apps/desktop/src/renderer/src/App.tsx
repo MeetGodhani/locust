@@ -59,6 +59,8 @@ import type {
 } from '../../shared/ipc.js'
 import { roleLabelOf } from '../../shared/ipc.js'
 import { isPanelRunKind } from '../../shared/panel-runs.js'
+import { carryOnOffer, planRanOut } from '../../shared/carry-on.js'
+import type { PlanRunsOut } from '../../shared/carry-on.js'
 import { withSuggestion } from '../../shared/about-you.js'
 import { aboutYouSecretRefusal, secretIn } from '../../shared/secrets.js'
 import type { AboutYouSuggestion } from '../../shared/about-you.js'
@@ -314,6 +316,8 @@ interface LiveRunState {
     readonly events: readonly NormalizedRuntimeEvent[]
     /** That turn's own workroom exchange, so the thread can draw it in place. */
     readonly peerMessages?: readonly PublicPeerMessage[]
+    /** Who started that turn, where it was not the person (a turn carried on after a plan ran out, 0.774). */
+    readonly startedBy?: LiveStarter
     /** Set when that turn was a reply sent to another runtime: the seam before it. */
     readonly switchedFrom?: TurnSwitch
     /** Set when the person had that exchange in the runtime's own terminal (0.391). */
@@ -506,6 +510,15 @@ function inTerminalOf(run: LiveRunState): { readonly inTerminal?: MissionRuntime
 }
 
 /**
+ * A recorded turn Locust carried on after a plan ran out (0.774) keeps saying so when the conversation is opened
+ * again: without its starter the thread read the host's instruction back as the person's own message (the 0.774
+ * drive's reloaded frame). Only this kind: what the others carry when reopened is unchanged.
+ */
+function carriedOnOf(mission: PublicRecoveredMission | undefined): { readonly startedBy?: LiveStarter } {
+  return mission?.startedBy?.kind === 'carry-on' ? { startedBy: mission.startedBy } : {}
+}
+
+/**
  * The turns before a host-started reply, so it renders as the next turn of
  * the conversation it continues. Read from the live run when the renderer
  * still holds it, else from history; empty when neither knows the mission,
@@ -545,6 +558,7 @@ function earlierTurnsOf(
       prompt: record === undefined ? turn.prompt : typedPrompt(record, byId),
       events: turn.events,
       peerMessages: turn.peerMessages,
+      ...carriedOnOf(record),
       ...(turn.switchedFrom === undefined ? {} : { switchedFrom: turn.switchedFrom }),
       ...(turn.inTerminal === undefined ? {} : { inTerminal: turn.inTerminal }),
       ...(turn.versions === undefined ? {} : { versions: turn.versions })
@@ -576,6 +590,7 @@ function reopenedRun(
               prompt: held === undefined ? turn.prompt : typedPrompt(held, byId),
               events: turn.events,
               peerMessages: turn.peerMessages,
+              ...carriedOnOf(held),
               ...(turn.switchedFrom === undefined ? {} : { switchedFrom: turn.switchedFrom }),
               ...(turn.inTerminal === undefined ? {} : { inTerminal: turn.inTerminal }),
               ...(turn.versions === undefined ? {} : { versions: turn.versions })
@@ -614,6 +629,7 @@ function restoredLiveRun(mission: PublicRecoveredMission): LiveRunState {
     restored: true,
     restoredMission: mission,
     peerMessages: mission.peerMessages,
+    ...carriedOnOf(mission),
     // A3.3: the check after this turn, kept on the record so a reopened
     // conversation still offers to send it.
     ...(mission.editCheck === undefined ? {} : { editCheck: mission.editCheck }),
@@ -2466,6 +2482,10 @@ export default function App(): ReactElement {
   const [keepATodoList, setKeepATodoList] = useState(false)
   /** Lend the person's own skills to Claude Code teammates. See WorkspaceSettings.claudeOwnSkills. */
   const [claudeOwnSkills, setClaudeOwnSkills] = useState(false)
+  /** Who carries the work on when a plan runs out (0.774). See WorkspaceSettings.planRunsOut. */
+  const [planRunsOut, setPlanRunsOut] = useState<PlanRunsOut | undefined>(undefined)
+  /** The stopped turn whose Carry on was pressed, until the new turn starts or the press is refused (0.774). */
+  const [carryingOn, setCarryingOn] = useState<{ readonly missionId: string; readonly refused?: string } | undefined>(undefined)
 
   // Switching Auto off takes it away from a window that was sitting on it,
   // rather than leaving a choice the host would refuse at the next send.
@@ -3043,6 +3063,10 @@ export default function App(): ReactElement {
         if (update.startedBy?.kind === 'room') refreshRooms()
         const queued = pendingUpdatesRef.current.get(update.runId) ?? []
         pendingUpdatesRef.current.delete(update.runId)
+        // The turn it continues: a reply's, or -- for a reply on another agent, which the host starts as a switch --
+        // the turn it switched from (0.774: a turn carried on after a plan ran out is always the second kind).
+        const continues = update.data.followsUp?.missionId ?? update.data.switchedFrom?.missionId
+        const switched = update.data.switchedFrom
         setRuns((current) => {
           if (current.has(update.runId)) return current
           let next: LiveRunState = {
@@ -3064,10 +3088,23 @@ export default function App(): ReactElement {
             ...(update.teammateId === undefined ? {} : { teammateId: update.teammateId }),
             peerMessages: update.data.peerMessages,
             startedBy: update.startedBy,
-            ...(update.data.followsUp === undefined
+            ...(continues === undefined
               ? {}
               : {
-                  earlierTurns: earlierTurnsOf(update.data.followsUp.missionId, current, historyByIdRef.current)
+                  earlierTurns: earlierTurnsOf(continues, current, historyByIdRef.current)
+                }),
+            // The seam, the moment it happens, as for a reply the person sent on another agent.
+            ...(switched === undefined
+              ? {}
+              : {
+                  switchedFrom: {
+                    from: switched.runtime,
+                    to: update.data.runtime,
+                    at: new Date().toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }),
+                    unsettledCount: switched.unsettledCount,
+                    omittedBriefing: switched.omittedBriefing,
+                    ...(update.startedBy.kind === 'carry-on' ? { carriedOn: true as const } : {})
+                  }
                 })
           }
           for (const held of queued) next = applyMissionUpdate(next, held)
@@ -3077,9 +3114,11 @@ export default function App(): ReactElement {
         // one on screen, follow it to its new turn, as a person's own reply
         // would be followed. Another conversation on screen is left alone.
         const shown = liveRunRef.current
-        if (update.data.followsUp !== undefined && shown?.data?.missionId === update.data.followsUp.missionId) {
+        if (continues !== undefined && shown?.data?.missionId === continues) {
           setShownKey(update.runId)
         }
+        // A press of Carry on is answered by the turn it started (0.774).
+        if (update.startedBy.kind === 'carry-on') setCarryingOn(undefined)
         // A turn a call with a teammate started (0.747): kept with the call, so its words go around it.
         if (update.startedBy?.kind === 'mcp' && update.startedBy.via === 'voice' && update.teammateId !== undefined && update.teammateId === liveCall()?.teammateId) {
           addLiveCallTurn(update.missionId)
@@ -3379,6 +3418,7 @@ export default function App(): ReactElement {
           setRelay(settings.relay === true)
           setAutoMode(settings.autoMode === true)
           setAutoModeKnown(true)
+          setPlanRunsOut(settings.planRunsOut ?? undefined)
           setAskConnectors(settings.askConnectors === true)
           setKeepATodoList(settings.keepATodoList === true)
           setClaudeOwnSkills(settings.claudeOwnSkills === true)
@@ -5090,6 +5130,8 @@ export default function App(): ReactElement {
             // the message Booty sent Wren lived on the turn BEFORE the reply,
             // and this is where that turn was rebuilt without it.
             ...(continuing.peerMessages === undefined ? {} : { peerMessages: continuing.peerMessages }),
+            // A turn Locust carried on (0.774) stays Locust's once the person replies under it.
+            ...(continuing.startedBy?.kind === 'carry-on' ? { startedBy: continuing.startedBy } : {}),
             // And where that turn itself switched runtime, so its divider
             // stays above it once the conversation moves on.
             ...(continuing.switchedFrom === undefined ? {} : { switchedFrom: continuing.switchedFrom }),
@@ -5726,6 +5768,56 @@ export default function App(): ReactElement {
     const failed = [...shown.events].reverse().find((event) => event.type === 'run.failed')
     if (failed === undefined || failed.type !== 'run.failed' || !failedOnProviderSide(failed.payload)) return undefined
     return () => void startMission('Continue from where you stopped.')
+  })()
+
+  /*
+   * WHEN A PLAN RUNS OUT (0.774, shared/carry-on.ts). A paid agent's limit was "the person's call" with nothing to
+   * press: pick another model, retype, send. The card names the agent that can carry on -- the one picked in Settings,
+   * or the first signed in and not at its own limit -- and one press starts it, briefed with what was done. The host
+   * starts the turn (main/carry-on.ts), so the press is the same path as carrying on without one.
+   */
+  // The agents that can carry work on here: found, signed in, built, and Antigravity only through its command line
+  // (main/index.ts) -- the person's own models and anything else discovery lists are not agents to hand a turn to.
+  const carryOnAgents: readonly MissionRuntimeId[] = runtimes
+    .filter((status) => runtimeIsUsable(status) && integrationOf(status.id) !== 'planned')
+    .filter((status) => status.id !== 'antigravity' || status.throughCli === true)
+    .map((status) => status.id)
+    .filter(isMissionRuntime)
+  const carryOnReady = new Set<MissionRuntimeId>(carryOnAgents.filter((runtime) => !limitedRuntimes.has(runtime)))
+  // What Settings offers to carry work on with: every agent that can run a turn here, the chosen one even when it cannot right now.
+  const carryOnChoices: readonly { readonly runtime: MissionRuntimeId; readonly label: string }[] = (() => {
+    const named = (runtime: MissionRuntimeId): string =>
+      planRunsOut?.runtime === runtime && planRunsOut.model !== undefined ? `${runtimeDisplayName(runtime)} · ${modelDisplayName(runtime, planRunsOut.model)}` : runtimeDisplayName(runtime)
+    const listed = carryOnAgents.map((runtime) => ({ runtime, label: named(runtime) }))
+    const chosen = planRunsOut?.runtime
+    return chosen === undefined || listed.some((choice) => choice.runtime === chosen) ? listed : [...listed, { runtime: chosen, label: `${named(chosen)} (not ready)` }]
+  })()
+  const carryOnShown = ((): { readonly label: string; readonly from: MissionRuntimeId; readonly busy: boolean; readonly refused?: string; readonly onPress: () => void } | undefined => {
+    const shown = liveRun
+    if (shown === undefined || shown.phase !== 'failed' || shown.data === undefined || limitOffer !== undefined) return undefined
+    if (!planRanOut(shown.events)) return undefined
+    const from = shown.data.runtime
+    const route = carryOnOffer(from, planRunsOut, carryOnReady)
+    if (route === undefined) return undefined
+    const missionId = shown.data.missionId
+    const pressed = carryingOn?.missionId === missionId ? carryingOn : undefined
+    const busy = pressed !== undefined && pressed.refused === undefined
+    return {
+      from,
+      label: `Carry on with ${route.model === undefined ? runtimeDisplayName(route.runtime) : modelDisplayName(route.runtime, route.model)}`,
+      busy,
+      ...(pressed?.refused === undefined ? {} : { refused: pressed.refused }),
+      onPress: () => {
+        const bridge = window.desktop
+        if (!bridge || busy) return
+        setCarryingOn({ missionId })
+        void bridge
+          .carryOn(missionId, route)
+          // Started: the new turn's own start clears this. Refused: the reason stays under the button.
+          .then((response) => { if (!response.ok) setCarryingOn({ missionId, refused: response.message }) })
+          .catch(() => setCarryingOn({ missionId, refused: 'The turn could not be started. The work stays where it stopped.' }))
+      }
+    }
   })()
 
   /*
@@ -8549,6 +8641,16 @@ export default function App(): ReactElement {
                   .then((settings) => setAutoMode(settings.autoMode === true))
                   .catch(() => setAutoMode(!next))
               }}
+              {...(planRunsOut === undefined ? {} : { planRunsOut })}
+              carryOnChoices={carryOnChoices}
+              onPlanRunsOutChange={(next) => {
+                const before = planRunsOut
+                setPlanRunsOut(next ?? undefined)
+                void window.desktop
+                  ?.writeWorkspaceSettings({ swarm, relay, relayHopCap, interrupt, memoryMode, autoMode, askConnectors, keepATodoList, replySize, layout, tube, planRunsOut: next })
+                  .then((settings) => setPlanRunsOut(settings.planRunsOut ?? undefined))
+                  .catch(() => setPlanRunsOut(before))
+              }}
               askConnectors={askConnectors}
               onOwnModelsChanged={readModels}
               onAskConnectorsChange={(next) => {
@@ -9311,6 +9413,7 @@ export default function App(): ReactElement {
                 onStopRun={cancelMission}
                 {...(limitOffer === undefined ? {} : { limitModel: limitOffer })}
                 {...(continueOffer === undefined || running ? {} : { onContinueAfterBusy: continueOffer })}
+                {...(carryOnShown === undefined || running ? {} : { carryOn: carryOnShown })}
                 {...(signInOffer === undefined ? {} : { signInRuntime: signInOffer })}
                 onSendAgain={
                   // R29: a run stopped before it used any tool, most often

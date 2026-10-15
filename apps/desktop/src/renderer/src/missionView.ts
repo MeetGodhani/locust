@@ -3804,7 +3804,8 @@ export function buildThread(
         // turn is over: after its work and its answer, never above them. The
         // first packaged drive drew "Saved this turn" under the ask, before
         // the work it saved.
-        if (event.payload.code === 'host.turn_checkpoint') {
+        // And why a turn whose plan ran out was not carried on (0.774): after its error, where the offer would be.
+        if (event.payload.code === 'host.turn_checkpoint' || event.payload.code === 'host.carry_on') {
           receipts.push({ key: event.id, type: 'diagnostic', level: event.payload.level, message: event.payload.message })
           break
         }
@@ -5071,6 +5072,8 @@ export interface TurnSwitch {
   readonly at: string | undefined
   readonly unsettledCount: number
   readonly omittedBriefing: readonly string[]
+  /** Locust made this switch because `from`'s plan ran out (0.774), not the person. */
+  readonly carriedOn?: true
 }
 
 export interface ConversationTurn {
@@ -5186,7 +5189,8 @@ export function switchOf(
     unsettledCount: checkpoint?.unsettledActions.length ?? 0,
     // Recorded since 0.519; an older switch recorded nothing, and nothing is guessed.
     omittedBriefing: link.leftOut ?? [],
-    ...(link.leftOutByYou === undefined ? {} : { leftOutByYou: link.leftOutByYou })
+    ...(link.leftOutByYou === undefined ? {} : { leftOutByYou: link.leftOutByYou }),
+    ...(mission.startedBy?.kind === 'carry-on' ? { carriedOn: true as const } : {})
   }
 }
 
@@ -5810,6 +5814,8 @@ export function turnPromptLine(turn: {
   // A tagged teammate's run is recorded as an ordinary one: the bubble is the
   // message, without the context that followed it (0.438, shared/tagging.ts).
   if (turn.startedBy === undefined) return splitAttachments(taggedWordsOf(turn.prompt)).text
+  // Carried on after a plan ran out (0.774): nobody typed it, and the divider above it says what happened.
+  if (turn.startedBy.kind === 'carry-on') return undefined
   // A routine step is the person's own words, saved from a conversation they
   // had; it is theirs to see, even though the host pressed go. A room post
   // is the person's own words too, said to several at once, and so is what

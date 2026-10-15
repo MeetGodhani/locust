@@ -181,7 +181,7 @@ export const SETTINGS_PAGES: readonly SettingsPage[] = [
     label: 'AI agents',
     group: 'Agents',
     icon: 'terminal',
-    headings: ['AI agents & accounts', 'What Locust can stop', 'When a model hits its limit'],
+    headings: ['AI agents & accounts', 'What Locust can stop', 'When a plan runs out'],
     alsoKnownAs: {
       // "node" and "npm" are what a person types after the first screen has
       // just talked to them about Node. This is the page about the CLIs that
@@ -190,7 +190,8 @@ export const SETTINGS_PAGES: readonly SettingsPage[] = [
       // R9 (0.617): which agents ask first, so which a card can stop.
       // Not 'approve', 'permission', 'ask first' or 'always': Teammates has those.
       'What Locust can stop': ['approval', 'approvals', 'permissions', 'card', 'cards', 'gate', 'stop', 'safety', 'security'],
-      'When a model hits its limit': ['route', 'limit', 'quota', 'rate limit', 'usage', 'fallback']
+      // 0.774: the section that carries work on when a plan runs out, by the words a person looking for it types.
+      'When a plan runs out': ['route', 'limit', 'quota', 'rate limit', 'usage', 'fallback', 'fallback chain', 'backup agent', 'carry on', 'ran out', 'out of credits']
     }
   },
   {

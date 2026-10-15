@@ -27,6 +27,7 @@ import type { OfficeDocument } from './office-document.js'
 import type { Workbook } from './sheet.js'
 import type { AboutYouSuggestion } from './about-you.js'
 import type { CompareSlotId, PublicCompare, RerunProgress } from './compare.js'
+import type { CarryOnResponse, CarryOnRoute, PlanRunsOut } from './carry-on.js'
 
 /**
  * How a teammate's memory is treated: kept at once and shown (the Claude
@@ -2768,6 +2769,11 @@ export interface WorkspaceSettings {
    * conversation already going keeps its own.
    */
   readonly newChatRoute?: TeammateRoute
+  /**
+   * When an agent's plan runs out mid-task, the agent that carries the work on, and whether it does so without a
+   * press (0.774, shared/carry-on.ts). Absent: the stopped run's card offers it. Written as null to clear it.
+   */
+  readonly planRunsOut?: PlanRunsOut | null
 }
 
 /*
@@ -3312,6 +3318,8 @@ export type CodexMissionUpdate =
         | { readonly kind: 'commit-draft' }
         /** A walk through a change (0.771): its answer is the Changes panel's, never a conversation. */
         | { readonly kind: 'walkthrough' }
+        /** The turn before ran out of `from`'s plan, and Locust carried the work on (0.774). */
+        | { readonly kind: 'carry-on'; readonly from: MissionRuntimeId }
       /**
        * Present when this run is the newest turn of the teammate's hub (see
        * `PublicTeammate.hubMissionId`), so the roster on screen learns it
@@ -3544,6 +3552,11 @@ export interface PublicRecoveredMission {
         readonly kind: 'side'
         readonly of: string
         readonly question: number
+      }
+    | {
+        /** The turn before ran out of `from`'s plan, and Locust carried the work on (0.774). Nobody typed it. */
+        readonly kind: 'carry-on'
+        readonly from: MissionRuntimeId
       }
 }
 
@@ -4008,6 +4021,8 @@ export interface DesktopApi {
    * it here.
    */
   readMission(missionId: string): Promise<MissionReadResponse>
+  /** A turn that ran out of its agent's plan, carried on with `route` (0.774, shared/carry-on.ts): the card's one press. */
+  carryOn(missionId: string, route: CarryOnRoute): Promise<CarryOnResponse>
   addMemory(request: MemoryAddRequest): Promise<MemoryListResponse>
   updateMemory(request: MemoryUpdateRequest): Promise<MemoryListResponse>
   removeMemory(memoryId: string): Promise<MemoryListResponse>

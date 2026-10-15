@@ -119,6 +119,8 @@ import { createQueuedMessageStore } from './queued-message-store.js'
 import { QUEUED_MESSAGES_READ_CHANNEL, QUEUED_MESSAGES_WRITE_CHANNEL } from '../shared/queued-messages.js'
 import { createBriefSessions } from './brief-sessions.js'
 import { createRunEnd } from './run-end.js'
+import { createCarryOn, type CarryOn } from './carry-on.js'
+import { CARRY_ON_CHANNEL, parsedCarryOnRoute } from '../shared/carry-on.js'
 import { createKeepAwake, KEEP_AWAKE_BEAT_MS } from './keep-awake.js'
 import { attentionDot, needsYouCountFrom, taskbarAttention } from './taskbar-attention.js'
 import { CLOSE_BUTTONS, closeQuestion, hideToTrayOnClose, shouldAskBeforeClosing, trayLine, trayMenuLabels } from './quit-guard.js'
@@ -2056,6 +2058,8 @@ if (!ownsSingleInstanceLock) {
     const routineLastStep = new Map<string, string>()
     let memoryReader: MemoryReader | undefined
     let attentionReader: AttentionReader | undefined
+    // 0.774: a turn whose agent's plan ran out, carried on (carry-on.ts). It starts runs through the service too.
+    let carryOn: CarryOn | undefined
     // Bound late for the same reason: it reads the ledger the service writes.
     let roomTasks: RoomTasks | undefined
     /**
@@ -2307,7 +2311,16 @@ if (!ownsSingleInstanceLock) {
       after: [
         { label: 'routine', step: () => routineRunner },
         { label: 'room tasks', step: () => roomTasks },
-        { label: 'attention', step: () => attentionReader },
+        // Before attention: a turn carried on is not stopped and waiting, so it raises no "limit reached" (0.774).
+        { label: 'carry on', step: () => carryOn },
+        {
+          label: 'attention',
+          step: () => {
+            const reader = attentionReader
+            if (reader === undefined) return undefined
+            return { onRunEnded: (mission) => (carryOn?.carried(mission.missionId) === true ? Promise.resolve() : reader.onRunEnded(mission)) }
+          }
+        },
         { label: 'unwritten answers', step: () => unwrittenAnswers },
         { label: 'scout', step: () => scout }
       ],
@@ -3525,6 +3538,90 @@ if (!ownsSingleInstanceLock) {
         return codexRun === undefined ? false : codexMissions.steer(codexRun, text)
       },
       notify: sendToWindow
+    })
+
+    /*
+     * WHEN A PLAN RUNS OUT (0.774, carry-on.ts): the turn is carried on with another agent, as a reply on that agent
+     * -- the same start a teammate's reply takes, recorded as Locust's (`carry-on`), never as the person's words.
+     * Without a press only for a turn the person sent from the chat box, which `sentByPerson` holds for this session.
+     */
+    const sentByPerson = new Set<string>()
+    const rememberSentByPerson = (missionId: string): void => {
+      sentByPerson.add(missionId)
+      while (sentByPerson.size > 500) {
+        const oldest = sentByPerson.values().next().value
+        if (oldest === undefined) break
+        sentByPerson.delete(oldest)
+      }
+    }
+    // Said in the stopped turn's thread now, and kept in its record for when it is opened again (as the relay's are).
+    const noteCarryOn = oneAtATime(async ({ missionId, message }: { readonly missionId: string; readonly message: string }) => {
+      const mission = await missionLedger.getMission(missionId).catch(() => undefined)
+      if (mission === undefined) return
+      sendToWindow({ kind: 'relay-notice', runId: mission.metadata.runId, missionId, message, level: 'warning' })
+      const last = mission.events.at(-1)
+      const sequence = (last?.sequence ?? 0) + 1
+      await missionLedger
+        .appendEvents(missionId, [
+          {
+            id: `${mission.metadata.runId}:carry-on:${String(sequence)}`,
+            runId: mission.metadata.runId,
+            missionId,
+            sequence,
+            type: 'adapter.diagnostic',
+            occurredAt: new Date().toISOString(),
+            sourceAdapter: last?.sourceAdapter ?? mission.metadata.runtime,
+            payload: { level: 'warning', code: 'host.carry_on', message, terminal: false, evidence: { redacted: true } }
+          } as NormalizedRuntimeEvent
+        ])
+        .catch(() => undefined)
+    })
+    carryOn = createCarryOn({
+      ledger: missionLedger,
+      setting: async () => (await teammates.readSettings()).planRunsOut ?? undefined,
+      sentByPerson: (missionId) => sentByPerson.has(missionId),
+      note: (missionId, message) => void noteCarryOn({ missionId, message }).catch(() => undefined),
+      start: async (input) => {
+        // Antigravity's app route records no starter, so its turn would read as the person's words.
+        if (input.runtime === 'antigravity' && antigravityProbe.cliPath() === undefined) {
+          return { ok: false, message: 'Antigravity carries work on only through its command line, and it is not installed.' }
+        }
+        const owner = (await teammates.missionOwners().catch(() => ({} as Readonly<Record<string, string>>)))[input.followUpOf]
+        const peer = owner === undefined ? undefined : await peerContextFor(owner)
+        const wasHub = owner !== undefined && (await teammates.list().catch(() => [])).find((entry) => entry.teammateId === owner)?.hubMissionId === input.followUpOf
+        const response = await codexMissions.start(
+          input.prompt,
+          input.runtime,
+          input.mode,
+          input.model === undefined ? {} : { model: input.model },
+          sendToWindow,
+          undefined,
+          peer,
+          input.followUpOf,
+          undefined,
+          { kind: 'carry-on', from: input.from }
+        )
+        if (!response.ok) return { ok: false, message: response.error.message }
+        await assignOwner(owner, response.data.missionId)
+        await advanceHub(owner, input.followUpOf, response.data.missionId)
+        sendToWindow({
+          kind: 'mission-started',
+          runId: response.data.runId,
+          missionId: response.data.missionId,
+          ...(owner === undefined ? {} : { teammateId: owner }),
+          prompt: input.prompt,
+          data: response.data,
+          startedBy: { kind: 'carry-on', from: input.from },
+          ...(wasHub ? { hubMissionId: response.data.missionId } : {})
+        })
+        return { ok: true, missionId: response.data.missionId }
+      }
+    })
+    ipcMain.handle(CARRY_ON_CHANNEL, async (event, missionId: unknown, route: unknown) => {
+      if (!fromOwnWindow(event)) return { ok: false, message: 'Only Locust’s own window can carry a turn on.' }
+      const chosen = parsedCarryOnRoute(route)
+      if (typeof missionId !== 'string' || missionId.length === 0 || chosen === undefined) return { ok: false, message: 'That is not a turn and an agent Locust knows.' }
+      return carryOn?.carry(missionId, chosen) ?? { ok: false, message: 'Locust is still starting.' }
     })
 
     // Routines replay through the same start path a teammate's reply uses,
@@ -8399,6 +8496,12 @@ if (!ownsSingleInstanceLock) {
       }
       return startMission(request, update => {
         if (!owner.isDestroyed() && !owner.webContents.isDestroyed()) owner.webContents.send(CODEX_MISSION_UPDATE_CHANNEL, update)
+      }).then((response) => {
+        // A turn the person sent from the chat box: the only kind carried on without a press when its plan runs out
+        // (0.774). Not one on the cloud computer, whose session cannot be carried to another agent here.
+        const cloud = typeof request === 'object' && request !== null && (request as { readonly cloud?: unknown }).cloud === true
+        if (response.ok && !cloud) rememberSentByPerson(response.data.missionId)
+        return response
       })
     })
     const mcpTools = createLocustMcpTools({

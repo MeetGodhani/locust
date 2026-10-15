@@ -129,10 +129,11 @@ describe('ledger schema versions', () => {
     // a conversation's session (0.461); v20 the cards a person answered
     // (mission.approval, 0.576); v21 an answer by the person's own Always on an
     // earlier card of the run (0.616); v22 a tool call made by a helper the
-    // teammate sent out (parentItemId, helper visibility).
-    expect(MISSION_LEDGER_SCHEMA_VERSION).toBe(23)
-    expect(header.schemaVersion).toBe(23)
-    expect(SUPPORTED_MISSION_LEDGER_SCHEMA_VERSIONS).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23])
+    // teammate sent out (parentItemId, helper visibility); v23 a turn another
+    // app asked for (mcp); v24 a turn carried on after a plan ran out (0.774).
+    expect(MISSION_LEDGER_SCHEMA_VERSION).toBe(24)
+    expect(header.schemaVersion).toBe(24)
+    expect(SUPPORTED_MISSION_LEDGER_SCHEMA_VERSIONS).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24])
     /*
      * THE PAIR THAT DRIFTED, checked as a pair.
      *
@@ -827,7 +828,7 @@ describe('ledger schema versions', () => {
       join(root, 'mission_1.jsonl'),
       `${JSON.stringify({
         // One past the newest this reader knows. Bump when the schema does.
-        schemaVersion: 24,
+        schemaVersion: 25,
         recordType: 'mission.created',
         ledgerSequence: 1,
         occurredAt: metadata.createdAt,

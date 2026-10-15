@@ -8,6 +8,8 @@ import { TalkVoice } from './TalkVoice.js'
 import { TalkShortcutSetting } from './TalkShortcutSetting.js'
 import { ScoutSetting } from './ScoutSetting.js'
 import type { ScoutState } from '../../../shared/scout.js'
+import type { PlanRunsOut } from '../../../shared/carry-on.js'
+import type { MissionRuntimeId } from '@teammate/runtime-adapters'
 import { VoiceSettings } from './VoiceSettings.js'
 import { LocustMcpSettings } from './LocustMcpSettings.js'
 import { SETTINGS_PAGES, matchedHeadings, pageMatches } from '../settingsPages.js'
@@ -1559,6 +1561,9 @@ export function SettingsScreen({
   interrupt,
   onInterruptChange,
   autoMode,
+  planRunsOut,
+  carryOnChoices = [],
+  onPlanRunsOutChange,
   askConnectors,
   keepATodoList,
   onKeepATodoListChange,
@@ -1696,6 +1701,12 @@ export function SettingsScreen({
   readonly onPlushChange?: (on: boolean) => void
   readonly onReplySizeChange: (size: ReplyTextSize) => void
   readonly onAutoModeChange: (autoMode: boolean) => void
+  /** Who carries the work on when a plan runs out (0.774). Absent: the card offers the first agent that can. */
+  readonly planRunsOut?: PlanRunsOut
+  /** The agents that can carry work on here, by name. */
+  readonly carryOnChoices?: readonly { readonly runtime: MissionRuntimeId; readonly label: string }[]
+  /** null clears the pick. */
+  readonly onPlanRunsOutChange?: (next: PlanRunsOut | null) => void
   readonly askConnectors: boolean
   readonly onAskConnectorsChange: (askConnectors: boolean) => void
   /** A model of the person's own was added or removed: the model list is read again. */
@@ -2431,15 +2442,72 @@ export function SettingsScreen({
         </section>
         )}
         {shownPage === 'runtimes' && (
-        <section className="lc-settings__section">
-          <h2 className="lc-settings__heading">When a model hits its limit</h2>
+        <section className="lc-settings__section" data-setting="plan-runs-out">
+          {/* 0.774 (shared/carry-on.ts): the third way on, which this section used to say was not built. */}
+          <h2 className="lc-settings__heading">When a plan runs out</h2>
           <p className="lc-settings__lede">
-            A run that hits its account&rsquo;s limit stops where it is and waits for you. Nothing moves to another AI agent on its own.
+            {planRunsOut === undefined
+              ? 'A run whose plan runs out stops where it is. Its card offers to carry the work on with the first AI agent that is ready, told what was done. Pick one here to choose which.'
+              : planRunsOut.automatic
+                ? `${carryOnChoices.find((choice) => choice.runtime === planRunsOut.runtime)?.label ?? planRunsOut.runtime} carries the work on by itself when another agent's plan runs out, told what was done.`
+                : `A run whose plan runs out stops where it is, and its card offers to carry the work on with ${carryOnChoices.find((choice) => choice.runtime === planRunsOut.runtime)?.label ?? planRunsOut.runtime}.`}
           </p>
+          <div className="lc-carryon" role="radiogroup" aria-label="Carry on with">
+            <button
+              type="button"
+              role="radio"
+              aria-checked={planRunsOut === undefined}
+              className={`lc-button${planRunsOut === undefined ? ' is-active' : ''}`}
+              onClick={() => onPlanRunsOutChange?.(null)}
+            >
+              First one ready
+            </button>
+            {carryOnChoices.map((choice) => (
+              <button
+                key={choice.runtime}
+                type="button"
+                role="radio"
+                aria-checked={planRunsOut?.runtime === choice.runtime}
+                className={`lc-button${planRunsOut?.runtime === choice.runtime ? ' is-active' : ''}`}
+                onClick={() =>
+                  onPlanRunsOutChange?.(
+                    planRunsOut?.runtime === choice.runtime ? planRunsOut : { runtime: choice.runtime, automatic: planRunsOut?.automatic === true }
+                  )
+                }
+              >
+                {choice.label}
+              </button>
+            ))}
+          </div>
+          <div className="lc-settingline lc-settingline--sub">
+            <div className="lc-settingline__text">
+              <h3 className="lc-settings__heading">Without asking</h3>
+              <p className="lc-settings__lede">
+                {planRunsOut === undefined
+                  ? 'Pick an agent above first: Locust never moves your work on its own to an agent you did not choose.'
+                  : planRunsOut.automatic
+                    ? 'On. Only for messages you send yourself, never a comparison, a routine or a reply between teammates.'
+                    : 'Off. The card waits for your press.'}
+              </p>
+            </div>
+            <button
+              type="button"
+              className={`lc-switch${planRunsOut?.automatic === true ? ' is-on' : ''}`}
+              role="switch"
+              aria-checked={planRunsOut?.automatic === true}
+              aria-label="Carry on without asking"
+              disabled={planRunsOut === undefined}
+              onClick={() => {
+                if (planRunsOut !== undefined) onPlanRunsOutChange?.({ ...planRunsOut, automatic: !planRunsOut.automatic })
+              }}
+            >
+              <span className="lc-switch__knob" />
+            </button>
+          </div>
           <More>
             <p>
-              You choose where the work continues, and Locust carries it there with a briefing of what was
-              done and what was left unsettled. Two ways to do that exist today; the third is not built.
+              Wherever the work goes on, Locust carries it there with a summary of what was done and what
+              was left unsettled, and a line in the conversation says where it moved and why.
             </p>
           <div className="lc-settingcard">
           <div className="lc-policyrow">
@@ -2457,9 +2525,11 @@ export function SettingsScreen({
             </span>
           </div>
           <div className="lc-policyrow">
-            <span className="lc-tag">AUTOMATIC</span>
+            <span className="lc-tag">CARRY ON</span>
             <span className="lc-settings__note">
-              Not built. Locust will not move your work to an AI agent you did not choose.
+              When a plan runs out, one press on the stopped run&rsquo;s card carries the work on with the
+              agent picked above, or, with Without asking on, it goes on by itself. Claude Code and Codex
+              say when their plan runs out; an agent that does not say so is not carried on.
             </span>
           </div>
           </div>

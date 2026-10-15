@@ -871,6 +871,8 @@ export interface ThreadProps {
   readonly limitModel?: { readonly label: string; readonly onPress: () => void; readonly why?: 'retired' | 'down' | 'limit' }
   /** The provider's servers were busy (0.511): carry the same conversation on. */
   readonly onContinueAfterBusy?: () => void
+  /** The agent's plan ran out (0.774): carry the work on with another agent, briefed with what was done. */
+  readonly carryOn?: { readonly label: string; readonly from: MissionRuntimeId; readonly busy: boolean; readonly refused?: string; readonly onPress: () => void }
   /** A run that failed because its runtime is signed out: that runtime's sign-in. */
   readonly signInRuntime?: MissionRuntimeId
   /** Open the conversation a received message was written in. */
@@ -1080,6 +1082,7 @@ export function Thread({
   onSendAgain,
   limitModel,
   onContinueAfterBusy,
+  carryOn,
   signInRuntime,
   onOpenSenderRun,
   wasPlan,
@@ -1963,6 +1966,18 @@ onResume,
             <button type="button" className="lc-button" onClick={onContinueAfterBusy}>
               <Icon name="play" size={13} /> Continue
             </button>
+          </div>
+        )}
+
+        {carryOn !== undefined && error !== undefined && (
+          <div className="lc-rerun" data-carry-on="">
+            <span>
+              {`${runtimeDisplayName(carryOn.from)} ran out of its plan. What it did is kept, and the next agent is told what was done and what is left.`}
+            </span>
+            <button type="button" className="lc-button" onClick={carryOn.onPress} disabled={carryOn.busy}>
+              <Icon name="play" size={13} /> {carryOn.busy ? 'Starting…' : carryOn.label}
+            </button>
+            {carryOn.refused !== undefined && <span className="lc-thread__note" role="note">{carryOn.refused}</span>}
           </div>
         )}
 
