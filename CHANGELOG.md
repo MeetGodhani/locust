@@ -11,6 +11,12 @@ Settings shows this file as What's new. An entry may group its changes under
 about when they arrive on it carries `<!-- big -->` on the line under its
 heading: the home screen then shows it once, as a splash.
 
+## 0.773.0 - 2026-10-15
+
+### Added
+
+- **Muse Code teammates can run in Auto.** Auto runs Muse's commands without Muse's own Windows sandbox, the way Codex's Auto runs without Codex's, so a Muse teammate can run tests and builds with nothing to set up first. Edit still keeps that sandbox; where it isn't set up, the conversation now suggests switching the teammate to Auto first, and `muse sandbox windows setup` second.
+
 ## 0.772.0 - 2026-10-14
 
 ### Fixed
