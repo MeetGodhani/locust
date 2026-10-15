@@ -122,7 +122,8 @@ describe('the PDF, opened beside the attachment', () => {
     }
     const readings = createPdfReadings(slow)
     const attached = readings.prepare(root, '.locust/attachments/a.pdf', 'a.pdf')
-    await new Promise((resolve) => setTimeout(resolve, 20))
+    // Wait for the reading itself to start, not a fixed time: under load it starts late.
+    while (calls === 0) await new Promise((resolve) => setTimeout(resolve, 5))
     const sending = readings.prepare(root, '.locust/attachments/a.pdf', 'a.pdf')
     release()
     expect(await sending).toEqual(await attached)
