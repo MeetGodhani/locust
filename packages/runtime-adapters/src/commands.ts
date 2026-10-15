@@ -116,7 +116,7 @@ export const OMNIROUTE_REQUIRED_FEATURES = [
  * has a narrower flag that does the job, and reaching for the wide one would
  * be a choice nobody made.
  */
-const FULL_ACCESS_ARGUMENTS = new Set(["--force", "--allow-all-paths"]);
+const FULL_ACCESS_ARGUMENTS = new Set(["--force", "--allow-all-paths", "--disable-sandbox"]);
 
 const FORBIDDEN_ARGUMENTS = new Set([
   "--dangerously-bypass-approvals-and-sandbox",
@@ -129,6 +129,8 @@ const FORBIDDEN_ARGUMENTS = new Set([
   // Cursor Agent: "force allow commands unless explicitly denied".
   "--force",
   "-f",
+  // Muse Code: runs its shell outside its own sandbox. Auto only (0.773).
+  "--disable-sandbox",
   // Gemini CLI: "-y" is the short form of its yolo mode.
   "-y",
   // OpenCode: publishes the session to opencode.ai and prints a public link.
@@ -1630,6 +1632,17 @@ export const PROMPT_FILE_PLACEHOLDER = "<locust:prompt-file>";
  * `accept-edits` means, and the read-only flags above for one that is not.
  * `--yolo` is deliberately never passed: it also disables the sandbox and
  * trusts the workspace, which is three decisions hiding in one flag.
+ *
+ * AUTO ADDS `--disable-sandbox` (0.773), and only Auto: the guard refuses it
+ * anywhere else. On Windows Muse's sandbox needs an elevated
+ * `muse sandbox windows setup` (local sandbox users and a WFP filter) before
+ * any command runs, and until then every shell task fails before it starts --
+ * Muse Wonder wrote its voxel page (2026-10-13) without one command. Auto is
+ * Codex's `danger-full-access` and Claude's `bypassPermissions`: the person
+ * chose a run that may do anything, so a box that was never built is not
+ * what stops it. MEASURED 2026-10-15 on 1.4.7: `--approval-mode never
+ * --disable-sandbox` ran `Write-Output hello` to exit 0 while
+ * `muse sandbox windows check` still said setup_required.
  */
 export function createMuseExecCommand(
   executable: ExecutableLaunch,
@@ -1662,8 +1675,9 @@ export function createMuseExecCommand(
     args.push("--disable-write", "--disable-shell");
   } else {
     // Nothing can answer a prompt in a headless run, and the default
-    // `on-request` would wait for one. The sandbox is left ON.
+    // `on-request` would wait for one. The sandbox is left ON, except in Auto.
     args.push("--approval-mode", "never");
+    if (sandbox === "full-access") args.push("--disable-sandbox");
   }
   return baseSpec("muse", executable, options.workspacePath, args, {
     stdin: "prompt-file",

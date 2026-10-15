@@ -110,15 +110,15 @@ describe('a runtime declares what it can do', () => {
      * Two have been run since, through the real builder, runner and
      * normalizer: `node _tools/drive-muse-echo.mjs` on the free echo
      * provider, read-only and workspace-write, both to `run.completed`.
-     * Those are the two modes here, and Plan comes free with Ask.
+     * Those were the two modes here, and Plan comes free with Ask. Auto was
+     * added in 0.773 once it meant something: `--disable-sandbox`, run
+     * 2026-10-15 to `Write-Output hello`, exit 0, on a PC whose Muse sandbox
+     * was never set up.
      */
-    expect(RUNTIME_CAPABILITIES.muse.modes).toEqual(['ask', 'accept-edits'])
+    expect(RUNTIME_CAPABILITIES.muse.modes).toEqual(['ask', 'accept-edits', 'auto'])
     expect(RUNTIME_CAPABILITIES.muse.evidence).toBe('measured')
     expect(modeRunsOn('plan', 'muse', 'win32')).toBe(true)
-    // Auto means full-access -- "may edit anything on this machine" -- and
-    // `createMuseExecCommand` keeps Muse's own sandbox on in every mode and
-    // never passes `--yolo`. The name would promise more than the argv does.
-    expect(modeRunsOn('auto', 'muse', 'win32')).toBe(false)
+    expect(modeRunsOn('auto', 'muse', 'win32')).toBe(true)
     // Approve-each needs a per-call approval the exec transport cannot ask.
     expect(modeRunsOn('approve-each', 'muse', 'win32')).toBe(false)
   })
@@ -169,7 +169,8 @@ describe('a runtime declares what it can do', () => {
         expect(aboutThisRuntime, `${runtime} / ${mode}: ${reason}`).not.toContain('Codex CLI')
       }
     }
-    expect(modeUnavailableReason('auto', 'muse', 'win32')).toContain('Muse Code')
+    // Muse has Auto since 0.773; Approve each is the mode it still refuses.
+    expect(modeUnavailableReason('approve-each', 'muse', 'win32')).toContain('Muse Code cannot stop and ask')
   })
 
   it('bars nothing by platform now: Cursor answers read-only everywhere (0.485)', () => {

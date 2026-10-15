@@ -114,6 +114,11 @@ describe('what the panel says a run may do', () => {
     expect(edit.args.join(' ')).not.toMatch(/--disable-sandbox|--yolo|--disable-web-tools/)
     expect(edit.args.join(' ')).toContain('--approval-mode never')
     expect(said('muse', 'workspace-write')).toEqual(expect.arrayContaining(["allow run commands inside Muse's sandbox", 'allow search the web and open web pages']))
+    // Auto (0.773): outside Muse's sandbox, and the chip says so.
+    const auto = createMuseExecCommand(launch('muse'), options('full-access'))
+    expect(auto.args).toContain('--disable-sandbox')
+    expect(auto.args).not.toContain('--yolo')
+    expect(said('muse', 'full-access')).toContain('allow run any command your account can run, and reach any network')
   })
 
   it('Codex: its own sandbox in every mode, and Approve each asks', () => {

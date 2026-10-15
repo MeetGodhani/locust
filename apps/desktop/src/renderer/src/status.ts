@@ -825,12 +825,15 @@ export const RUNTIME_CAPABILITIES: Readonly<Record<MissionRuntimeId, RuntimeCapa
    * read-only and once workspace-write. Both reached `run.completed`, and
    * the prompt came back in the answer, so the prompt file arrived.
    *
-   * `auto` is NOT claimed. Auto means full-access -- "may edit anything on
-   * this machine" -- and `createMuseExecCommand` leaves Muse's own sandbox
-   * ON for every mode and never passes `--yolo`. Offering Auto would be
-   * offering Accept edits under a name that promises more.
+   * `auto` was left off while `createMuseExecCommand` kept Muse's own
+   * sandbox on in every mode: it would have been Accept edits under a name
+   * that promises more. 0.773 claims it, because Auto now passes
+   * `--disable-sandbox` -- measured 2026-10-15: `Write-Output hello` ran to
+   * exit 0 on a PC whose Muse sandbox was never set up, where Edit's every
+   * command failed before it started. A Locust user is never asked to run an
+   * elevated setup to get a teammate that can run commands.
    */
-  muse: { modes: ['ask', 'accept-edits'], evidence: 'measured' }
+  muse: { modes: [...EVERY_ORDINARY_MODE], evidence: 'measured' }
 }
 
 export function modeRunsOn(

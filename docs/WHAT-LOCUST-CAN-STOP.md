@@ -63,4 +63,4 @@ Locust can stop a run only where its AI agent asks first. Where it asks, a card 
 
 **Asks first.** Nothing: Muse runs without asking Locust.
 
-**Without asking.** In Ask and Plan, no file changes and no commands. In Edit, changes in this folder, commands inside Muse’s own sandbox, and the web. Auto is not offered.
+**Without asking.** In Ask and Plan, no file changes and no commands. In Edit, changes in this folder, commands inside Muse’s own sandbox, and the web. In Auto, everything, with commands outside that sandbox.

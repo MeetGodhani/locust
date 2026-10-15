@@ -912,11 +912,10 @@ describe('the Auto mode, which has to be switched on before it is offered', () =
     expect(modesFor('codex', 'win32')).toContain('auto')
   })
 
-  it('is offered on every runtime Locust has a handle on, Antigravity through its CLI included (0.540)', () => {
-    for (const runtime of ['codex', 'claude', 'cursor', 'opencode', 'copilot', 'antigravity'] as const) {
+  it('is offered on every runtime Locust has a handle on, Antigravity (0.540) and Muse (0.773) included', () => {
+    for (const runtime of ['codex', 'claude', 'cursor', 'opencode', 'copilot', 'antigravity', 'muse'] as const) {
       expect(modesFor(runtime, 'win32')).toContain('auto')
     }
-    expect(modesFor('muse', 'win32')).not.toContain('auto')
   })
 
   it('is never the mode a route falls back to', () => {

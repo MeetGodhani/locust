@@ -137,13 +137,13 @@ export function whatItMayDo(runtime: MissionRuntimeId, sandbox: MissionSandbox, 
       if (sandbox === 'read-only') return rows(NO_COMMANDS, THE_WEB)
       return rows(OPEN_COMMANDS, THE_WEB, NOT_OUTSIDE)
     case 'muse':
-      // Read-only: `--disable-write --disable-shell`. Otherwise approval
-      // `never` with Muse's sandbox left on ("shell filesystem/network
-      // sandboxing", `muse exec --help`) -- which is why Auto is not offered
-      // for Muse at all (RUNTIME_CAPABILITIES). Web tools are on unless
-      // `--disable-web-tools`, which is never passed; only a mode that never
-      // asks is sure to use them.
+      // Read-only: `--disable-write --disable-shell`. Edit: approval `never`
+      // with Muse's sandbox left on ("shell filesystem/network sandboxing",
+      // `muse exec --help`). Auto adds `--disable-sandbox` (0.773). Web tools
+      // are on unless `--disable-web-tools`, which is never passed; only a
+      // mode that never asks is sure to use them.
       if (sandbox === 'read-only') return rows(NO_COMMANDS)
+      if (sandbox === 'full-access') return rows(ANY_COMMAND, THE_WEB)
       return { rows: [READ, CHANGES_HERE, { verdict: 'allow', text: "run commands inside Muse's sandbox" }, THE_WEB], rest }
     case 'cursor':
       // Only Auto says anything about commands (`--force`). Read-only is

@@ -17,6 +17,9 @@ import { openTeammateScript, recordRoot, say, scratchRepository, sendAndWaitScri
 
 const arg = (name) => (process.argv.includes(name) ? process.argv[process.argv.indexOf(name) + 1] : undefined)
 const packaged = arg('--packaged')
+// `--mode auto` (0.773): Auto runs outside Muse's sandbox, so the command runs and the line never appears.
+const mode = arg('--mode') ?? 'accept-edits'
+const auto = mode === 'auto'
 
 /** Muse's own word on its sandbox, read-only: `status=setup_required` until someone sets it up. */
 let status = 'unknown'
@@ -35,14 +38,14 @@ const drive = await startDrive({
   port: 9938,
   workspace,
   spends: true,
-  outPath: join(recordRoot('muse-says-its-sandbox-is-not-set-up-2026-10-14'), packaged === undefined ? 'local' : 'packaged'),
+  outPath: join(recordRoot('muse-says-its-sandbox-is-not-set-up-2026-10-14'), `${packaged === undefined ? 'local' : 'packaged'}${auto ? '-auto' : ''}`),
   seed: {
     schemaVersion: 1,
     teammates: [
-      { teammateId: 'tm_mira', name: 'Mira', hue: 'violet', role: 'Docs & QA', createdAt: '2026-10-14T01:00:00.000Z', route: { runtime: 'muse', model: 'muse-spark-1.3', effort: 'low', mode: 'accept-edits' } }
+      { teammateId: 'tm_mira', name: 'Mira', hue: 'violet', role: 'Docs & QA', createdAt: '2026-10-14T01:00:00.000Z', route: { runtime: 'muse', model: 'muse-spark-1.3', effort: 'low', mode } }
     ],
     missionOwners: {},
-    settings: { swarm: false, relay: false, relayHopCap: 2, memoryMode: 'off', autoMode: false }
+    settings: { swarm: false, relay: false, relayHopCap: 2, memoryMode: 'off', autoMode: auto }
   }
 })
 
@@ -62,8 +65,14 @@ try {
   say(`  thread: ${thread.slice(-600)}`)
   const lines = thread.match(/Muse Code can't run commands on this computer yet/g) ?? []
   check('the turn finished', /finished/.test(sent), sent)
-  if (notSetUp) {
+  if (auto) {
+    const after = thread.slice(thread.indexOf('Do nothing else.') + 'Do nothing else.'.length)
+    check('in Auto the command ran: the answer says hello', /\bhello\b/i.test(after), after.slice(-300))
+    check('and nothing failed', !/\d+ failed/.test(thread), (thread.match(/\d+ failed/) ?? [''])[0])
+    check('and the sandbox line does not appear', lines.length === 0, `${String(lines.length)} times`)
+  } else if (notSetUp) {
     check('the thread says the sandbox is not set up, once', lines.length === 1, `${String(lines.length)} times`)
+    check('and leads with switching to Auto', thread.includes('Switch this teammate to Auto'), thread.slice(-300))
     check('and names the command that sets it up', thread.includes('muse sandbox windows setup'), thread.slice(-300))
   } else {
     check(`the sandbox is ${status} here, so the line does not appear`, lines.length === 0, `${String(lines.length)} times`)
@@ -73,7 +82,7 @@ try {
   failures += 1
   say(`drive failed: ${error instanceof Error ? error.message : String(error)}`)
 } finally {
-  await drive.finish({ intro: `Build: ${packaged ?? 'out/'}. Mira on Muse Code / Muse Spark 1.3, Edit, low; Muse's sandbox: ${status}.`, extra: `Checks failed: ${String(failures)}` })
+  await drive.finish({ intro: `Build: ${packaged ?? 'out/'}. Mira on Muse Code / Muse Spark 1.3, ${auto ? 'Auto' : 'Edit'}, low; Muse's sandbox: ${status}.`, extra: `Checks failed: ${String(failures)}` })
 }
 say(failures === 0 ? 'ALL CHECKS PASSED' : `${String(failures)} CHECK(S) FAILED`)
 process.exit(failures === 0 ? 0 : 1)

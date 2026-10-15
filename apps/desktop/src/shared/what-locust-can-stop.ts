@@ -90,7 +90,7 @@ export const WHAT_LOCUST_CAN_STOP: readonly StopRow[] = [
     runtime: 'muse',
     reach: 'nothing',
     asks: 'Nothing: Muse runs without asking Locust.',
-    without: 'In Ask and Plan, no file changes and no commands. In Edit, changes in this folder, commands inside Muse’s own sandbox, and the web. Auto is not offered.'
+    without: 'In Ask and Plan, no file changes and no commands. In Edit, changes in this folder, commands inside Muse’s own sandbox, and the web. In Auto, everything, with commands outside that sandbox.'
   }
 ]
 

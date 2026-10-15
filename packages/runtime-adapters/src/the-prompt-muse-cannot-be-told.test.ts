@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  assertSafeRuntimeCommand,
   createMuseExecCommand,
   PROMPT_FILE_PLACEHOLDER,
 } from "./commands.js";
@@ -71,6 +72,17 @@ describe("the prompt Muse cannot be told", () => {
     // decisions in one flag is not a flag this app passes.
     expect(spec.args).not.toContain("--yolo");
     expect(spec.args).not.toContain("--disable-sandbox");
+  });
+
+  it("runs Auto's commands outside Muse's own sandbox, and only Auto's (0.773)", () => {
+    const spec = build({ sandbox: "full-access" });
+    expect(spec.args.join(" ")).toContain("--approval-mode never");
+    expect(spec.args).toContain("--disable-sandbox");
+    expect(spec.args).not.toContain("--yolo");
+    expect(() => assertSafeRuntimeCommand(spec)).not.toThrow();
+    // The same flag on an Edit run is refused at the last gate.
+    const edit = build({ sandbox: "workspace-write" });
+    expect(() => assertSafeRuntimeCommand({ ...edit, args: [...edit.args, "--disable-sandbox"] })).toThrow(/--disable-sandbox/);
   });
 
   it("refuses an effort the CLI would reject the whole run for", () => {

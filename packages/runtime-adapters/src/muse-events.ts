@@ -149,11 +149,14 @@ export const MUSE_BILLING_SENTENCE =
  * ready", and `muse sandbox windows check` said `status=setup_required`. The model wrote its page without running
  * anything, and the person saw only a column of failed rows. Each row keeps Muse's own reason; this says once, in a
  * sentence, what it means and what fixes it. Whether `setup` asks for an administrator's OK was not tried here.
+ *
+ * Auto runs outside that sandbox (0.773, `--disable-sandbox`), so this is only ever met in Edit, and the fix it
+ * leads with is the one a click makes: switch the teammate to Auto. The terminal setup comes second.
  */
 const MUSE_SANDBOX_NOT_SET_UP = /sandbox enforcement unavailable|sandbox users are not ready/i;
 
 export const MUSE_SANDBOX_SENTENCE =
-  "Muse Code can't run commands on this computer yet: its Windows sandbox isn't set up, so every command fails before it starts. Run `muse sandbox windows setup` once in a terminal to set it up; it may ask for an administrator's OK.";
+  "Muse Code can't run commands on this computer yet: its Windows sandbox isn't set up, so in Edit every command fails before it starts. Switch this teammate to Auto to run commands without that sandbox, or run `muse sandbox windows setup` once in a terminal; it may ask for an administrator's OK.";
 
 export function createMuseEventNormalizer(
   context: MuseInvocationContext,
