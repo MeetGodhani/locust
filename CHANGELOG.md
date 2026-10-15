@@ -11,6 +11,14 @@ Settings shows this file as What's new. An entry may group its changes under
 about when they arrive on it carries `<!-- big -->` on the line under its
 heading: the home screen then shows it once, as a splash.
 
+## 0.777.0 - 2026-10-15
+<!-- big -->
+
+### New
+
+- **Add any agent that speaks the Agent Client Protocol.** Goose, Qwen Code, Kimi CLI, Mistral Vibe and many more start in this protocol with a command like `goose acp`. Add one in Settings > AI agents > Your own agents with its name and that command. Test starts it, asks its name and the models it offers, and stops it. No message is sent, so nothing is spent.
+- **It works like any other agent.** It's in every teammate's model list, in a group of its own, with the models it offered, and its conversations are kept like the rest. It runs in Approve each: every action it asks to take is a card you answer. Which actions it asks about is the agent's own setting.
+
 ## 0.776.0 - 2026-10-15
 
 ### Improved
