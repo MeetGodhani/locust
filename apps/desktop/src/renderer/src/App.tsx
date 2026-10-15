@@ -10011,6 +10011,11 @@ export default function App(): ReactElement {
             onClose={() => setBesideId(undefined)}
           />
         ) : changesOpen && reviewing === undefined && screen === 'workroom' ? (
+          /*
+           * Notes on a line (0.376) in the folder's whole change too (0.776): they go, as in the conversation's own
+           * diffs, to the conversation on screen. With none on screen there is nowhere to send one, so no "+".
+           */
+          <DiffNotesContext.Provider value={diffNotesPlace}>
           <ChangesPanel
             workspacePath={workspacePath}
             running={running}
@@ -10025,7 +10030,10 @@ export default function App(): ReactElement {
                   }
                 })}
           />
+          </DiffNotesContext.Provider>
         ) : reviewing !== undefined && screen === 'workroom' ? (
+          // A teammate's branch takes notes only when it is that teammate's conversation on screen: a note goes there.
+          <DiffNotesContext.Provider value={reviewing.teammateId === pickedTeammate?.teammateId ? diffNotesPlace : undefined}>
           <ReviewChanges
             key={reviewing.teammateId}
             teammate={reviewing}
@@ -10038,6 +10046,7 @@ export default function App(): ReactElement {
             onAsk={startFromComposer}
             onClose={() => setReviewingId(undefined)}
           />
+          </DiffNotesContext.Provider>
         ) : (
           inspectorOpen && liveRun !== undefined && screen === 'workroom' && (
             <Inspector
