@@ -11,6 +11,15 @@ Settings shows this file as What's new. An entry may group its changes under
 about when they arrive on it carries `<!-- big -->` on the line under its
 heading: the home screen then shows it once, as a splash.
 
+## 0.775.0 - 2026-10-15
+<!-- big -->
+
+### New
+
+- **Locust on your phone.** Turn on Settings > General > Your phone and scan the code with your phone's camera. Your phone then shows your conversations and their answers, and you can send the next message from it. Locust's window shows it as your own message, in the same conversation.
+- **Answer approval cards from your phone.** When a teammate asks to change a file or run a command, the card shows on your phone too, under Waiting on you. Allow once or Deny there, and the card in Locust's window goes away.
+- **Your phone and Locust talk directly, on your Wi-Fi.** Nothing goes through anyone else's server. The code holds a key: only a phone that scanned it can see or do anything. New code unpairs every phone at once, and turning the setting off closes the page. The first time, Windows may ask whether Locust can use your network: choose Allow, on private networks.
+
 ## 0.774.0 - 2026-10-15
 <!-- big -->
 
