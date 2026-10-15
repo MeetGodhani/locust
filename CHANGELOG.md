@@ -11,6 +11,14 @@ Settings shows this file as What's new. An entry may group its changes under
 about when they arrive on it carries `<!-- big -->` on the line under its
 heading: the home screen then shows it once, as a splash.
 
+## 0.774.0 - 2026-10-15
+<!-- big -->
+
+### New
+
+- **When a plan runs out, the work carries on.** When Codex or Claude Code stops because your plan ran out, the stopped turn's card now offers to carry the work on with another AI agent in one press. The next agent is told what was asked, what was done and how it stopped, and finishes the rest. A line in the conversation says where the work went and why.
+- **Pick who carries on, or let it happen by itself.** Settings > AI agents > When a plan runs out picks the agent the card offers. With Without asking on, Locust carries on with that agent by itself, only for messages you send yourself. It never moves your work to an agent you didn't pick.
+
 ## 0.773.0 - 2026-10-15
 
 ### Added
