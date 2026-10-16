@@ -19,6 +19,9 @@ export function startPhaseLabel(phase: StartPhase | undefined, runtimeName: stri
       return 'Reading the folder'
     case 'starting-runtime':
       return `Starting ${runtimeName}`
+    // Its first start on this machine installs its plugin package first (0.780, opencode-first-start.ts): 48-89 s measured.
+    case 'runtime-first-setup':
+      return `Setting up ${runtimeName} for its first start, about a minute`
     // Your cloud computer (0.761). MEASURED: made in about 35 s, woken in about a minute and a half.
     case 'cloud-making':
       return 'Making your cloud computer, about a minute'

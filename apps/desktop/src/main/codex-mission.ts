@@ -652,6 +652,11 @@ interface CodexMissionServiceOptions {
    */
   readonly openCodeCommandGuard?: () => Promise<string | undefined>
   /**
+   * Whether this runtime's next start sets itself up first (0.780, opencode-first-start.ts): OpenCode installs
+   * its plugin package on its first start, a minute or more, and the start line says so instead of "Starting".
+   */
+  readonly setsItselfUp?: (runtime: MissionRuntimeId) => boolean
+  /**
    * The same guard for a Codex run (0.720, `codexCommandGuardConfig`): the
    * config its thread is started, resumed or forked with, for this folder;
    * undefined when Codex would load some other hook too (`otherCodexHooks`),
@@ -1424,7 +1429,9 @@ export function createCodexMissionService(options: CodexMissionServiceOptions): 
       const say = (phase: StartPhase): void => {
         const at = Date.now()
         phaseAt[phase] = at
-        emit({ kind: 'start-phase', runtime, ...(peer === undefined ? {} : { teammateId: peer.self.teammateId }), phase, at: new Date(at).toISOString() })
+        // Timed as the start it is; said as what the person is waiting for (0.780).
+        const shown: StartPhase = phase === 'starting-runtime' && options.setsItselfUp?.(runtime) === true ? 'runtime-first-setup' : phase
+        emit({ kind: 'start-phase', runtime, ...(peer === undefined ? {} : { teammateId: peer.self.teammateId }), phase: shown, at: new Date(at).toISOString() })
       }
       // `account-default` is the shell's word for "send no --model", not a
       // model id. Passing it through would make the CLI look for a model that

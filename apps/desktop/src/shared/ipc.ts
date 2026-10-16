@@ -3165,7 +3165,7 @@ export type CodexMissionCancelResponse =
 
 /** The phases of a start, in order (0.602): what the live line says while nothing has arrived. */
 /** The cloud computer's four (0.761): made, woken, the agent installed there, this folder brought over. */
-export type StartPhase = 'looking' | 'briefing' | 'reading-folder' | 'starting-runtime' | 'cloud-making' | 'cloud-waking' | 'cloud-installing' | 'cloud-bringing'
+export type StartPhase = 'looking' | 'briefing' | 'reading-folder' | 'starting-runtime' | 'runtime-first-setup' | 'cloud-making' | 'cloud-waking' | 'cloud-installing' | 'cloud-bringing'
 
 export type CodexMissionUpdate =
   | {

@@ -3713,12 +3713,13 @@ describe('a file the runtime named but the host could not read (0.597)', () => {
  * as each begins, and the run's end writes where the seconds went.
  */
 describe('the start says its phase, and the run writes where its seconds went', () => {
-  const build = () => {
+  const build = (extra: { readonly setsItselfUp?: (runtime: string) => boolean } = {}) => {
     const appended: { type: string; payload: Record<string, unknown> }[] = []
     const updates: CodexMissionUpdate[] = []
     const scheduled: Array<() => void> = []
     let ids = 0
     const service = createCodexMissionService({
+      ...extra,
       workspacePath: WORKSPACE,
       discover: async () => [codexRuntime()],
       runner: {
@@ -3759,6 +3760,19 @@ describe('the start says its phase, and the run writes where its seconds went', 
     const note = appended.slice(completed + 1).find((event) => event.payload.code === 'host.start-timing')
     expect(note?.type).toBe('adapter.diagnostic')
     expect(String(note?.payload.message)).toMatch(/^Started in \d+\.\d s: looked for Codex CLI \d+\.\d s, briefed \d+\.\d s, read the folder \d+\.\d s; Codex CLI took \d+\.\d s to say it had started\.$/)
+  })
+
+  // 0.780: OpenCode's first start installs its plugin package first; the line says that, the note still times the start.
+  it('says the runtime is setting itself up when its start will, and times it as the start', async () => {
+    const { service, appended, updates, scheduled } = build({ setsItselfUp: (runtime) => runtime === 'codex' })
+    const response = await service.start('Say done.', 'codex', 'accept-edits', {}, (update) => updates.push(update))
+    expect(response.ok).toBe(true)
+    expect(phasesOf(updates)).toEqual(['looking', 'briefing', 'reading-folder', 'runtime-first-setup'])
+    while (scheduled.length > 0) scheduled.shift()!()
+    for (let i = 0; i < 20; i += 1) await new Promise((resolve) => setImmediate(resolve))
+    const completed = appended.findIndex((event) => event.type === 'run.completed')
+    const note = appended.slice(completed + 1).find((event) => event.payload.code === 'host.start-timing')
+    expect(String(note?.payload.message)).toMatch(/; Codex CLI took \d+\.\d s to say it had started\.$/)
   })
 
   it('reads no folder for a read-only start, and says so by leaving the phase out', async () => {

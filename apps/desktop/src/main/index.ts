@@ -13,6 +13,7 @@ import { VOICE_READY, VOICE_DOWNLOAD, VOICE_TRANSCRIBE, VOICE_CANCEL, VOICE_PROG
 import { TALK_SHORTCUT_PENDING, TALK_SHORTCUT_PRESSED, TALK_SHORTCUT_READ, TALK_SHORTCUT_SET, isTalkShortcut, type TalkShortcutPress } from '../shared/talk-shortcut.js'
 import { LOCUST_LINK_TAKE, LOCUST_LINK_WAITING, linkInArguments, parseLocustLink, type LocustLink } from '../shared/locust-link.js'
 import { claimLinks, createLinkInbox } from './locust-links.js'
+import { createOpenCodeFirstStart, OPENCODE_SETUP_TIMEOUT_MS } from './opencode-first-start.js'
 import { createTalkShortcut, type TalkShortcut } from './talk-shortcut.js'
 import { createScout, type Scout } from './scout.js'
 import { readScoutGithub } from './scout-github.js'
@@ -551,6 +552,11 @@ const probeRunner = createNodeProbeRunner()
 // was never read and connector allow rules were never made. Its own ceiling,
 // so no other probe's default grows with it.
 const connectorProbeRunner = createNodeProbeRunner({ maximumTimeoutMs: 30_000 })
+// OpenCode's first-start setup (0.780): a 61 MB install, so its own ceiling, as the connector list has.
+const openCodeSetUpRunner = createNodeProbeRunner({ maximumTimeoutMs: OPENCODE_SETUP_TIMEOUT_MS })
+/** The guard's plugin URL once it is written at start (whenReady); a sweep before then waits for it. */
+let markOpenCodeGuard: (url: string | undefined) => void = () => undefined
+const openCodeGuardForSetUp = new Promise<string | undefined>((resolve) => { markOpenCodeGuard = resolve })
 // `LOCUST_HIDE_RUNTIMES=1` is a test seam: the first-run drive needs a
 // machine with nothing installed, and this one has everything.
 /*
@@ -830,7 +836,23 @@ const askRuntimes = async (only?: ReadonlySet<string>): Promise<readonly Runtime
   }
   return [...keepWhatWasAnswered(settled, discoveryCache?.value ?? [])].sort((left, right) => rank(left.id) - rank(right.id))
 }
-const discoverRuntimes = (): Promise<readonly RuntimeDiscovery[]> => askRuntimes()
+/*
+ * OpenCode's first start, done before the first message (0.780, opencode-first-start.ts): once a sweep finds it
+ * ready and its plugin package is not there yet, it sets itself up in the background, once a launch.
+ */
+const openCodeFirstStart = createOpenCodeFirstStart({
+  locate: () => executableLocator.find('opencode'),
+  plugin: () => openCodeGuardForSetUp,
+  run: (command) => openCodeSetUpRunner.run(command),
+  note: (line) => console.warn(line)
+})
+const discoverRuntimes = async (): Promise<readonly RuntimeDiscovery[]> => {
+  const found = await askRuntimes()
+  if (process.env.LOCUST_HIDE_RUNTIMES !== '1' && found.some((runtime) => runtime.id === 'opencode' && runtime.readiness === 'ready')) {
+    void openCodeFirstStart.ensure()
+  }
+  return found
+}
 /**
  * The connectors this machine has, read in the background and held.
  *
@@ -2269,6 +2291,8 @@ if (!ownsSingleInstanceLock) {
       parent: process.pid,
       ...(process.env.LOCUST_GUARD_LOG === undefined ? {} : { log: process.env.LOCUST_GUARD_LOG })
     })
+    // OpenCode's first-start setup names the same guard a run does (0.780).
+    void openCodeGuardWritten.then(markOpenCodeGuard)
 
     /*
      * What answers a run that stops to ask. Approve-each used to have a whole
@@ -2424,6 +2448,7 @@ if (!ownsSingleInstanceLock) {
       commandGuard: () => commandGuardWritten,
       copilotCommandGuard: () => copilotGuardWritten,
       openCodeCommandGuard: () => openCodeGuardWritten,
+      setsItselfUp: (runtime) => runtime === 'opencode' && openCodeFirstStart.willSetUp(),
       // The same guard for Codex (0.720), only when it is the one hook Codex would load.
       codexCommandGuard: async (folder) => {
         if ((await otherCodexHooks({ codexHome: process.env.CODEX_HOME ?? join(homedir(), '.codex'), folder })).length > 0) return undefined
