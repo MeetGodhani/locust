@@ -101,11 +101,20 @@ class Cdp {
     ])
   }
   async eval(expression) {
-    const message = await this.send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true })
-    if (message.error) throw new Error(JSON.stringify(message.error))
-    const result = message.result
-    if (result?.exceptionDetails) throw new Error(result.exceptionDetails.exception?.description ?? 'evaluate threw')
-    return result?.result?.value
+    // A page that reloads while it starts destroys the context an evaluate runs in: 0.781's publish died in step 2 on
+    // "Execution context was destroyed" (2026-10-16) and passed when run again. The page is the same one, so ask
+    // again, in its new context, a few times.
+    for (let attempt = 1; ; attempt += 1) {
+      const message = await this.send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true })
+      if (message.error && attempt < 4 && /context was destroyed|Cannot find context/i.test(String(message.error.message))) {
+        await sleep(1500)
+        continue
+      }
+      if (message.error) throw new Error(JSON.stringify(message.error))
+      const result = message.result
+      if (result?.exceptionDetails) throw new Error(result.exceptionDetails.exception?.description ?? 'evaluate threw')
+      return result?.result?.value
+    }
   }
 }
 
