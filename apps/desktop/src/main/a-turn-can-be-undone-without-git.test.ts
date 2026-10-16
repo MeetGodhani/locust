@@ -59,7 +59,7 @@ describe('a turn on a machine without git', () => {
     expect(await checkpoints.changed(workspace, before.commit, after.commit)).toEqual(['gone.md', 'made.md', 'notes.txt'])
     expect(await checkpoints.fileAt(workspace, before.commit, 'notes.txt')).toBe('one\r\ntwo\r\n')
     const result = await checkpoints.undo(workspace, before.commit, after.commit)
-    expect(result.restored.sort()).toEqual(['gone.md', 'made.md', 'notes.txt'])
+    expect([...result.restored].sort()).toEqual(['gone.md', 'made.md', 'notes.txt'])
     expect(result.leftAlone).toEqual([])
     expect(await readFile(join(workspace, 'notes.txt'), 'utf8')).toBe('one\r\ntwo\r\n')
     expect(await readFile(join(workspace, 'gone.md'), 'utf8')).toBe('here before\n')
