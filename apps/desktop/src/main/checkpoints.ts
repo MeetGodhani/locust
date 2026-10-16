@@ -45,6 +45,8 @@ export const TOO_BIG_REMEMBERED_MS = 10 * 60_000
 export const MAX_READ_BACK_BYTES = 2 * 1024 * 1024
 /** How many turns a folder keeps a way back from; older ones are let go. */
 export const KEPT_TURNS_PER_FOLDER = 60
+/** A state the git-free store kept (checkpoints-plain.ts): `p` and 64 hex, never a git name's 40. */
+export const PLAIN_STATE_ID = /^p[0-9a-f]{64}$/
 const GIT_TIMEOUT_MS = 60_000
 /** How many files' sizes and times are asked for at once. */
 const STAT_BATCH = 128
@@ -110,6 +112,12 @@ export interface CheckpointOptions {
   readonly now?: () => number
   /** Test seam: run git with this store and work tree; resolves stdout. */
   readonly runGit?: (args: readonly string[], options: { readonly input?: string; readonly env?: Readonly<Record<string, string>> }) => Promise<string>
+  /**
+   * The store for a machine with no git (0.780, checkpoints-plain.ts). Undefined keeps git the only one.
+   */
+  readonly withoutGit?: Checkpoints
+  /** Test seam: whether `git` runs here, asked once; by default `git --version`. */
+  readonly gitAvailable?: () => Promise<boolean>
 }
 
 function defaultRunGit(args: readonly string[], options: { readonly input?: string; readonly env?: Readonly<Record<string, string>> }): Promise<string> {
@@ -157,12 +165,26 @@ export function createCheckpoints(options: CheckpointOptions): Checkpoints {
 
   const now = options.now ?? Date.now
   const tooBig = new Map<string, { readonly until: number; readonly why: string }>()
+  /*
+   * NO GIT, THE SAME UNDO (0.780). Asked once, at the first take: a machine with no `git` keeps its copies in the
+   * git-free store, and every later call goes to the store whose names it was given -- git's are 40 hex digits,
+   * the other's `p` and 64 (PLAIN_STATE_ID) -- so a turn's before and after are always read where they were kept.
+   * Git installed while Locust runs is used from the next launch.
+   */
+  const plain = options.withoutGit
+  let gitHere: Promise<boolean> | undefined
+  const usesGit = (): Promise<boolean> => {
+    if (plain === undefined) return Promise.resolve(true)
+    gitHere ??= (options.gitAvailable ?? (() => run(['--version'], {}).then(() => true, () => false)))()
+    return gitHere
+  }
+  const keptWithoutGit = (...names: readonly string[]): boolean => plain !== undefined && names.some((name) => PLAIN_STATE_ID.test(name))
   const refuse = (store: string, why: string): { readonly ok: false; readonly why: string } => {
     tooBig.set(store, { until: now() + TOO_BIG_REMEMBERED_MS, why })
     return { ok: false, why }
   }
 
-  return {
+  const withGit: Checkpoints = {
     async take(workspace) {
       const store = storeFor(options.root, workspace)
       const known = tooBig.get(store)
@@ -304,6 +326,14 @@ export function createCheckpoints(options: CheckpointOptions): Checkpoints {
       for (const ref of refs.slice(0, refs.length - KEPT_TURNS_PER_FOLDER * 2)) await git(store, workspace, ['update-ref', '-d', ref])
       await git(store, workspace, ['prune', '--expire=now']).catch(() => undefined)
     }
+  }
+  if (plain === undefined) return withGit
+  return {
+    take: async (workspace) => ((await usesGit()) ? withGit.take(workspace) : plain.take(workspace)),
+    changed: (workspace, before, after) => (keptWithoutGit(before, after) ? plain.changed(workspace, before, after) : withGit.changed(workspace, before, after)),
+    fileAt: (workspace, commit, path) => (keptWithoutGit(commit) ? plain.fileAt(workspace, commit, path) : withGit.fileAt(workspace, commit, path)),
+    undo: (workspace, before, after) => (keptWithoutGit(before, after) ? plain.undo(workspace, before, after) : withGit.undo(workspace, before, after)),
+    hold: (workspace, name, commit) => (keptWithoutGit(commit) ? plain.hold(workspace, name, commit) : withGit.hold(workspace, name, commit))
   }
 }
 

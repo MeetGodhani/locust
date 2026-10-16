@@ -14,6 +14,7 @@ import { TALK_SHORTCUT_PENDING, TALK_SHORTCUT_PRESSED, TALK_SHORTCUT_READ, TALK_
 import { LOCUST_LINK_TAKE, LOCUST_LINK_WAITING, linkInArguments, parseLocustLink, type LocustLink } from '../shared/locust-link.js'
 import { claimLinks, createLinkInbox } from './locust-links.js'
 import { createOpenCodeFirstStart, OPENCODE_SETUP_TIMEOUT_MS } from './opencode-first-start.js'
+import { createPlainCheckpoints } from './checkpoints-plain.js'
 import { createTalkShortcut, type TalkShortcut } from './talk-shortcut.js'
 import { createScout, type Scout } from './scout.js'
 import { readScoutGithub } from './scout-github.js'
@@ -640,7 +641,8 @@ const executableLocator = process.env.LOCUST_HIDE_RUNTIMES === '1'
 const runtimeFacts = createRuntimeFactsStore({ rootDirectory: app.getPath('userData') })
 // Undo a turn (0.674): each folder's kept states, and each turn's record of its way back. In the profile,
 // never in the person's folder; not in a profile backup (BACKED_UP_FOLDERS names what is).
-const checkpoints = createCheckpoints({ root: join(app.getPath('userData'), 'checkpoints') })
+// And on a machine with no git, the same Undo from a store of Locust's own (0.780, checkpoints-plain.ts).
+const checkpoints = createCheckpoints({ root: join(app.getPath('userData'), 'checkpoints'), withoutGit: createPlainCheckpoints({ root: join(app.getPath('userData'), 'checkpoints') }) })
 const turnRecords = createTurnRecords(join(app.getPath('userData'), 'checkpoints', 'turns.json'))
 /** Skills copied for each Claude run outside Auto (0.679); what a crash left is cleared at launch. */
 const claudeSkillCopies = join(app.getPath('userData'), 'claude-skills')

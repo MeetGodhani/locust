@@ -211,8 +211,8 @@ export const MAX_FOLDER_DEPTH = 8
  * `Thumbs.db`, macOS's `.DS_Store`, and the `~$budget.xlsx` Office leaves
  * beside a file it has open -- which would read as changes nobody made.
  */
-const SKIPPED_FOLDER = /^(?:node_modules|__pycache__|venv|site-packages)$|^\./
-const SKIPPED_FILE = /^(?:desktop\.ini|thumbs\.db|\.ds_store)$|^~\$/i
+export const SKIPPED_FOLDER = /^(?:node_modules|__pycache__|venv|site-packages)$|^\./
+export const SKIPPED_FILE = /^(?:desktop\.ini|thumbs\.db|\.ds_store)$|^~\$/i
 
 export interface FolderEntry {
   readonly name: string
