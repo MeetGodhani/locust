@@ -11,6 +11,20 @@ Settings shows this file as What's new. An entry may group its changes under
 about when they arrive on it carries `<!-- big -->` on the line under its
 heading: the home screen then shows it once, as a splash.
 
+## 0.780.0 - 2026-10-16
+
+### Improved
+
+- **A new computer's first message no longer waits on OpenCode's setup.** The first time OpenCode starts, it installs a package of its own, and the first message waited for it: a minute and a half on a clean computer, then an answer in seven seconds. Locust now has OpenCode do that setup in the background as soon as it is installed. If a message starts before it is done, its line says "Setting up OpenCode for its first start, about a minute" instead of "Starting OpenCode".
+- **Undo works without Git.** Undo kept its copies of your folder with Git, so on a computer without Git no turn could be undone, and nothing said why. When Git is not there, Locust now keeps the same copies itself. Computers with Git work as before.
+- **On a new computer, Home starts with the Install button.** With no AI agent installed, the free one's Install button sat under the team templates and the folder card, out of sight in Locust's own window. Until an agent is installed, it now comes first.
+- **Settings can install an agent.** The AI agents page said "Press Install" but had no Install button, and the npm command it showed does not work on a computer without Node.js. It now has the same Install button as Home.
+
+### Fixed
+
+- **Plain words on a new computer's first screens.** The chat box, the startup screen and the send button's note said "coding agent" and "runtimes". They now say "AI agent", as the rest of Locust does. A question in a conversation with no teammate was headed "The runtime needs a decision"; it now says "A decision is needed to continue".
+- **Claude Code's remote sessions switch shows only where Claude Code is.** It was the first thing on the AI agents page of a computer without Claude Code, where it could only fail.
+
 ## 0.779.0 - 2026-10-16
 
 ### Improved
