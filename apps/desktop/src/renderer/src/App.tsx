@@ -1924,6 +1924,8 @@ export default function App(): ReactElement {
   const [reviewingId, setReviewingId] = useState<string>()
   /** The folder's changes, in one panel beside the conversation (0.732, ChangesPanel.tsx). */
   const [changesOpen, setChangesOpen] = useState(false)
+  // Commits made from the Commit button: the Changes panel reads the folder again on each.
+  const [commits, setCommits] = useState(0)
   /*
    * The file open beside the conversation, if any.
    *
@@ -9213,6 +9215,7 @@ export default function App(): ReactElement {
                       {...((liveRun.data?.missionId ?? liveRun.restoredMission?.missionId) === undefined ? {} : { of: (liveRun.data?.missionId ?? liveRun.restoredMission?.missionId)! })}
                       asks={[...(liveRun.earlierTurns ?? []).map((turn) => turn.prompt), liveRun.prompt].map((prompt) => splitAttachments(prompt).text).slice(-5)}
                       {...(pickedTeammate === undefined ? {} : { teammate: pickedTeammate.name })}
+                      onCommitted={() => setCommits((count) => count + 1)}
                     />
                   )}
                   {/* Review changes (0.439): only a teammate on its own branch has one to review. */}
@@ -10030,6 +10033,7 @@ export default function App(): ReactElement {
           <ChangesPanel
             workspacePath={workspacePath}
             running={running}
+            committed={commits}
             onClose={() => setChangesOpen(false)}
             {...((liveRun?.data?.missionId ?? liveRun?.restoredMission?.missionId) === undefined || liveRun === undefined
               ? {}

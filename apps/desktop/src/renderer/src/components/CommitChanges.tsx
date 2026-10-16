@@ -24,7 +24,8 @@ export function CommitChanges({
   running,
   asks,
   teammate,
-  of
+  of,
+  onCommitted
 }: {
   /** A run is live in this conversation: nothing is offered until it ends, so half a turn is never committed. */
   readonly running: boolean
@@ -34,6 +35,8 @@ export function CommitChanges({
   readonly teammate?: string
   /** The conversation's latest turn: its teammate writes the message from the changes (0.771). */
   readonly of?: string
+  /** A commit was made: what shows the folder's changes reads them again. */
+  readonly onCommitted?: () => void
 }): ReactElement | null {
   const [changes, setChanges] = useState<FolderChanges>()
   const [open, setOpen] = useState(false)
@@ -101,6 +104,7 @@ export function CommitChanges({
     setWorking(undefined)
     setResult(done)
     void read()
+    if (done?.kind === 'done') onCommitted?.()
   }
 
   const count = changes?.kind === 'changes' ? changes.files.length : 0

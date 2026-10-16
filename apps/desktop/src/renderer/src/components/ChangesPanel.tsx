@@ -27,7 +27,7 @@ type Walk =
   | { readonly phase: 'shown'; readonly walkthrough: Walkthrough }
   | { readonly phase: 'failed'; readonly message: string }
 
-export function ChangesPanel({ workspacePath, running, onClose, walkWith }: { readonly workspacePath?: string; readonly running: boolean; readonly onClose: () => void; readonly walkWith?: { readonly of: string; readonly teammate: string; readonly asks: readonly string[] } }): ReactElement {
+export function ChangesPanel({ workspacePath, running, onClose, walkWith, committed = 0 }: { readonly workspacePath?: string; readonly running: boolean; readonly onClose: () => void; readonly walkWith?: { readonly of: string; readonly teammate: string; readonly asks: readonly string[] }; /** Counts commits made from the Commit button: each one is a change to read (2026-10-16). */ readonly committed?: number }): ReactElement {
   const [diff, setDiff] = useState<FolderDiff>()
   const [showing, setShowing] = useState<'all' | string>('all')
   // The tree beside the diffs where there is room for both; in a small window, one press away.
@@ -53,7 +53,8 @@ export function ChangesPanel({ workspacePath, running, onClose, walkWith }: { re
     scroller.current?.scrollTo({ top: 0 })
   }
 
-  // Read when opened, when a turn ends (it may have changed files), and on Refresh.
+  // Read when opened, when a turn ends (it may have changed files), on Refresh, and when Commit made a commit -- the
+  // panel kept showing a change already committed until the next turn (Gemini 4 Argon's workflow drive, 2026-10-16).
   useEffect(() => {
     if (running) return
     let current = true
@@ -71,7 +72,7 @@ export function ChangesPanel({ workspacePath, running, onClose, walkWith }: { re
     return () => {
       current = false
     }
-  }, [showing, running, asked])
+  }, [showing, running, asked, committed])
 
   const read = useMemo(() => (diff?.kind === 'diff' ? parseUnifiedDiff(diff.text) : []), [diff])
   // Walked through, each file has its note and its place in the reading; one it did not mention keeps git's place after.
