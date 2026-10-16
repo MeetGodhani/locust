@@ -443,6 +443,91 @@ export function FirstLaunch({
     return () => observer.disconnect()
   }, [])
 
+  /*
+   * THE STEP THAT CAN BE TAKEN COMES FIRST (0.780). With nothing installed, the one thing Home can do is install
+   * the free agent, and its row sat under the team templates and the folder card: below the fold in Locust's own
+   * 1215x800 window and at 1024x680. So the first screen offered three teams that could not run yet and hid the
+   * press that makes them run (clean-machine drive, packaged 0.779, 2026-10-16). Until something is installed the
+   * accounts lead; once anything is, the order is the one it always was. Installed, not connected: agents being
+   * checked at launch are installed, so a returning Home never reorders while they answer.
+   */
+  const accountsLead = discoveryPhase === 'ready' && runtimes.every((runtime) => !runtime.installed)
+  const teamAndFolder = (
+    <>
+      {offerFirstTeammate && onUseTemplate !== undefined && onNewTeammate !== undefined && (
+        <TeamTemplates onUse={onUseTemplate} onNewTeammate={onNewTeammate} {...(onAddTeamFromCard === undefined ? {} : { onAddFromImage: onAddTeamFromCard })} />
+      )}
+
+      {offerFirstTeammate && onUseTemplate === undefined && (
+        <div className="lc-firstteammate">
+          <button type="button" className="lc-button lc-firstteammate__button" onClick={onNewTeammate}>
+            <Icon name="plus" size={13} /> New teammate
+          </button>
+          <span className="lc-firstteammate__about">
+            A name, a face and a model of its own, and a place for its conversations. It grants no new access.
+          </span>
+        </div>
+      )}
+
+      {/*
+        * The folder card itself lives in Settings and on the composer's own
+        * chip -- this screen is about what is connected (Colin, 2026-09-05).
+        * What stays is the one case where the screen would otherwise invite
+        * a mission that cannot start: no folder chosen, which is what an
+        * installed app launched from its own install folder begins as.
+        */}
+      {workspacePath === undefined && (
+        <div className="lc-folder is-missing">
+          <div className="lc-folder__text">
+            <div className="lc-folder__label">No folder chosen</div>
+            <div className="lc-folder__path">
+              Every teammate works inside one project folder. Pick it before the first conversation.
+            </div>
+          </div>
+          <button type="button" className="lc-button" onClick={onChooseFolder}>
+            Choose folder
+          </button>
+        </div>
+      )}
+
+      {/*
+        * THE FOLDER LOCUST INVENTED, SAID WHERE SOMEBODY IS LOOKING.
+        *
+        * A fresh install is launched from the Start menu, which starts it
+        * in its own install folder; the host refuses that folder on
+        * purpose, so the app makes `Documents\Locust` and works there. The
+        * person therefore has a teammate standing in an empty folder they
+        * did not choose, while the whole promise of the product is that a
+        * teammate works in THEIR project.
+        *
+        * It was said in exactly one place: the composer chip's hover
+        * tooltip. Nobody hovers a chip in their first ten seconds, and the
+        * chip reads "Locust" -- which is also the application name and the
+        * window title, so it does not read as a folder at all, let alone
+        * one worth changing. Found by driving a first launch nobody had
+        * ever driven (`_tools/first-launch-folder-drive.mjs`, 2026-09-19).
+        *
+        * Not an alarm, and not `is-missing`: the app did something
+        * reasonable and this is the sentence that makes it visible. It
+        * disappears the moment a folder is chosen, because `workspaceMade`
+        * is false for any folder a person picked.
+        */}
+      {workspacePath !== undefined && workspaceMade && (
+        <div className="lc-folder">
+          <div className="lc-folder__text">
+            <div className="lc-folder__label">Locust made a folder to work in</div>
+            <div className="lc-folder__path" title={workspacePath}>
+              Teammates will work in {workspacePath} — it is new and empty. Point them at your own project instead.
+            </div>
+          </div>
+          <button type="button" className="lc-button" onClick={onChooseFolder}>
+            Choose folder
+          </button>
+        </div>
+      )}
+    </>
+  )
+
   return (
     <div className={`lc-empty${scrolled ? ' is-scrolled' : ''}${tight ? ' is-tight' : ''}`} ref={pane}>
       <div className="lc-empty__inner" ref={inner}>
@@ -546,77 +631,7 @@ export function FirstLaunch({
           </div>
         )}
 
-        {offerFirstTeammate && onUseTemplate !== undefined && onNewTeammate !== undefined && (
-          <TeamTemplates onUse={onUseTemplate} onNewTeammate={onNewTeammate} {...(onAddTeamFromCard === undefined ? {} : { onAddFromImage: onAddTeamFromCard })} />
-        )}
-
-        {offerFirstTeammate && onUseTemplate === undefined && (
-          <div className="lc-firstteammate">
-            <button type="button" className="lc-button lc-firstteammate__button" onClick={onNewTeammate}>
-              <Icon name="plus" size={13} /> New teammate
-            </button>
-            <span className="lc-firstteammate__about">
-              A name, a face and a model of its own, and a place for its conversations. It grants no new access.
-            </span>
-          </div>
-        )}
-
-        {/*
-          * The folder card itself lives in Settings and on the composer's own
-          * chip -- this screen is about what is connected (Colin, 2026-09-05).
-          * What stays is the one case where the screen would otherwise invite
-          * a mission that cannot start: no folder chosen, which is what an
-          * installed app launched from its own install folder begins as.
-          */}
-        {workspacePath === undefined && (
-          <div className="lc-folder is-missing">
-            <div className="lc-folder__text">
-              <div className="lc-folder__label">No folder chosen</div>
-              <div className="lc-folder__path">
-                Every teammate works inside one project folder. Pick it before the first conversation.
-              </div>
-            </div>
-            <button type="button" className="lc-button" onClick={onChooseFolder}>
-              Choose folder
-            </button>
-          </div>
-        )}
-
-        {/*
-          * THE FOLDER LOCUST INVENTED, SAID WHERE SOMEBODY IS LOOKING.
-          *
-          * A fresh install is launched from the Start menu, which starts it
-          * in its own install folder; the host refuses that folder on
-          * purpose, so the app makes `Documents\Locust` and works there. The
-          * person therefore has a teammate standing in an empty folder they
-          * did not choose, while the whole promise of the product is that a
-          * teammate works in THEIR project.
-          *
-          * It was said in exactly one place: the composer chip's hover
-          * tooltip. Nobody hovers a chip in their first ten seconds, and the
-          * chip reads "Locust" -- which is also the application name and the
-          * window title, so it does not read as a folder at all, let alone
-          * one worth changing. Found by driving a first launch nobody had
-          * ever driven (`_tools/first-launch-folder-drive.mjs`, 2026-09-19).
-          *
-          * Not an alarm, and not `is-missing`: the app did something
-          * reasonable and this is the sentence that makes it visible. It
-          * disappears the moment a folder is chosen, because `workspaceMade`
-          * is false for any folder a person picked.
-          */}
-        {workspacePath !== undefined && workspaceMade && (
-          <div className="lc-folder">
-            <div className="lc-folder__text">
-              <div className="lc-folder__label">Locust made a folder to work in</div>
-              <div className="lc-folder__path" title={workspacePath}>
-                Teammates will work in {workspacePath} — it is new and empty. Point them at your own project instead.
-              </div>
-            </div>
-            <button type="button" className="lc-button" onClick={onChooseFolder}>
-              Choose folder
-            </button>
-          </div>
-        )}
+        {!accountsLead && teamAndFolder}
 
         {discoveryPhase === 'ready' && (() => {
           /*
@@ -1243,6 +1258,8 @@ export function FirstLaunch({
             )}
           </div>
         )}
+
+        {accountsLead && teamAndFolder}
 
         {/*
           * The privacy claim is made once, in the claim line above; the
