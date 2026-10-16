@@ -4,6 +4,8 @@ import { fileURLToPath } from 'node:url'
 
 import { describe, expect, it } from 'vitest'
 
+import { REMOTE_CONTROL_LABEL } from '../shared/claude-remote-control.js'
+
 /**
  * No harness may select something this app cannot draw.
  *
@@ -35,7 +37,8 @@ import { describe, expect, it } from 'vitest'
  * those five would have broken two working smokes. The app was read before
  * anything was changed, which is the only reason it did not happen.
  *
- * A label built entirely from a variable cannot be judged here and is not
+ * A label held in a named string constant is read as its words. Any other
+ * label built entirely from a variable cannot be judged here and is not
  * claimed to be.
  */
 
@@ -116,6 +119,19 @@ const appClasses = new Set(
   readAll(SRC, ['.tsx', '.ts']).flatMap((text) => text.match(/lc-[a-zA-Z0-9_-]+/g) ?? [])
 )
 
+/*
+ * Named string constants, so `aria-label={REMOTE_CONTROL_LABEL}` is read as
+ * its words. Without this, the clean-machine drive's check that no claude.ai
+ * switch is drawn on a machine without Claude Code was reported dead, although
+ * the app draws that switch wherever Claude Code is installed (2026-10-16).
+ */
+const appConstants = new Map<string, string[]>()
+for (const text of appSource) {
+  for (const [, name, value] of text.matchAll(/\bconst ([A-Z][A-Z0-9_]*) = '([^']+)'/g)) {
+    if (name !== undefined && value !== undefined) appConstants.set(name, [...(appConstants.get(name) ?? []), value])
+  }
+}
+
 /** Every literal an `aria-label` can hold, plus the fixed prefix of a template one. */
 const appLabels = new Set<string>()
 const appLabelPrefixes: string[] = []
@@ -125,6 +141,7 @@ for (const text of appSource) {
   for (const [, expression] of text.matchAll(/aria-label=\{((?:[^{}]|\{[^{}]*\})*)\}/g)) {
     // A ternary of two literals is two literal labels. Missing this is what
     // made the first run of this check report five false positives.
+    for (const value of appConstants.get(expression.trim()) ?? []) appLabels.add(value)
     const outsideTemplates = expression.replace(/`[^`]*`/g, '')
     for (const [, quoted] of outsideTemplates.matchAll(/'([^']+)'/g)) appLabels.add(quoted)
     for (const [, quoted] of outsideTemplates.matchAll(/"([^"]+)"/g)) appLabels.add(quoted)
@@ -200,6 +217,8 @@ describe('no harness selects something the app cannot draw', () => {
     // The ternary case specifically, because missing it is what this check got
     // wrong first time.
     expect(appLabels.has('Save as routine')).toBe(true)
+    // And a label held in a named constant, which it reported dead first time.
+    expect(appLabels.has(REMOTE_CONTROL_LABEL)).toBe(true)
     expect(appLabels.size).toBeGreaterThan(40)
   })
 
