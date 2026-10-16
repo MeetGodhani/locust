@@ -86,6 +86,18 @@ describe('a long turn keeps what it said', () => {
     expect(buildThread(run(), { running: true }).some((item) => item.type === 'diagnostic' && item.message === TRIMMED_TURN_LINE)).toBe(false)
   })
 
+  it('counts "at least" when part of the turn is out of view, and not otherwise (review 2026-10-15, C4)', () => {
+    // A 600-call turn read "596 tool calls": the line counted the window, not the record.
+    const traceOf = (trimmed: boolean): string => {
+      const items = buildThread(run(), { running: false, trimmed })
+      const activity = items.find((item) => item.type === 'activity')
+      return activity?.type === 'activity' ? activity.trace.map((segment) => segment.text).join(' · ') : ''
+    }
+    expect(traceOf(true)).toMatch(/at least/)
+    // The control: a turn drawn whole says its counts plainly.
+    expect(traceOf(false)).not.toMatch(/at least/)
+  })
+
   it('keeps its opening messages and newest live step after repeated evictions', () => {
     const all = [...run(), ...Array.from({ length: 500 }, (_, at) => call(100 + at)).flat(), event('tool.started', { itemId: 'newest', toolKind: 'tool_use', name: 'Read', phase: 'started' })]
     let held = { events: [] as readonly NormalizedRuntimeEvent[], eventsTruncated: false }

@@ -14,6 +14,7 @@ Locust can stop a run only where its AI agent asks first. Where it asks, a card 
 | Cursor Agent | Nothing | never | — |
 | Antigravity | Questions only | its questions | — |
 | Muse Code | Nothing | never | — |
+| Your own agent | Some actions | what the agent asks about | Locust |
 
 ## Codex CLI
 
@@ -64,3 +65,11 @@ Locust can stop a run only where its AI agent asks first. Where it asks, a card 
 **Asks first.** Nothing: Muse runs without asking Locust.
 
 **Without asking.** In Ask and Plan, no file changes and no commands. In Edit, changes in this folder, commands inside Muse’s own sandbox, and the web. In Auto, everything, with commands outside that sandbox.
+
+## Your own agent
+
+**Asks first.** In Approve each action, its only mode: every action the agent asks about, before it runs. Which actions it asks about is the agent’s own setting.
+
+**Without asking.** Whatever its own settings let it do without asking, in the folder it was given.
+
+**Always.** Locust keeps an Always for the rest of the run, and your saved rules come first.

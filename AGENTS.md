@@ -17,6 +17,10 @@ This repository is the canonical workspace for the AI teammate platform.
 - Keep runtime orchestration independent from Electron and React.
 - Add tests for routing, quota classification, permission boundaries, checkpointing, and handoff behavior.
 - Do not persist hidden chain-of-thought. Persist concise summaries, plans, tool receipts, approvals, and artifact hashes.
+  Reasoning a runtime SHOWS its own user is not hidden, and is kept for the thinking row, bounded and scrubbed of secrets
+  (Colin's call, 2026-09-16): Claude Code's thinking blocks, Codex app-server's reasoning summary, an ACP agent's
+  thought chunks. What a runtime does not show is never kept: Codex app-server's raw reasoning `content`, and the
+  whole reasoning item on the older `codex exec` path. A ledger a person shares carries the kept part too.
 - Preserve unrelated changes; multiple Codex tasks may work through separate worktrees.
 
 ## Shared context

@@ -30,4 +30,11 @@ describe('a point that counts more than once', () => {
     const card = weighted(parseScorecard(SAID, ['a', 'b'], criteriaLines(CRITERIA)), criteriaWeights(CRITERIA))!
     expect(panelVote([card, card, card])?.weights).toEqual([2, 1, 3, 1])
   })
+
+  it('never reads a size or a name that ends in a number as a weight (review 2026-10-15, C3)', () => {
+    const inWords = ['The result is a 4x4', 'Works on Linux2', 'Draws a 3×3 grid', 'Handles empty input x3', 'Covers the edge cases(x2)'].join('\n')
+    expect(criteriaLines(inWords)).toEqual(['The result is a 4x4', 'Works on Linux2', 'Draws a 3×3 grid', 'Handles empty input', 'Covers the edge cases'])
+    // The last two are the controls: a weight after a space, and in brackets, still count.
+    expect(criteriaWeights(inWords)).toEqual([1, 1, 1, 3, 2])
+  })
 })

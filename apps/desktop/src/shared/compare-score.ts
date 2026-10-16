@@ -45,7 +45,9 @@ const clip = (text: string, max: number): string => {
  * WEIGHTED POINTS (0.767), the canvas's "Score = the weighted lines met": a point ending in x2 to x5 -- or the times
  * sign, or in brackets -- counts that many times in the score. The judges are given the point without it.
  */
-const WEIGHT = /\s*(?:\(\s*[x×]\s*([2-5])\s*\)|[x×]\s*([2-5]))\s*$/i
+// The bare form needs a space (or the line's start) before it, so a size or a
+// name that ends in one is not a weight: "a 4x4", "Linux2" (review 2026-10-15, C3).
+const WEIGHT = /(?:\s*\(\s*[x×]\s*([2-5])\s*\)|(?:^|\s+)[x×]\s*([2-5]))\s*$/i
 
 /** The person's lines, a list's bullet or number taken off, at most `MAX_SCORE_POINTS`. */
 function pointLines(criteria: string | undefined): readonly string[] {

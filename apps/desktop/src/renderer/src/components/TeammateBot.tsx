@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactElement } from 'react'
 import type { BotAvatarState } from 'bot-avatars'
 
@@ -349,7 +349,7 @@ export function everydayFace(
   }
 }
 
-export function TeammateBot({
+function TeammateBotFace({
   hue,
   avatar,
   size = 32,
@@ -527,3 +527,10 @@ export function TeammateBot({
     </span>
   )
 }
+
+/*
+ * A face redraws only when what it shows changes (review 2026-10-15, P1). Every streamed word re-renders the
+ * sidebar, and each row's face ran its dozen hooks again for nothing: its props are values and the teammate's
+ * own look, which keeps its identity until the teammate changes.
+ */
+export const TeammateBot = memo(TeammateBotFace)

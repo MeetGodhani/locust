@@ -11,6 +11,7 @@ import type { FileHandle } from 'node:fs/promises'
 import { isAbsolute, join } from 'node:path'
 
 import { parsedCheckpoint, reconcileMission } from './checkpoint.js'
+import { fitEventsToLedger, LEDGER_TEXT_LIMIT } from './fit.js'
 import type { CheckpointReason, ReconciledCheckpoint } from './checkpoint.js'
 
 /**
@@ -189,7 +190,8 @@ function isSupportedSchemaVersion(value: unknown): value is MissionLedgerSchemaV
 }
 
 const MAX_PROMPT_LENGTH = 8_000
-const MAX_TEXT_LENGTH = 16_384
+// One number with the fitter, so what it shortens to is what this reads.
+const MAX_TEXT_LENGTH = LEDGER_TEXT_LIMIT
 const MAX_RECORD_BYTES = 512 * 1024
 const MAX_APPEND_BYTES = 2 * 1024 * 1024
 const MAX_LEDGER_BYTES = 64 * 1024 * 1024
@@ -2005,7 +2007,9 @@ export function createFileMissionLedger(options: FileMissionLedgerOptions): Miss
         const hydrated = await hydrateForAppend(missionId)
         let sequence = hydrated.nextSequence
         let eventSequence = hydrated.nextEventSequence
-        const records: EventRecord[] = events.map((event) => {
+        // Sizes are fitted here, once, for every caller (fit.ts): an event
+        // that is merely long is kept shortened, never refused.
+        const records: EventRecord[] = fitEventsToLedger(events).map((event) => {
           if (event.missionId !== missionId || event.runId !== hydrated.metadata.runId) {
             throw new Error('Mission event correlation is invalid')
           }
@@ -2570,6 +2574,14 @@ export type {
   WorkroomSnapshot,
   WorkroomUnread
 } from './workroom.js'
+export {
+  fitEventToLedger,
+  fitEventsToLedger,
+  fitJson,
+  fitText,
+  LEDGER_NAME_LIMIT,
+  LEDGER_TEXT_LIMIT
+} from './fit.js'
 export {
   CHECKPOINT_SCHEMA_VERSION,
   MAX_CHECKPOINT_SUMMARY_LENGTH,

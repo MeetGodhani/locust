@@ -7331,8 +7331,44 @@ export default function App(): ReactElement {
   // and the routines through refs the same way they read the rows.
   const teammatesRef = useRef<readonly PublicTeammate[]>([])
   const routinesRef = useRef<readonly PublicRoutine[]>([])
+  /*
+   * The history's rows, built when the history changes rather than on every streamed word: `runs` changes with
+   * each delta, and the whole list was rebuilt with it -- at 2,000 missions with a check inside the loop that
+   * walked every row already built (review 2026-10-15, P1).
+   */
+  const historyRows = useMemo<readonly SidebarMission[]>(() => {
+    const rows: SidebarMission[] = []
+    for (const mission of history) {
+      if (mission.startedBy?.kind === 'side' || hiddenRunIds.has(mission.missionId)) continue
+      // Every folder's conversations, each under its own project (0.458, like
+      // Claude Code). This used to drop every other folder's, so a folder
+      // switch emptied the sidebar and read as the team being reset (Colin,
+      // 2026-09-29).
+      const root = rootMission(mission, historyById)
+      const routineId = routineOf(root.startedBy)
+      rows.push({
+        missionId: mission.missionId,
+        folderId: mission.workspaceId,
+        // A continuation's own prompt is the briefing; name it by the words
+        // the person typed at the start of the chain.
+        title: missionTitle(relayedTitle(root) ?? shownPrompt(root)),
+        rootId: root.missionId,
+        // What this turn said, for search: a follow-up's words are not in the title (0.414).
+        words: splitAttachments(typedPrompt(mission, historyById)).text,
+        ...(mission.continuesFrom === undefined ? {} : { parentId: mission.continuesFrom.missionId }),
+        ...(routineId === undefined ? {} : { routineId }),
+        phase: mission.phase,
+        runtime: mission.runtime,
+        model: mission.model,
+        integrityIssueCount: mission.integrityIssueCount,
+        lastAt: mission.lastUpdatedAt
+      })
+    }
+    return rows
+  }, [history, historyById, hiddenRunIds])
   const sidebarMissions = useMemo<readonly SidebarMission[]>(() => {
     const rows: SidebarMission[] = []
+    const listedLive = new Set<string>()
     for (const [key, run] of runs.entries()) {
       // A send the host REFUSED never became a mission. It was assigned no
       // id and it has already settled, so listing it here files a permanent
@@ -7349,7 +7385,8 @@ export default function App(): ReactElement {
       // its pending key so the teammate reads as working from the first
       // moment, not from the first receipt.
       const missionId = run.data?.missionId ?? key
-      if (rows.some((row) => row.missionId === missionId)) continue
+      if (listedLive.has(missionId)) continue
+      listedLive.add(missionId)
       // A live reply already holds the turns before it, so its chain is
       // known without waiting for the ledger to be re-read.
       const earlier = run.earlierTurns ?? []
@@ -7425,35 +7462,9 @@ export default function App(): ReactElement {
         integrityIssueCount: run.restoredMission?.integrityIssueCount ?? 0
       })
     }
-    for (const mission of history) {
-      if (rows.some((row) => row.missionId === mission.missionId)) continue
-      if (mission.startedBy?.kind === 'side' || hiddenRunIds.has(mission.missionId)) continue
-      // Every folder's conversations, each under its own project (0.458, like
-      // Claude Code). This used to drop every other folder's, so a folder
-      // switch emptied the sidebar and read as the team being reset (Colin,
-      // 2026-09-29).
-      rows.push({
-        missionId: mission.missionId,
-        folderId: mission.workspaceId,
-        // A continuation's own prompt is the briefing; name it by the words
-        // the person typed at the start of the chain.
-        title: missionTitle(
-          relayedTitle(rootMission(mission, historyById)) ?? shownPrompt(rootMission(mission, historyById))
-        ),
-        rootId: rootMission(mission, historyById).missionId,
-        // What this turn said, for search: a follow-up's words are not in the title (0.414).
-        words: splitAttachments(typedPrompt(mission, historyById)).text,
-        ...(mission.continuesFrom === undefined ? {} : { parentId: mission.continuesFrom.missionId }),
-        ...(routineOf(rootMission(mission, historyById).startedBy) === undefined
-          ? {}
-          : { routineId: routineOf(rootMission(mission, historyById).startedBy)! }),
-        phase: mission.phase,
-        runtime: mission.runtime,
-        model: mission.model,
-        integrityIssueCount: mission.integrityIssueCount,
-        lastAt: mission.lastUpdatedAt
-      })
-    }
+    // A live row stands for its mission; the history's own row for it is not listed again.
+    const live = new Set(rows.map((row) => row.missionId))
+    for (const row of historyRows) if (!live.has(row.missionId)) rows.push(row)
     // One row per conversation. The ledger still holds one mission per run;
     // this is only how the exchange is listed.
     /*
@@ -7487,7 +7498,7 @@ export default function App(): ReactElement {
     }
     const parents = nestedUnder(named, sentFrom)
     return named.map((row) => (parents.has(row.missionId) ? { ...row, nestedUnder: parents.get(row.missionId)! } : row))
-  }, [history, historyById, runs, workspaceId, missionTitles, compares, hiddenRunIds])
+  }, [historyRows, historyById, runs, workspaceId, missionTitles, compares, hiddenRunIds])
   // The conversation the box writes in, so an unsent message stays with it (0.551).
   const shownConversation = liveRun?.data?.missionId ?? shownKey
   const shownRow = shownConversation === undefined ? undefined : sidebarMissions.find((entry) => (entry.memberIds ?? [entry.missionId]).includes(shownConversation))

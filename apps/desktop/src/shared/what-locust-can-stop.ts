@@ -34,6 +34,8 @@ export interface StopRow {
   readonly without: string
   /** Who keeps an "Always", where there is one. */
   readonly always?: string
+  /** The table's "Asks first" cell, where the reach's own words would not be true of this agent. */
+  readonly asksBrief?: string
 }
 
 export const STOP_REACH_LABEL: Readonly<Record<StopReach, string>> = {
@@ -91,6 +93,17 @@ export const WHAT_LOCUST_CAN_STOP: readonly StopRow[] = [
     reach: 'nothing',
     asks: 'Nothing: Muse runs without asking Locust.',
     without: 'In Ask and Plan, no file changes and no commands. In Edit, changes in this folder, commands inside Muse’s own sandbox, and the web. In Auto, everything, with commands outside that sandbox.'
+  },
+  {
+    // 0.777: any agent that speaks the Agent Client Protocol, added by its command line. It runs in Approve each
+    // action only, and every request it sends is a card -- but which actions it sends one for is its own setting
+    // (OpenCode over ACP edits without asking unless its opencode.json says "ask"), so not "each action".
+    runtime: 'acp',
+    reach: 'some-actions',
+    asks: 'In Approve each action, its only mode: every action the agent asks about, before it runs. Which actions it asks about is the agent’s own setting.',
+    without: 'Whatever its own settings let it do without asking, in the folder it was given.',
+    always: KEPT_BY_LOCUST,
+    asksBrief: 'what the agent asks about'
   }
 ]
 
@@ -110,7 +123,7 @@ export function whatLocustCanStopDocument(): string {
     '',
     '| AI agent | Can stop | Asks first | Always kept by |',
     '| --- | --- | --- | --- |',
-    ...WHAT_LOCUST_CAN_STOP.map((row) => `| ${runtimeDisplayName(row.runtime)} | ${STOP_REACH_LABEL[row.reach]} | ${row.reach === 'nothing' ? 'never' : row.reach === 'questions-only' ? 'its questions' : row.reach === 'each-action' ? 'in Approve each action' : 'connectors, and commands in Edit'} | ${row.always === undefined ? '—' : row.always === KEPT_BY_LOCUST ? 'Locust' : runtimeDisplayName(row.runtime)} |`),
+    ...WHAT_LOCUST_CAN_STOP.map((row) => `| ${runtimeDisplayName(row.runtime)} | ${STOP_REACH_LABEL[row.reach]} | ${row.asksBrief ?? (row.reach === 'nothing' ? 'never' : row.reach === 'questions-only' ? 'its questions' : row.reach === 'each-action' ? 'in Approve each action' : 'connectors, and commands in Edit')} | ${row.always === undefined ? '—' : row.always === KEPT_BY_LOCUST ? 'Locust' : runtimeDisplayName(row.runtime)} |`),
     ''
   ]
   for (const row of WHAT_LOCUST_CAN_STOP) {

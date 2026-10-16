@@ -1849,7 +1849,14 @@ export function activityTrace(
    * since 0.38.8. The count never was. Same function on both now, so what
    * the fold lists and what the line counts cannot disagree.
    */
-  workspacePath?: string
+  workspacePath?: string,
+  /**
+   * The turn is longer than its display window (shared/event-window.ts), so
+   * these events are not all of it. Its counts then say "at least": a
+   * 600-call turn read "596 tool calls" (review 2026-10-15, C4), which is the
+   * 0.627 bug the window was made to end, back for the longest turns.
+   */
+  trimmed?: boolean
 ): readonly TraceSegment[] {
   const segments: TraceSegment[] = []
   const duration = durationText(runSpanMs(events) ?? 0)
@@ -2004,7 +2011,7 @@ export function activityTrace(
    * because four command lines will not fit and "all exit 0" is the part a
    * reader is actually asking about.
    */
-  if (shellCommands.length === 1 && onlyCommand !== undefined && onlyCommand.length > 0) {
+  if (shellCommands.length === 1 && onlyCommand !== undefined && onlyCommand.length > 0 && trimmed !== true) {
     const one = commandsRunText(commandsRun(details, finished))
     // Not yet RUN while it has no result and the turn is live -- running, or
     // waiting on the person's card. "ran" beside a card that says "Nothing has
@@ -2022,10 +2029,12 @@ export function activityTrace(
   } else {
     const many = commandsRunText(
       commandsRun(details, finished),
-      shellCommands.map((detail) => detail.name)
+      // A turn out of view is counted, not named: the names would be the window's.
+      trimmed === true ? [] : shellCommands.map((detail) => detail.name)
     )
     if (many !== undefined) {
-      segments.push({ key: 'commands', text: many.text, ...(many.amber ? { tone: 'amber' as const } : {}) })
+      const text = trimmed === true ? many.text.replace(/^ran /, 'ran at least ') : many.text
+      segments.push({ key: 'commands', text, ...(many.amber ? { tone: 'amber' as const } : {}) })
     }
   }
   /*
@@ -2035,9 +2044,11 @@ export function activityTrace(
    * command rows under "3 tool calls · ran mkdir, printf and 10 more" and
    * filed it as an undercount (beta report, #6). The three were the reads.
    */
-  if (calls > 0) segments.push({ key: 'calls', text: pluralize(calls, shellCommands.length > 0 ? 'other tool call' : 'tool call') })
-  if (files > 0 && !(outcome === 'cancelled' && files === 0)) segments.push({ key: 'files', text: pluralize(files, 'file') })
-  else if (files === 0 && outcome === 'completed' && mayEdit === true && !cannotAttribute) {
+  const atLeast = trimmed === true ? 'at least ' : ''
+  if (calls > 0) segments.push({ key: 'calls', text: `${atLeast}${pluralize(calls, shellCommands.length > 0 ? 'other tool call' : 'tool call')}` })
+  if (files > 0 && !(outcome === 'cancelled' && files === 0)) segments.push({ key: 'files', text: `${atLeast}${pluralize(files, 'file')}` })
+  // Not said of a turn whose middle is out of view: an edit may sit there.
+  else if (files === 0 && outcome === 'completed' && mayEdit === true && !cannotAttribute && trimmed !== true) {
     segments.push({ key: 'files', text: 'no files changed' })
   }
   if (refused > 0) segments.push({ key: 'refused', text: `${String(refused)} refused`, tone: 'amber' })
@@ -4096,7 +4107,8 @@ export function buildThread(
         traceOutcome(events, options.running),
         planSteps,
         options.mayEdit,
-        options.workspacePath
+        options.workspacePath,
+        options.trimmed
       ),
       finished: !options.running,
       details: activity,

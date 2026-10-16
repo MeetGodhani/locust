@@ -1,7 +1,10 @@
 # Cross-task context
 
 How to work on Locust, for a person or an agent session arriving cold.
-Updated 2026-10-04, at 0.619. Every rule here names the file that holds it;
+Updated 2026-10-04, at 0.619; the rules still hold at 0.778 (2026-10-15), and
+two were added since: a ledger field is fitted, not refused, by
+`packages/mission-store/src/fit.ts`, so an adapter need not bound its own
+sizes; and the reasoning rule in AGENTS.md now says what is kept and why. Every rule here names the file that holds it;
 when the file and this page disagree, the file is right and this page needs
 an edit.
 

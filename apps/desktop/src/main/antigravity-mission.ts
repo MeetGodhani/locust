@@ -4,6 +4,7 @@ import { readFile, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
 
 import type { MissionLedger, Workroom, WorkroomMessage } from '@teammate/mission-store'
+import { fitEventsToLedger } from '@teammate/mission-store'
 import { antigravityMessageStep, createAntigravityEventNormalizer, hasAntigravityGap, withRestoredGaps } from '@teammate/runtime-adapters'
 import type { NormalizedRuntimeEvent, RuntimeProcessCompletion, ToolQuestion } from '@teammate/runtime-adapters'
 
@@ -460,8 +461,10 @@ export function createAntigravityMissionService(options: AntigravityMissionOptio
     options.emitApproval(questionCard(run, asking))
   }
 
-  const persistAndEmit = async (run: LiveRun, events: readonly NormalizedRuntimeEvent[]): Promise<void> => {
-    if (events.length === 0) return
+  const persistAndEmit = async (run: LiveRun, given: readonly NormalizedRuntimeEvent[]): Promise<void> => {
+    if (given.length === 0) return
+    // What the ledger keeps is what the screen shows (fit.ts).
+    const events = fitEventsToLedger(given)
     // Persist-before-emit, as every transport here does: a receipt the person
     // has seen is already on disk.
     //

@@ -122,6 +122,7 @@ import { createRunEnd } from './run-end.js'
 import { createCarryOn, type CarryOn } from './carry-on.js'
 import { CARRY_ON_CHANNEL, parsedCarryOnRoute } from '../shared/carry-on.js'
 import { createPhoneHost } from './phone-host.js'
+import { countingLedgerWrites, keyedOnce } from './ledger-writes.js'
 import { acpScratch, createAcpAgents } from './acp-agents.js'
 import { acpCatalog, ACP_AGENTS_LIST_CHANNEL, ACP_AGENTS_REMOVE_CHANNEL, ACP_AGENTS_SAVE_CHANNEL, ACP_AGENTS_TEST_CHANNEL } from '../shared/acp-agents.js'
 import { phonePage } from './phone-page.js'
@@ -1849,7 +1850,8 @@ if (!ownsSingleInstanceLock) {
       await folders.learn(found)
     }
     const ledgerDirectory = join(app.getPath('userData'), 'mission-ledger')
-    const missionLedger = createFileMissionLedger({ rootDirectory: ledgerDirectory })
+    // Counted, so a reader of the whole history can tell nothing changed (the phone page, P4).
+    const { ledger: missionLedger, writes: ledgerWrites } = countingLedgerWrites(createFileMissionLedger({ rootDirectory: ledgerDirectory }))
     /** From a turn back to its conversation's root, one ledger read per hop, remembered. */
     const conversationChain = createConversationChain(missionLedger)
     // Its own directory: the ledger treats every `.jsonl` in ITS directory as
@@ -8614,12 +8616,19 @@ if (!ownsSingleInstanceLock) {
       const listed = await teammates.list().catch(() => [])
       return (missionId: string) => listed.find((mate) => mate.teammateId === owners[missionId])?.name
     }
-    const phoneHistory = async () => {
+    const phoneLive = (): string[] => [...codexMissions.liveMissionIds(), ...antigravityMissions.liveMissionIds()]
+    /*
+     * Built once per change, not once per poll: an open phone page asks every 3 s, and reading the whole history
+     * each time cost 131 ms at 2,000 missions (review 2026-10-15, P4). The key is the ledger's write count, what is
+     * live, and the minute, so a teammate renamed in Settings reaches the phone within one.
+     */
+    const phoneHistoryOnce = keyedOnce(async () => {
       const history = await readMissionHistory(missionLedger, undefined, workspacePath)
-      const live = [...codexMissions.liveMissionIds(), ...antigravityMissions.liveMissionIds()]
+      const live = phoneLive()
       const names = await phoneNames()
       return { ...phoneConversations(history.ok ? history.data.missions : [], live, names), live, names }
-    }
+    })
+    const phoneHistory = () => phoneHistoryOnce(`${String(ledgerWrites())}|${phoneLive().join(',')}|${String(Math.floor(Date.now() / 60_000))}`)
     const phoneSending = new Set<string>()
     const phoneHost = createPhoneHost({
       directory: app.getPath('userData'),

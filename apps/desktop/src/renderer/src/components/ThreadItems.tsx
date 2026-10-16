@@ -13,6 +13,7 @@ import { quietMinutes } from '../quiet.js'
 import { linkHost } from '../../../shared/outbound-links.js'
 import type { OrbState, PlanStep } from '../missionView.js'
 import { TeammateBot } from './TeammateBot.js'
+import type { TeammateBotProps } from './TeammateBot.js'
 import { MathTex } from './MathTex.js'
 import type { FaceActivity } from '../faceState.js'
 import { Icon } from './Icon.js'
@@ -129,8 +130,8 @@ export function AgentAvatar({
     : <TeammateBot hue={teammate.hue} avatar={teammate.avatar} size={size} />
 }
 
-type PixelFaceHueLike = Parameters<typeof TeammateBot>[0]['hue']
-type AvatarSpecLike = Parameters<typeof TeammateBot>[0]['avatar']
+type PixelFaceHueLike = TeammateBotProps['hue']
+type AvatarSpecLike = TeammateBotProps['avatar']
 
 /**
  * A model's reply, drawn the way it was written.

@@ -1,3 +1,4 @@
+import { fitEventsToLedger } from '@teammate/mission-store'
 import type { MissionLedger } from '@teammate/mission-store'
 import type { NormalizedRuntimeEvent } from '@teammate/runtime-adapters'
 import type { CodexMissionUpdate } from '../shared/ipc.js'
@@ -12,7 +13,10 @@ export async function persistEventUpdates(
   track: (events: readonly NormalizedRuntimeEvent[]) => void,
   emit: (update: CodexMissionUpdate) => void
 ): Promise<void> {
-  await ledger.appendEvents(missionId, events)
-  track(events)
-  for (const update of streamedUpdates(runId, missionId, events)) emit(update)
+  // Fitted before the write so the screen shows what the ledger keeps; the
+  // ledger fits again, which costs nothing on an event that already fits.
+  const kept = fitEventsToLedger(events)
+  await ledger.appendEvents(missionId, kept)
+  track(kept)
+  for (const update of streamedUpdates(runId, missionId, kept)) emit(update)
 }

@@ -26,7 +26,7 @@ const source = (file: string): string => readFileSync(fileURLToPath(new URL(file
  * renderer, so this reads the table the way the other main tests read
  * renderer source.
  */
-const RUNTIMES: readonly MissionRuntimeId[] = ['codex', 'claude', 'cursor', 'gemini', 'opencode', 'copilot', 'antigravity', 'muse']
+const RUNTIMES: readonly MissionRuntimeId[] = ['codex', 'claude', 'cursor', 'gemini', 'opencode', 'copilot', 'antigravity', 'muse', 'acp']
 const capabilities = source('../renderer/src/status.ts')
 const table = capabilities.slice(capabilities.indexOf('export const RUNTIME_CAPABILITIES'))
 const modesOf = (runtime: MissionRuntimeId): string => {
@@ -42,13 +42,16 @@ describe('one row for every AI agent a run can start on', () => {
     expect(WHAT_LOCUST_CAN_STOP.map((entry) => entry.runtime).sort()).toEqual([...runnable].sort())
   })
 
-  it('says "each action" exactly where Approve each action is offered', () => {
+  it('says "each action" exactly where Approve each action is offered and Locust sets what is asked', () => {
     for (const entry of WHAT_LOCUST_CAN_STOP) {
       const offered = modesOf(entry.runtime).includes("'approve-each'")
-      expect(entry.reach === 'each-action', entry.runtime).toBe(offered)
+      // An added ACP agent (0.777) decides for itself which actions it asks about.
+      expect(entry.reach === 'each-action', entry.runtime).toBe(offered && entry.runtime !== 'acp')
       expect(/Approve each action/.test(entry.asks), entry.runtime).toBe(offered)
     }
-    expect(RUNTIMES.filter((runtime) => modesOf(runtime).includes("'approve-each'")).sort()).toEqual(['codex', 'copilot', 'opencode'])
+    expect(RUNTIMES.filter((runtime) => modesOf(runtime).includes("'approve-each'")).sort()).toEqual(['acp', 'codex', 'copilot', 'opencode'])
+    expect(row('acp').reach).toBe('some-actions')
+    expect(row('acp').asks).toMatch(/agent’s own setting/)
   })
 })
 
@@ -99,7 +102,7 @@ describe('each row is what the run is given', () => {
     expect(source('./permission-host.ts')).toContain('alwaysKey: `claude:${alwaysKeyOf(toolName)}`')
     expect((openCodePermissionRequest({ permission: 'bash', patterns: ['echo hi'], always: ['echo *'], metadata: {} }, 'C:/work').params as Record<string, unknown>).locustAlwaysKey).toBeDefined()
     expect((acpPermissionRequest({ toolCallId: 't', title: 'x', kind: 'execute', command: 'npm test', paths: [], diff: undefined, options: [] }, 'C:/work').params as Record<string, unknown>).locustAlwaysKey).toBeDefined()
-    for (const runtime of ['codex', 'claude', 'opencode', 'copilot'] as const) expect(row(runtime).always, runtime).toMatch(/^Locust keeps an Always/)
+    for (const runtime of ['codex', 'claude', 'opencode', 'copilot', 'acp'] as const) expect(row(runtime).always, runtime).toMatch(/^Locust keeps an Always/)
     for (const runtime of ['cursor', 'antigravity', 'muse'] as const) expect(row(runtime).always, runtime).toBeUndefined()
   })
 })

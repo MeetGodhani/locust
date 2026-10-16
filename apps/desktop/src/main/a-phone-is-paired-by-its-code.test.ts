@@ -98,6 +98,22 @@ describe('your phone', () => {
     await host.dispose()
   })
 
+  it('answers a key of the right length in characters but not in bytes, and counts it as wrong (review 2026-10-15, C2)', async () => {
+    const { host } = await phone()
+    const on = await host.setEnabled(true)
+    // Latin-1 header bytes: 32 characters, 64 bytes in UTF-8. timingSafeEqual used to throw before answering.
+    const status = await new Promise<number>((resolve, reject) => {
+      const req = request(`${base(on.url)}/api/state`, { headers: { authorization: Buffer.from(`Bearer ${'é'.repeat(32)}`, 'latin1').toString('latin1') } }, (res) => { res.resume(); resolve(res.statusCode ?? 0) })
+      req.on('error', reject)
+      req.setTimeout(3_000, () => { req.destroy(new Error('no answer')) })
+      req.end()
+    })
+    expect(status).toBe(401)
+    // The control: the right key still works.
+    expect((await get(`${base(on.url)}/api/state`, keyOf(on.url))).status).toBe(200)
+    await host.dispose()
+  })
+
   it('keeps its key across a restart, so a paired phone stays paired', async () => {
     const { host, directory, c } = await phone()
     const on = await host.setEnabled(true)

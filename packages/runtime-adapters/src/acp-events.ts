@@ -129,6 +129,20 @@ export function acpToolNaming(kind: string | undefined): { readonly toolKind: st
 }
 
 /** The text of an ACP content block, or of every text block in a list. */
+/** Usage keys kept from one run; an agent's own names beyond this are dropped. */
+const MAX_USAGE_KEYS = 32;
+/** What a held message or thought keeps of each end while it is still growing. */
+const HELD_END = 16_384;
+
+/**
+ * A growing text, held with both ends. What is written is bounded at its close,
+ * keeping its start and its end, so the middle never has to stay in memory.
+ */
+function heldText(text: string): string {
+  if (text.length <= HELD_END * 4) return text;
+  return `${text.slice(0, HELD_END)}\n…\n${text.slice(-HELD_END)}`;
+}
+
 function textOf(content: unknown): string | undefined {
   if (Array.isArray(content)) {
     const texts = content.map((entry) => textOf(isObject(entry) && isObject(entry.content) ? entry.content : entry)).filter((text): text is string => text !== undefined);
@@ -258,7 +272,7 @@ export function createAcpEventNormalizer(context: AcpInvocationContext): AcpEven
       // The words are the step's message; the evidence only names the record.
       const evidence = { transportSequence: record.sequence, runtimeEventType: kind, redacted: true } satisfies CodexEventEvidence;
       if (reasoning !== undefined) {
-        reasoning.text += text;
+        reasoning.text = heldText(reasoning.text + text);
         return [];
       }
       reasoningOrdinal += 1;
@@ -275,8 +289,12 @@ export function createAcpEventNormalizer(context: AcpInvocationContext): AcpEven
       const events: NormalizedRuntimeEvent[] = [...start(evidence), ...closeReasoning(evidence)];
       if (message !== undefined && agentId !== undefined && message.agentId !== agentId) events.push(...closeMessage(evidence));
       const current = message ?? (message = openMessage(agentId));
-      current.text += text;
-      events.push(emit("message.delta", { itemId: current.itemId, operation: "append", text, final: false, evidence }));
+      // Held bounded as it grows: the closing replace keeps both ends anyway,
+      // so the middle of a long answer is never needed in memory.
+      current.text = heldText(current.text + text);
+      // An agent may send its answer whole rather than token by token; the
+      // chunk is bounded like every other message text (review 2026-10-15, C1).
+      events.push(emit("message.delta", { itemId: current.itemId, operation: "append", text: boundedMessageText(text), final: false, evidence }));
       return events;
     }
 
@@ -365,7 +383,10 @@ export function createAcpEventNormalizer(context: AcpInvocationContext): AcpEven
       stopReason = stringValue(params.stopReason);
       if (isObject(params.usage)) {
         for (const [key, amount] of Object.entries(params.usage)) {
-          if (typeof amount === "number" && Number.isFinite(amount)) usage[key] = (usage[key] ?? 0) + amount;
+          if (typeof amount !== "number" || !Number.isFinite(amount)) continue;
+          // Any key an agent invents is kept, up to a number nobody reads past.
+          if (usage[key] === undefined && Object.keys(usage).length >= MAX_USAGE_KEYS) continue;
+          usage[key] = (usage[key] ?? 0) + amount;
         }
       }
       const evidence = { transportSequence: record.sequence, runtimeEventType: "prompt_result", redacted: true } satisfies CodexEventEvidence;

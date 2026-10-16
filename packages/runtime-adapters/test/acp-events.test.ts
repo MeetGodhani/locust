@@ -170,6 +170,20 @@ describe("what the agent says", () => {
     record(sequence, "session/update", { update: { sessionUpdate: status === "pending" ? "tool_call" : "tool_call_update", toolCallId: "t1", kind: "execute", status, rawInput: { command: "npm test" } } });
   const ended = (sequence: number): RuntimeJsonlRecord => record(sequence, ACP_PROMPT_RESULT, { stopReason: "end_turn" });
 
+  it("sent whole rather than token by token, is bounded like every other message -- and keeps both ends (review 2026-10-15, C1)", () => {
+    // An agent that sends its answer in one chunk is what "bring any agent" is for; a
+    // 17,000 character chunk used to be refused by the ledger and stop the run.
+    const long = `START ${"w".repeat(60_000)} END`;
+    const events = normalize([record(1, ACP_SESSION, { sessionId: "s" }), chunk(2, long, "m1"), chunk(3, " more", "m1"), ended(4)], "copilot");
+    const deltas = events.filter((event) => event.type === "message.delta").map(payload);
+    expect(deltas.map((delta) => (delta.text as string).length).every((length) => length <= 16_384)).toBe(true);
+    const whole = said(events)[0] as string;
+    expect(whole.startsWith("START ")).toBe(true);
+    expect(whole.endsWith("END more")).toBe(true);
+    // The control: an ordinary chunk passes through as it came.
+    expect(deltas[1]).toMatchObject({ operation: "append", text: " more" });
+  });
+
   it("streams as it is written, and is marked whole and final when the turn ends", () => {
     const events = normalize([record(1, ACP_SESSION, { sessionId: "s" }), chunk(2, "Done: ", "m1"), chunk(3, "port is 3001.", "m1"), ended(4)], "copilot");
     const deltas = events.filter((event) => event.type === "message.delta").map(payload);

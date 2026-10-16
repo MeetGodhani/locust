@@ -73,4 +73,4 @@ Authentication, billing/spend-cap, safety, malformed request, and policy failure
 | `turn.failed` | `step.failed` and `run.failed`, or the checkpoint/fallback flow for an eligible limit |
 | host-correlated cancellation | synthesized `run.cancelled` |
 
-Reasoning records are not persisted as hidden chain-of-thought. Only concise, user-facing summaries and execution metadata may enter the mission ledger.
+Reasoning records are not persisted as hidden chain-of-thought. Only concise, user-facing summaries and execution metadata may enter the mission ledger: on the app-server path the reasoning item's `summary` (what Codex shows its own user) is kept as the thinking step's message, bounded and scrubbed of secrets, and its raw `content` is not; on the `codex exec` path the whole reasoning item is replaced by `[redacted]`. Other runtimes keep the reasoning they show their own users by the same rule (AGENTS.md, Engineering practices).

@@ -19137,6 +19137,31 @@ textarea.lc-compare__judgecriteria {
   padding: var(--lc-space-2) var(--lc-space-3) var(--lc-space-3) 28px;
 }
 
+/* The end of a long list drawn so far (ListWindow.tsx): it draws the next page by itself as it scrolls near, and
+   says how many are left in case nobody scrolls. Quiet, a row's height, on the titles' x. */
+.lc-listmore {
+  display: block;
+  width: 100%;
+  height: 28px;
+  padding: 0 var(--lc-space-3) 0 28px;
+  border: 0;
+  border-radius: var(--lc-radius-control);
+  background: transparent;
+  color: var(--lc-text-muted);
+  text-align: left;
+  cursor: pointer;
+}
+
+.lc-listmore:hover {
+  background: var(--lc-hover-surface);
+  color: var(--lc-text-name);
+}
+
+.lc-listmore:focus-visible {
+  outline: 2px solid var(--lc-focus-ring);
+  outline-offset: -2px;
+}
+
 /* Group settings: two properties, each with its claim above and its provenance below. */
 .lc-groupsettings {
   width: min(560px, calc(100vw - 32px));

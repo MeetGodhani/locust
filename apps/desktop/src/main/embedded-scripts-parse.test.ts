@@ -1,5 +1,5 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import vm from 'node:vm'
 
@@ -260,8 +260,9 @@ describe('the browser scripts the harnesses send', () => {
     expect(() => new vm.Script(embeddedScripts(`evaluate(\`${doubled}\`)`)[0] ?? '')).not.toThrow()
   })
 
-  it.each(files.map((path) => path.slice(path.lastIndexOf('\\') + 1)))('%s', (name: string) => {
-    const path = files.find((entry) => entry.endsWith(`${BACKSLASH}${name}`))
+  it.each(files.map((path) => basename(path)))('%s', (name: string) => {
+    // By name, whatever the separator: on macOS and Linux every case used to fail (review 2026-10-15, C5).
+    const path = files.find((entry) => basename(entry) === name)
     expect(path).toBeDefined()
     const source = readFileSync(path ?? '', 'utf8')
     for (const script of embeddedScripts(source)) {

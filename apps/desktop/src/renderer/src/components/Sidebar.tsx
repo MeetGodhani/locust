@@ -26,6 +26,7 @@ import {
   teammateStatusView
 } from '../status.js'
 import { TeammateBot } from './TeammateBot.js'
+import { LIST_PAGE, ListMore, WhenNear } from './ListWindow.js'
 import { RuntimeMark } from './RuntimeMark.js'
 import type { TeammateStatusView } from '../status.js'
 import { Icon } from './Icon.js'
@@ -481,6 +482,10 @@ export function Sidebar({
    */
 
   const [faceFilter, setFaceFilter] = useState<string>()
+  /** How many of the long list's rows are drawn (ListWindow.tsx): a page, and more as it is scrolled. */
+  const [listBudget, setListBudget] = useState(LIST_PAGE)
+  // A new search or filter is a new list: it starts at one page again.
+  useEffect(() => setListBudget(LIST_PAGE), [query, faceFilter])
   const railOpenFor = railPinned ?? railHovered
   /*
    * M35 (the code review): in the rail, Rename and New group did nothing --
@@ -655,6 +660,15 @@ export function Sidebar({
      */
     const drawnGroups = groups
     const folderUngrouped = withRoomsFolded(inFolder.filter((mission) => heldFor(mission, groupMembers) === undefined), rooms)
+    /*
+     * The long part of the list, drawn a page at a time (ListWindow.tsx) -- always far enough to hold the one open,
+     * so the conversation on screen is never the row that is missing.
+     */
+    const openAt = folderUngrouped.findIndex((entry) =>
+      entry.kind === 'room' ? entry.missions.some((mission) => isShown(mission, selectedMissionId)) : isShown(entry.mission, selectedMissionId)
+    )
+    const drawnUngrouped = folderUngrouped.slice(0, Math.max(listBudget, openAt + 1))
+    const notDrawn = folderUngrouped.length - drawnUngrouped.length
     // "Ungrouped" only where a group is drawn beside it: in a folder with none it names the only thing there.
     const groupsShown = drawnGroups.some((group) => showsGroup(group.groupId, inFolder, keepsEmpty))
     return (
@@ -763,7 +777,8 @@ export function Sidebar({
                 <span className="lc-project__name">{groupsShown ? 'Ungrouped' : 'Recents'}</span>
               </div>
             )}
-            {folderUngrouped.map((entry) => (entry.kind === 'room' ? roomRow(entry.room, entry.missions) : rowAndChildren(entry.mission)))}
+            {drawnUngrouped.map((entry) => (entry.kind === 'room' ? roomRow(entry.room, entry.missions) : rowAndChildren(entry.mission)))}
+            {notDrawn > 0 && <ListMore remaining={notDrawn} onMore={() => setListBudget((held) => held + LIST_PAGE)} />}
           </>
     )
   }
@@ -969,7 +984,10 @@ export function Sidebar({
                         </span>
                       )
                     ) : (
-                      <TeammateBot hue={by.hue} avatar={by.avatar} size={BOT_SIZE.conversationOwner} teammateId={by.teammateId} name={by.name} />
+                      // Drawn when the row comes near the screen: a face is most of what a row costs (ListWindow.tsx).
+                      <WhenNear size={BOT_SIZE.conversationOwner}>
+                        <TeammateBot hue={by.hue} avatar={by.avatar} size={BOT_SIZE.conversationOwner} teammateId={by.teammateId} name={by.name} />
+                      </WhenNear>
                     )}
                     {fromRoutine !== undefined && (
                       <span className="lc-conv__routine" role="img" aria-label={`${fromRoutine.charAt(0).toUpperCase()}${fromRoutine.slice(1)}`}>

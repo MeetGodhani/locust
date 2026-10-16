@@ -1,4 +1,4 @@
-import { randomBytes, timingSafeEqual } from 'node:crypto'
+import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import { networkInterfaces, type NetworkInterfaceInfo } from 'node:os'
@@ -7,6 +7,18 @@ import { join } from 'node:path'
 import type { PhoneSettings, PhoneState, PhoneTurn } from '../shared/phone.js'
 import { privateMcpFile } from './locust-mcp-host.js'
 import { replaceFile } from './replace-file.js'
+
+/**
+ * The key, compared in constant time over digests of equal length. Node reads
+ * header bytes as Latin-1, so a supplied key of the right LENGTH in characters
+ * could be twice as many bytes in UTF-8, and `timingSafeEqual` throws on
+ * unequal lengths -- before the wrong-key count, with no answer sent (review
+ * 2026-10-15, C2). Digests are always 32 bytes, so nothing here can throw.
+ */
+function sameKey(supplied: string, expected: string): boolean {
+  const digest = (value: string): Buffer => createHash('sha256').update(value, 'latin1').digest()
+  return timingSafeEqual(digest(supplied), digest(expected))
+}
 
 /*
  * YOUR PHONE (0.775, shared/phone.ts): one small page on the home network. Off means no socket. On, the page is
@@ -94,7 +106,7 @@ export function phoneRequestHandler(key: () => string | undefined, page: () => s
     const expected = key()
     const auth = req.headers.authorization
     const supplied = typeof auth === 'string' && auth.startsWith('Bearer ') ? auth.slice(7) : ''
-    if (expected === undefined || supplied.length !== expected.length || !timingSafeEqual(Buffer.from(supplied), Buffer.from(expected))) {
+    if (expected === undefined || !sameKey(supplied, expected)) {
       wrong.set(from, [...recent, now()])
       json(res, 401, { message: 'This phone is not paired. Scan the code in Locust’s Settings again.' })
       return

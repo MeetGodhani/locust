@@ -1,6 +1,7 @@
 # Project state
 
-Updated 2026-10-04, at 0.619. This file says what Locust is and where it
+Updated 2026-10-15, at 0.778 (the agent list below; the rest was written at
+0.619 and still holds). This file says what Locust is and where it
 stands. `CHANGELOG.md` is the running record of each build, in the words a
 person using the app would read; `docs/ARCHITECTURE.md` says how it is built;
 `docs/CROSS_TASK_CONTEXT.md` says how to work on it. Earlier versions of this
@@ -21,7 +22,15 @@ welcome and code is by invitation (`CONTRIBUTING.md`).
 Seven AI agents own real conversations end to end: Claude Code, Codex CLI,
 Cursor Agent, OpenCode, Copilot CLI, Antigravity and Muse Code
 (`apps/desktop/src/shared/runtime-integration.ts` says how far each goes:
-five live, Antigravity experimental, Muse Code preview). Each is found on the
+five live, Antigravity experimental, Muse Code preview). Since 0.777 a
+person can add any other agent that speaks the Agent Client Protocol by its
+command line (Settings, Your own agents); it runs in Approve each.
+
+Since 0.619, among much else (CHANGELOG.md has all of it): a cloud computer
+(an agent on a GitHub Codespace, 0.761-0.768), benchmarks and judges in
+Compare (0.763-0.767), Scout, diagrams and locust:// links (0.770), carry-on
+when a plan runs out (0.774), and the phone page on the home network (0.775,
+off by default; docs/NETWORK.md). Each is found on the
 machine without reading its credentials and offers the models its own CLI
 lists. Gemini CLI is found and refused, with the reason said in the app.
 

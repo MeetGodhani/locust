@@ -1,5 +1,5 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { describe, expect, it } from 'vitest'
@@ -192,8 +192,9 @@ describe('no harness closes a template literal inside a comment', () => {
     expect(literalsClosedInComments('const s = `a${ /* `q` */ 1 }b`\n')).toEqual([])
   })
 
-  it.each(files.map((path) => path.slice(path.lastIndexOf('\\') + 1)))('%s', (name: string) => {
-    const path = files.find((entry) => entry.endsWith(`\\${name}`))
+  it.each(files.map((path) => basename(path)))('%s', (name: string) => {
+    // By name, whatever the separator: on macOS and Linux every case used to fail (review 2026-10-15, C5).
+    const path = files.find((entry) => basename(entry) === name)
     expect(path).toBeDefined()
     expect(literalsClosedInComments(readFileSync(path ?? '', 'utf8'))).toEqual([])
   })

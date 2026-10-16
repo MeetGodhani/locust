@@ -43,6 +43,10 @@ import type { MetalMotion, MetalPreset, MetalStrength } from '../../../shared/ip
  */
 const bendConfig = (): typeof BEND => BEND
 
+/** How long the send button waits for the shader before drawing itself plainly (P3). */
+const NO_ROOT_AFTER_MS = 3_000
+const NO_REVEAL_AFTER_MS = 15_000
+
 function MetalBend({ node }: { readonly node: HTMLElement | null }): null {
   const ref = useMemo(() => ({ current: node }), [node])
   useMetalBend(ref, bendConfig)
@@ -138,6 +142,8 @@ export function MetalSend({
    * frame that has no halo in it.
    */
   const [frozen, setFrozen] = useState(false)
+  /** The shader never showed up (no WebGL): the plain button, as `off` draws it. */
+  const [unavailable, setUnavailable] = useState(false)
   const host = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -152,7 +158,7 @@ export function MetalSend({
   }, [bend, strength])
 
   useEffect(() => {
-    if (warm) return
+    if (warm || unavailable) return
     const node = host.current
     if (node === null) return
     /*
@@ -161,6 +167,7 @@ export function MetalSend({
      * means pausing an instance that never painted — invisible forever.
      */
     let live = true
+    const began = performance.now()
     const look = (): void => {
       if (!live) return
       const root = node.querySelector<HTMLElement>('.metal-fx-root')
@@ -171,13 +178,26 @@ export function MetalSend({
           return
         }
       }
+      /*
+       * WITHOUT WebGL THE ROOT NEVER COMES, and this loop used to wait for it
+       * for ever: 60 callbacks a second at rest, about 7% of a core, on a VM,
+       * a blocklisted driver or a remote desktop (review 2026-10-15, P3). A
+       * root that has not appeared in 3 s is not coming; one that appeared is
+       * compiling and gets 15 s. Either way the plain button takes over, which
+       * is the `off` path and cannot be invisible.
+       */
+      const waited = performance.now() - began
+      if ((root === null && waited > NO_ROOT_AFTER_MS) || waited > NO_REVEAL_AFTER_MS) {
+        setUnavailable(true)
+        return
+      }
       requestAnimationFrame(look)
     }
     requestAnimationFrame(look)
     return () => {
       live = false
     }
-  }, [warm])
+  }, [warm, unavailable])
 
   /*
    * A DISABLED BUTTON NEVER SAYS GOODBYE.
@@ -246,7 +266,7 @@ export function MetalSend({
    * the failure the design agent warned about: a plain button cannot be
    * invisible.
    */
-  if (preset === 'off') return <button {...button}>{children}</button>
+  if (preset === 'off' || unavailable) return <button {...button}>{children}</button>
 
   return (
     <div

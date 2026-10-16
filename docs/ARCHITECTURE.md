@@ -161,10 +161,16 @@ in one IPC message (`main/durable-event-updates.ts`). The renderer folds that
 batch in one state update, retaining append/replace semantics and the complete
 answer. A write failure stops the run without showing the unwritten batch.
 
-The schema is versioned, at 21 in this build, and every earlier version is
+The schema is versioned, at 25 in this build (0.777; 22 named a helper's own
+calls, 23 an Ask-only conversation started from another app through MCP, 24
+a turn carried on after a plan ran out, 25 an agent the person added), and
+every earlier version is
 read (`SUPPORTED_MISSION_LEDGER_SCHEMA_VERSIONS`): a file's version is fixed by
 its header, and the comment above that list says why each number moved. Three
-of those moves shape the product:
+of those moves shape the product. Since 0.778 every event is fitted to the
+reader's size limits where it meets the ledger (`packages/mission-store/src/fit.ts`):
+a field that is only too long is kept shortened, both ends kept, and only a
+field that is wrong is refused.
 
 - **A hand-off is a new mission.** A mission records one runtime, so a run
   that continues on another runtime, or a second turn in the same

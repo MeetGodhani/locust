@@ -277,21 +277,25 @@ it('stops recovery at a noncontiguous body record and refuses to extend the corr
     if (message === undefined) throw new Error('Fixture message event missing')
     await ledger.createMission(metadata())
 
-    const oversizedIdentity = {
+    // Since review 2026-10-15 (D2) a field that is only too LONG, or carries a
+    // NUL, is fitted where events meet the ledger (fit.ts) rather than
+    // refused: that refusal stopped whole runs. What is WRONG rather than
+    // long is still refused, which is what this test is about.
+    const emptyIdentity = {
       ...message,
       sequence: 1,
-      payload: { ...message.payload, itemId: 'x'.repeat(513) }
+      payload: { ...message.payload, itemId: '   ' }
     } as typeof message
-    const nulBearing = {
+    const unknownOperation = {
       ...message,
       sequence: 1,
-      payload: { ...message.payload, text: `answer${String.fromCharCode(0)}` }
-    } as typeof message
+      payload: { ...message.payload, operation: 'prepend' }
+    } as unknown as typeof message
 
-    await expect(ledger.appendEvents('mission_1', [oversizedIdentity])).rejects.toThrow(
+    await expect(ledger.appendEvents('mission_1', [emptyIdentity])).rejects.toThrow(
       'Mission event is not readable by the ledger reader'
     )
-    await expect(ledger.appendEvents('mission_1', [nulBearing])).rejects.toThrow(
+    await expect(ledger.appendEvents('mission_1', [unknownOperation])).rejects.toThrow(
       'Mission event is not readable by the ledger reader'
     )
 
