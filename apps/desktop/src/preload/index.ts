@@ -15,7 +15,7 @@ import { TALK_SHORTCUT_PENDING, TALK_SHORTCUT_PRESSED, TALK_SHORTCUT_READ, TALK_
 import { LOCUST_LINK_TAKE, LOCUST_LINK_WAITING, type LocustLink } from '../shared/locust-link.js'
 import { SCOUT_CHANGED, SCOUT_DISMISS, SCOUT_LOOK, SCOUT_SET, SCOUT_STATE, SCOUT_TURN_ON, type ScoutState } from '../shared/scout.js'
 import { REMOTE_CONTROL_GET_CHANNEL, REMOTE_CONTROL_SET_CHANNEL, type RemoteControlState } from '../shared/claude-remote-control.js'
-import { FOLDER_CHANGES_CHANNEL, FOLDER_COMMIT_CHANNEL, type CommitResult, type FolderChanges } from '../shared/folder-commit.js'
+import { FOLDER_CHANGES_CHANNEL, FOLDER_COMMIT_CHANNEL, FOLDER_REPOSITORY_CHANNEL, type CommitResult, type FolderChanges } from '../shared/folder-commit.js'
 import {
   BACKGROUND_DISMISS_CHANNEL,
   BACKGROUND_LIST_CHANNEL,
@@ -691,6 +691,7 @@ const desktopApi: DesktopApi = {
     ipcRenderer.invoke(TURN_UNDO_STATE_CHANNEL, [...runIds]) as Promise<Readonly<Record<string, TurnUndoState>>>,
   undoTurn: (runId: string) => ipcRenderer.invoke(TURN_UNDO_CHANNEL, runId) as Promise<TurnUndoState>,
   folderChanges: () => ipcRenderer.invoke(FOLDER_CHANGES_CHANNEL) as Promise<FolderChanges>,
+  folderIsRepository: () => ipcRenderer.invoke(FOLDER_REPOSITORY_CHANNEL) as Promise<boolean | undefined>,
   folderPullRequest: () => ipcRenderer.invoke(FOLDER_PULL_REQUEST_CHANNEL) as Promise<FolderPullRequest | undefined>,
   watchPullRequest: (url: string, on: boolean) => ipcRenderer.invoke(PULL_REQUEST_WATCH_CHANNEL, url, on) as Promise<boolean>,
   folderDiff: (sha?: string) => ipcRenderer.invoke(FOLDER_DIFF_CHANNEL, sha) as Promise<FolderDiff>,

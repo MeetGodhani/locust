@@ -147,7 +147,7 @@ import { createBackgroundRuns } from './claude-background-runs.js'
 import type { BackgroundRun, BackgroundRuns } from './claude-background-runs.js'
 import { BACKGROUND_DISMISS_CHANNEL, BACKGROUND_LIST_CHANNEL, BACKGROUND_OPEN_CHANNEL, BACKGROUND_SETUP_CHANNEL, BACKGROUND_START_CHANNEL, BACKGROUND_STOP_CHANNEL } from '../shared/background.js'
 import type { BackgroundStartResponse, PublicBackgroundRun } from '../shared/background.js'
-import { FOLDER_CHANGES_CHANNEL, FOLDER_COMMIT_CHANNEL, type CommitResult, type FolderChanges } from '../shared/folder-commit.js'
+import { FOLDER_CHANGES_CHANNEL, FOLDER_COMMIT_CHANNEL, FOLDER_REPOSITORY_CHANNEL, type CommitResult, type FolderChanges } from '../shared/folder-commit.js'
 import { readRuntimeArtifacts } from './runtime-artifacts.js'
 import { relative } from 'node:path'
 import { decideReveal, insideOnDisk } from './reveal-file.js'
@@ -2951,6 +2951,10 @@ if (!ownsSingleInstanceLock) {
       fromOwnWindow(event)
         ? folderCommits.changes(workspacePath).catch((): FolderChanges => ({ kind: 'none', why: 'not-a-repository' }))
         : ({ kind: 'none', why: 'not-a-repository' } as FolderChanges)
+    )
+    // Whether the open folder is a git repository, for the Changes button (2026-10-16); undefined when git cannot say.
+    ipcMain.handle(FOLDER_REPOSITORY_CHANNEL, (event) =>
+      fromOwnWindow(event) ? folderCommits.repository(workspacePath).catch(() => undefined) : undefined
     )
     // The folder's pull request, for the header (0.720, shared/pull-request.ts): read with the person's own gh.
     ipcMain.handle(FOLDER_PULL_REQUEST_CHANNEL, (event) =>

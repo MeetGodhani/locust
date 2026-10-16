@@ -5,6 +5,8 @@
 
 export const FOLDER_CHANGES_CHANNEL = 'folder:changes'
 export const FOLDER_COMMIT_CHANNEL = 'folder:commit'
+/** Whether the open folder is a git repository, for the Changes button (2026-10-16). */
+export const FOLDER_REPOSITORY_CHANNEL = 'folder:repository'
 
 export type ChangeStatus = 'added' | 'modified' | 'deleted' | 'renamed'
 

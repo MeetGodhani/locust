@@ -3800,6 +3800,8 @@ export interface DesktopApi {
   undoTurn(runId: string): Promise<TurnUndoState>
   /** Commit (0.680): what the open folder has uncommitted, and whether it can be pushed or proposed. */
   folderChanges(): Promise<FolderChanges>
+  /** Whether the open folder is a git repository's top; undefined when git cannot say (2026-10-16). */
+  folderIsRepository(): Promise<boolean | undefined>
   /** The pull request for the branch the open folder is on, read with the person's own gh (0.720). */
   folderPullRequest(): Promise<FolderPullRequest | undefined>
   /** Watch the folder's pull request, or stop (0.731); answers whether it is watched now. */

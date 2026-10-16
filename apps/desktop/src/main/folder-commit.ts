@@ -126,6 +126,23 @@ export function createFolderCommits(options: FolderCommitOptions = {}) {
     return { name: 'origin', upstream, defaultBranch, pullRequests: github && (await ghSignedIn(folder)) }
   }
 
+  /*
+   * Whether the folder is a repository's top, for the Changes button (2026-10-16): the panel is a branch's changes
+   * against its base, so a folder that is not one has nothing to show there. Only rev-parse, so it stays cheap:
+   * `changes` also runs a full status, and any error there reads as "not a repository". Undefined when git cannot say.
+   */
+  const repository = async (folder: string): Promise<boolean | undefined> => {
+    try {
+      if ((await runGit(['rev-parse', '--is-inside-work-tree'], folder)).trim() !== 'true') return false
+      const top = (await runGit(['rev-parse', '--show-toplevel'], folder)).trim()
+      const norm = (path: string): string => path.replace(/[\\/]+/g, '/').replace(/\/$/, '').toLowerCase()
+      return top.length > 0 && norm(top) === norm(folder)
+    } catch (error) {
+      // Git's own answer, or no git on the computer at all: either way there is no repository here.
+      return /not a git repository|ENOENT/i.test(error instanceof Error ? error.message : String(error)) ? false : undefined
+    }
+  }
+
   const changes = async (folder: string): Promise<FolderChanges> => {
     const inside = (await runGit(['rev-parse', '--is-inside-work-tree'], folder).catch(() => '')).trim()
     if (inside !== 'true') return { kind: 'none', why: 'not-a-repository' }
@@ -406,7 +423,7 @@ export function createFolderCommits(options: FolderCommitOptions = {}) {
     }
   }
 
-  return { changes, commit, diff, forgetSignIn, pending, pullRequest }
+  return { changes, commit, diff, forgetSignIn, pending, pullRequest, repository }
 }
 
 export type FolderCommits = ReturnType<typeof createFolderCommits>

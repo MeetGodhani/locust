@@ -6367,6 +6367,27 @@ export default function App(): ReactElement {
    */
 
   const running = liveRunIsActive(liveRun)
+  /*
+   * Whether the folder is a git repository (2026-10-16). The Changes panel is a branch's changes against its base,
+   * so a folder that is not a repository has none: on a computer without Git its button only ever opened "This
+   * folder is not a git repository" (the clean-machine drive). Read per folder and after each run, since a teammate
+   * may run git init; while git has not said, the button stays.
+   */
+  const [folderRepository, setFolderRepository] = useState<{ readonly path: string; readonly repository: boolean | undefined }>()
+  useEffect(() => {
+    if (workspacePath === undefined || running) return
+    let current = true
+    void window.desktop
+      ?.folderIsRepository()
+      .then((repository) => {
+        if (current) setFolderRepository({ path: workspacePath, repository })
+      })
+      .catch(() => undefined)
+    return () => {
+      current = false
+    }
+  }, [workspacePath, running])
+  const changesAvailable = folderRepository?.path !== workspacePath || folderRepository?.repository !== false
   /**
    * What THIS mission cost, for the line that is about this mission.
    *
@@ -8286,7 +8307,7 @@ export default function App(): ReactElement {
   return (
     <CallTodosContext.Provider value={callTodos}>
     <ApprovalRuleContext.Provider value={ruleOfCard}>
-    <div className={`lc-shell${layoutMode === 'compact' ? ' is-compact' : ''}${changesOpen && screen === 'workroom' && viewingFile === undefined && viewerRefusal === undefined && besideRun === undefined && reviewing === undefined ? ' has-viewer has-changes' : ''}${(viewingFile !== undefined || viewerRefusal !== undefined || besideRun !== undefined || reviewing !== undefined) && screen === 'workroom' ? ' has-viewer' :inspectorOpen && liveRun !== undefined && screen === 'workroom' ? ' has-inspector' : ''}`}>
+    <div className={`lc-shell${layoutMode === 'compact' ? ' is-compact' : ''}${changesOpen && changesAvailable && screen === 'workroom' && viewingFile === undefined && viewerRefusal === undefined && besideRun === undefined && reviewing === undefined ? ' has-viewer has-changes' : ''}${(viewingFile !== undefined || viewerRefusal !== undefined || besideRun !== undefined || reviewing !== undefined) && screen === 'workroom' ? ' has-viewer' :inspectorOpen && liveRun !== undefined && screen === 'workroom' ? ' has-inspector' : ''}`}>
       <TitleBar
         // With no folder the composer chip already says so; the bar shows the
         // build instead (Colin, 2026-09-05).
@@ -9242,7 +9263,7 @@ export default function App(): ReactElement {
                     </button>
                   )}
                   {/* The folder's changes, as Claude Code's Changes panel (0.732); a branch of a teammate's own has Review changes. */}
-                  {workspacePath !== undefined && pickedTeammate?.worktree !== true && (
+                  {workspacePath !== undefined && pickedTeammate?.worktree !== true && changesAvailable && (
                     <button
                       type="button"
                       className={`lc-button${changesOpen ? ' is-active' : ''}`}
@@ -10035,7 +10056,7 @@ export default function App(): ReactElement {
             }}
             onClose={() => setBesideId(undefined)}
           />
-        ) : changesOpen && reviewing === undefined && screen === 'workroom' ? (
+        ) : changesOpen && changesAvailable && reviewing === undefined && screen === 'workroom' ? (
           /*
            * Notes on a line (0.376) in the folder's whole change too (0.776): they go, as in the conversation's own
            * diffs, to the conversation on screen. With none on screen there is nowhere to send one, so no "+".
