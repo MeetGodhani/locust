@@ -11,6 +11,19 @@ Settings shows this file as What's new. An entry may group its changes under
 about when they arrive on it carries `<!-- big -->` on the line under its
 heading: the home screen then shows it once, as a splash.
 
+## 0.779.0 - 2026-10-16
+
+### Improved
+
+- **A handoff shows the models on both sides.** When a conversation moves to another agent, the line between them now reads "Handed off", then each side's logo and the model it ran, as in GPT-6.1-Sol → Opus 5.5. The side it went to is in its brand's colour where it has one. Before, it named only the two apps.
+- **Compare columns are named by the model.** A Cursor model with levels, such as Gemini 4 Argon, read "Gemini 4 Argon Low" even with its level set to High. It now reads "Gemini 4 Argon", and the level is beside it.
+
+### Fixed
+
+- **A Cursor teammate set to a level starts the first time.** A message sent in the first seconds after opening Locust, before Cursor's model list had arrived, could fail with "Cursor Agent takes no effort level". The level is now turned into Cursor's own model name when the run starts.
+- **A finished Antigravity run is shown as finished.** Antigravity sometimes reports "The stream was interrupted" after its whole answer is in. Locust showed that run as failed, with Try again, over finished work. It now shows the answer as done, with a line saying what Antigravity reported. A run cut off while it was still working is still shown as stopped.
+- **The Changes panel updates after you commit.** It used to keep showing the changes you had just committed until the next turn.
+
 ## 0.778.0 - 2026-10-15
 
 ### Improved
