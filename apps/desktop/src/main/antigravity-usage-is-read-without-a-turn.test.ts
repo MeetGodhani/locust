@@ -89,16 +89,15 @@ describe('Antigravity reports remaining plan windows without a turn', () => {
     value.command.data.groups[0]!.buckets[0]!.reset_time = 'unknown'
     expect(antigravityUsageText(value)).toContain('Gemini: weekly window 67% left · Claude')
   })
-  it('rejects missing windows, unknown groups and duplicate buckets', () => {
-    const missing = answer()
-    missing.command.data.groups[0]!.buckets.pop()
-    expect(antigravityUsageText(missing)).toBeUndefined()
-    const unknown = answer()
-    unknown.command.data.groups[0]!.name = 'Unexpected'
-    expect(antigravityUsageText(unknown)).toBeUndefined()
+  // A group it does not know and a group a window short are read since 2026-10-16
+  // (an-antigravity-model-with-its-own-limit-is-shown.test.ts); a repeat is still a garbled answer.
+  it('rejects duplicate buckets and a group named twice', () => {
     const duplicate = answer()
     duplicate.command.data.groups[0]!.buckets.push(bucket('weekly', 0.4))
     expect(antigravityUsageText(duplicate)).toBeUndefined()
+    const twice = answer()
+    twice.command.data.groups.push({ name: 'Gemini Models', buckets: [bucket('weekly', 0.5), bucket('5h', 0.5)] })
+    expect(antigravityUsageText(twice)).toBeUndefined()
   })
   it('uses only the discovered executable and usage argv, with no shell and a bounded hidden process', async () => {
     exec.mockImplementationOnce((_file, _args, _options, callback) => callback(null, JSON.stringify(answer())))
