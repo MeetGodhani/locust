@@ -69,6 +69,40 @@ describe("Antigravity CLI's stream", () => {
     expect(payload<{ text: string; final: boolean; itemId: string }>(final)).toMatchObject({ text: "It says hello. FINISHED", final: true, itemId: "msg_3" });
   });
 
+  /*
+   * Gemini 4 Argon's voxel station, 2026-10-16 (agy, Antigravity CLI): the answer's own step DONE, the whole answer
+   * in the result, then status ERROR, "The stream was interrupted. Please continue the task you were working on.",
+   * exit 0 -- and Locust drew "failed" with "Try again" over a finished 91 KB page.
+   */
+  const interrupted = (after: readonly string[]) => {
+    const normalizer = createAgyEventNormalizer({ runId: "run_1", missionId: "mission_1", now: () => new Date("2026-10-02T00:00:00Z") });
+    const step = (index: number, fields: Record<string, unknown>) => JSON.stringify({ event: "step_update", step_update: { conversation_id: "c1", step_index: index, ...fields } });
+    const lines = [
+      '{"event":"init","conversation_id":"c1"}',
+      step(28, { step_type: "tool", state: "DONE", tool_name: "write_to_file", tool_info: { parameters: { TargetFile: "C:/w/index.html" } } }),
+      step(30, { step_type: "agent_response", state: "ACTIVE", text_delta: "I have built the station in index.html." }),
+      step(30, { step_type: "agent_response", state: "DONE", text_delta: " Open it in Chrome." }),
+      ...after,
+      '{"event":"result","result":{"conversation_id":"c1","status":"ERROR","response":"I have built the station in index.html. Open it in Chrome.","error":"The stream was interrupted. Please continue the task you were working on.","duration_seconds":1109.15}}'
+    ];
+    return [...lines.flatMap((raw, index) => normalizer.accept({ sequence: index + 1, raw } as never)), ...normalizer.finish(completion(0))];
+  };
+
+  it("the answer closed, then the stream was \"interrupted\": finished, with a line saying so (0.779)", () => {
+    const events = interrupted([]);
+    const said = events.find((event) => event.type === "adapter.diagnostic" && payload<{ code: string }>(event).code === "antigravity.interrupted_after_answer");
+    expect(payload<{ level: string; message: string }>(said)).toMatchObject({ level: "warning" });
+    expect(payload<{ message: string }>(said).message).toMatch(/kept.*send "continue"/);
+    expect(events.at(-1)!.type).toBe("run.completed");
+    expect(events.some((event) => event.type === "run.failed")).toBe(false);
+  });
+
+  it("a stream interrupted while a tool was still going is still a failure", () => {
+    const events = interrupted([JSON.stringify({ event: "step_update", step_update: { conversation_id: "c1", step_index: 31, step_type: "tool", state: "ACTIVE", tool_name: "run_command", tool_info: { parameters: { CommandLine: "npx serve" } } } })]);
+    expect(events.at(-1)!.type).toBe("run.failed");
+    expect(events.some((event) => event.type === "adapter.diagnostic" && payload<{ code: string }>(event).code === "antigravity.interrupted_after_answer")).toBe(false);
+  });
+
   it("a 503 with no answer is still a failure", () => {
     const normalizer = createAgyEventNormalizer({ runId: "run_1", missionId: "mission_1", now: () => new Date("2026-10-02T00:00:00Z") });
     const raw = '{"event":"result","result":{"conversation_id":"c1","status":"ERROR","response":"","error":"API error (attempt 1): UNAVAILABLE (code 503): The service is currently unavailable."}}';

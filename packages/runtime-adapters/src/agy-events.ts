@@ -100,8 +100,10 @@ export function createAgyEventNormalizer(context: AgyInvocationContext): AgyEven
   let status: string | undefined;
   let resultError: string | undefined;
   let resultEvidence: CodexEventEvidence | undefined;
-  // The answer arrived whole, then agy's call after it found the service unavailable (0.657).
+  // The answer arrived whole, then agy's call after it found the service unavailable (0.657), or its stream "interrupted" (0.779).
   let answeredThenUnavailable = false;
+  /** Whether the last step agy reported was an answer with words, closed: nothing was left mid-way after it. */
+  let answerClosed = false;
   let usage: { readonly inputTokens: number; readonly outputTokens: number } | undefined;
   /** The message item each agent_response step writes into, newest last. */
   let lastMessageItem: string | undefined;
@@ -175,6 +177,7 @@ export function createAgyEventNormalizer(context: AgyInvocationContext): AgyEven
     if (index === undefined || type === undefined) return [];
     // The prompt, read back: the ledger already has the person's own words.
     if (type === "user_input") return [];
+    answerClosed = type === "agent_response" && state === "DONE" && (spoken.has(index) || (stringValue(step.text_delta) ?? "").length > 0);
 
     if (type === "agent_response") {
       const text = stringValue(step.text_delta);
@@ -328,6 +331,20 @@ export function createAgyEventNormalizer(context: AgyInvocationContext): AgyEven
       if (status !== "SUCCESS" && !stopped && resultError !== undefined && /\bUNAVAILABLE\b|\b503\b/.test(resultError)) {
         answeredThenUnavailable = true;
         events.push(diagnostic("warning", "antigravity.unavailable_after_answer", "Google's service was unavailable for Antigravity's last call, after this answer (code 503). The answer and its changes are kept. If it was not finished, send \"continue\".", evidence));
+      }
+      /*
+       * AND ITS STREAM "INTERRUPTED" AFTER IT (0.779). Gemini 4 Argon's voxel
+       * station, 2026-10-16: 18 minutes, a 91 KB page, the answer's own step
+       * DONE and the whole answer in the result -- then status ERROR, "The
+       * stream was interrupted. Please continue the task you were working
+       * on.", exit 0. Locust drew "Model A failed" and "Try again" over a
+       * finished page. Only when the last step agy reported was that answer,
+       * closed: a stream cut while a tool or the answer was still going stays
+       * a failure.
+       */
+      if (status !== "SUCCESS" && !stopped && !answeredThenUnavailable && answerClosed && resultError !== undefined && /stream was interrupted/i.test(resultError)) {
+        answeredThenUnavailable = true;
+        events.push(diagnostic("warning", "antigravity.interrupted_after_answer", "Antigravity said its stream was interrupted after this answer had finished. The answer and its changes are kept. If it was not finished, send \"continue\".", evidence));
       }
       if (turnOpen) {
         turnOpen = false;
