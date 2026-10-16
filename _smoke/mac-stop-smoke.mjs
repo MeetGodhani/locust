@@ -33,10 +33,20 @@ const check = (what, ok, detail) => {
   console.log(`  [${ok ? 'PASS' : 'FAIL'}] ${what}${detail === undefined ? '' : ` -- ${detail}`}`)
 }
 const git = (args, cwd) => execFileSync('git', args, { cwd, encoding: 'utf8' })
-/** The `opencode` processes on this machine, by pid. */
+/**
+ * The `opencode` processes on this machine, by pid -- not counting Locust's own first-start setup (0.780,
+ * opencode-first-start.ts: `opencode debug config`, started when the window finds OpenCode, before and apart from any
+ * run). On a runner with a fresh OpenCode it was still installing when Stop was pressed, and was counted as the run's
+ * (0.780's first Mac run: "left": the setup's pid).
+ */
 const opencodes = () => {
   try {
-    return execFileSync('pgrep', ['-f', 'opencode'], { encoding: 'utf8' }).split('\n').map((line) => line.trim()).filter(Boolean)
+    return execFileSync('ps', ['-axo', 'pid=,command='], { encoding: 'utf8' })
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line.includes('opencode') && !/\bdebug config\b/.test(line))
+      .map((line) => line.split(/\s+/)[0])
+      .filter(Boolean)
   } catch {
     return []
   }
