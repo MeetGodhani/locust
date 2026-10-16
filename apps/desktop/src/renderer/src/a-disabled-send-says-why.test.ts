@@ -27,7 +27,7 @@ describe('a disabled send says why', () => {
   })
 
   it('names the install when there is nothing to run on', () => {
-    expect(sendBlockedReason({ ...blocked, nothingInstalled: true })).toContain('install a coding agent')
+    expect(sendBlockedReason({ ...blocked, nothingInstalled: true })).toContain('install an AI agent')
   })
 
   it('names an empty box only when that is the real reason', () => {
@@ -39,9 +39,9 @@ describe('a disabled send says why', () => {
     // Then the same with the box cleared — still the install, because that is
     // the thing typing cannot fix.
     expect(sendBlockedReason({ nothingInstalled: true, runtimeReady: false, routeCanRun: false, busy: true, empty: false }))
-      .toContain('install a coding agent')
+      .toContain('install an AI agent')
     expect(sendBlockedReason({ nothingInstalled: true, runtimeReady: false, routeCanRun: false, busy: true, empty: true }))
-      .toContain('install a coding agent')
+      .toContain('install an AI agent')
   })
 
   it('separates a route that is not ready from a mode that cannot run on it', () => {

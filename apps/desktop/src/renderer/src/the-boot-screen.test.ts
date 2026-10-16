@@ -44,7 +44,7 @@ describe('what the screen is made of', () => {
     // Neither has answered, so neither has a result -- that gap is the
     // whole reason this screen exists.
     expect(view.rows.every((row) => row.result === undefined)).toBe(true)
-    expect(view.progress).toBe('checking 0 of 2 runtimes ')
+    expect(view.progress).toBe('checking 0 of 2 AI agents ')
   })
 
   it('counts elapsed from the moment the command was issued', () => {
@@ -218,7 +218,7 @@ describe('the two things Colin caught on a real launch', () => {
       at('probe.started', { id: 'codex', bin: 'codex', product: 'Codex CLI', at: 0 }),
       at('probe.finished', { id: 'codex', at: 10, outcome: 'ready' })
     ])
-    expect(bootView(state, 'probing', 20).progress).toBe('checking 1 of 1 runtimes ')
+    expect(bootView(state, 'probing', 20).progress).toBe('checking 1 of 1 AI agents ')
   })
 
   it('keeps antigravity, which is checked by the host rather than by a CLI', () => {

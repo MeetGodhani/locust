@@ -984,7 +984,7 @@ export function Composer({
                 // (Grok, pass 11). Only a runtime that has SAID it wants a
                 // sign-in earns the words.
                 runtimes.some((runtime) => runtime.status === 'auth-required' || runtime.auth === 'unauthenticated')
-                ? 'Install a coding agent and sign in to start…'
+                ? 'Install an AI agent and sign in to start…'
                 : // And "install" is wrong under five rows that say installed
                   // and not answering (Fable, pass 1, finding 9): the box
                   // names what the screen above it offers, Check again.
@@ -1009,12 +1009,12 @@ export function Composer({
                           (runtime) => runtime.installed && !runtimeIsUsable(runtime)
                         ).length
                         return silent === 1
-                          ? 'A coding agent is installed but not answering — Check again above…'
-                          : `${String(silent)} coding agents are installed but not answering — Check again above…`
+                          ? 'An AI agent is installed but not answering — Check again above…'
+                          : `${String(silent)} AI agents are installed but not answering — Check again above…`
                       })()
                     : // Installed and still being asked: say that, not "install".
-                      'Checking the coding agents on this machine…'
-                  : 'Install a coding agent to start…'
+                      'Checking the AI agents on this machine…'
+                  : 'Install an AI agent to start…'
 
   /** Set by Ctrl+Enter for the submit it starts: stop the run and send this now (0.485). */
   const sendNow = useRef(false)

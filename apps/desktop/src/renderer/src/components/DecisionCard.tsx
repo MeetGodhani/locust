@@ -37,12 +37,14 @@ export function DecisionCard({
   readonly onChoose: (option: DecisionOption) => void
   readonly busy: boolean
 }): ReactElement {
-  const who = teammateName ?? 'The runtime'
+  // With no teammate there is nobody to name (0.780): "The runtime needs a decision" was the first card a new person
+  // met, on their first conversation, in a word the rest of the app stopped using on 2026-10-01.
+  const title = teammateName === undefined ? 'A decision is needed to continue' : `${teammateName} needs a decision to continue`
   return (
     <div className="lc-decision" role="group" aria-label="A decision is needed to continue">
       <div className="lc-decision__head">
         <span className="lc-decision__title">
-          <Icon name="diff" size={13} /> {who} needs a decision to continue
+          <Icon name="diff" size={13} /> {title}
         </span>
         <span className="lc-rail__meta">{standing}</span>
       </div>

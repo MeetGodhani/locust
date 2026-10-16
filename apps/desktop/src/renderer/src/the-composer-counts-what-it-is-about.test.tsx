@@ -97,16 +97,16 @@ const hung = (n: number): readonly PublicRuntimeStatus[] =>
 describe('the composer says how many agents are not answering', () => {
   it('says one in the singular', () => {
     const seen = afterGivingUp(hung(1))
-    expect(seen).toContain('A coding agent is installed but not answering')
-    expect(seen).not.toMatch(/\d+ coding agents/)
+    expect(seen).toContain('An AI agent is installed but not answering')
+    expect(seen).not.toMatch(/\d+ AI agents/)
   })
 
   it('counts five as five, not as one', () => {
     // The exact shape Grok found: five rows that each said so, and a box that
     // said "A coding agent".
     const seen = afterGivingUp(hung(5))
-    expect(seen).toContain('5 coding agents are installed but not answering')
-    expect(seen).not.toContain('A coding agent is installed but not answering')
+    expect(seen).toContain('5 AI agents are installed but not answering')
+    expect(seen).not.toContain('An AI agent is installed but not answering')
   })
 
   it('counts only what is installed, not every runtime it knows about', () => {
@@ -122,8 +122,8 @@ describe('the composer says how many agents are not answering', () => {
       runtime('cursor', 'Cursor Agent', 'absent'),
       runtime('copilot', 'Copilot CLI', 'absent')
     ])
-    expect(seen).toContain('2 coding agents are installed but not answering')
-    expect(seen).not.toMatch(/[34] coding agents/)
+    expect(seen).toContain('2 AI agents are installed but not answering')
+    expect(seen).not.toMatch(/[34] AI agents/)
   })
 
   it('does not complain about hung agents when one of them works', () => {

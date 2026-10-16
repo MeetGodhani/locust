@@ -97,8 +97,8 @@ describe('the composer on a machine that just got its first runtime', () => {
     route: { runtime: 'codex' as const, model: 'account-default' }
   }
 
-  it('does not tell a person who just installed OpenCode to install a coding agent', () => {
-    expect(markup(justInstalledOpenCode)).not.toContain('Install a coding agent')
+  it('does not tell a person who just installed OpenCode to install an AI agent', () => {
+    expect(markup(justInstalledOpenCode)).not.toContain('Install an AI agent')
   })
 
   it('invites a message, since one runtime can run it', () => {
@@ -115,7 +115,7 @@ describe('the composer on a machine that just got its first runtime', () => {
 
   it('still says to install one when nothing is installed', () => {
     expect(markup({ runtimes: [runtime('codex', 'Codex CLI', false)] })).toContain(
-      'Install a coding agent'
+      'Install an AI agent'
     )
   })
 
@@ -190,7 +190,7 @@ describe('the placeholder on a machine with nothing installed', () => {
     // 0.138; the box you type into still did, under a welcome saying
     // OpenCode needs no account.
     const bare = markup({ runtimes: [runtime('opencode', 'OpenCode', false), runtime('codex', 'Codex CLI', false)] })
-    expect(bare).toContain('Install a coding agent to start…')
+    expect(bare).toContain('Install an AI agent to start…')
     expect(bare).not.toContain('sign in')
   })
   it('still says sign in when a runtime is installed but not usable', () => {

@@ -1925,7 +1925,7 @@ export function sendBlockedReason(blocked: {
   readonly busy: boolean
   readonly empty: boolean
 }): string | undefined {
-  if (blocked.nothingInstalled) return 'Nothing can run yet — install a coding agent from the list above.'
+  if (blocked.nothingInstalled) return 'Nothing can run yet — install an AI agent from the list above.'
   if (!blocked.runtimeReady) return 'The model this is set to is not ready on this machine. Pick another above, or set it up in Settings.'
   if (!blocked.routeCanRun) return 'This mode cannot run on the model this is set to. Pick another mode or model above.'
   if (blocked.busy) return 'Something else is starting. This goes as soon as it settles.'

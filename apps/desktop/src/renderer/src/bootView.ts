@@ -233,8 +233,8 @@ export function bootView(state: BootState, phase: BootPhase, now: number): BootV
      */
     progress:
       rows.length === 0
-        ? 'looking for coding agents on this machine '
-        : `checking ${String(answered)} of ${String(rows.length)} runtimes `,
+        ? 'looking for AI agents on this machine '
+        : `checking ${String(answered)} of ${String(rows.length)} AI agents `,
     summary,
     allAnswered: rows.length > 0 && answered === rows.length
   }

@@ -136,7 +136,7 @@ try {
   check('the head note says checking, once, with a count', /checking \d+ on this machine/.test(early.head ?? ''), early.head)
   check('and offers no Install yet', early.checkAgain === false)
   check('the composer does not ask for a sign-in nothing has asked for', !/sign in/.test(early.placeholder ?? ''), early.placeholder)
-  check('and while the rows are still being asked it says checking, not install or not-answering', /Checking the coding agents/.test(early.placeholder ?? ''), early.placeholder)
+  check('and while the rows are still being asked it says checking, not install or not-answering', /Checking the AI agents/.test(early.placeholder ?? ''), early.placeholder)
   check('no red card while the rows are still checking', early.redCard === false)
   check('no no-Node sentence while there is no Install to be about', early.npmNote === false)
 
