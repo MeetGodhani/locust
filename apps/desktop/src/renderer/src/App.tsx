@@ -2263,6 +2263,21 @@ export default function App(): ReactElement {
     return () => window.clearInterval(tick)
   }, [installing])
 
+  /*
+   * "checking for npm", not "starting npm".
+   *
+   * Before an install runs, the installer re-asks which npm
+   * to use. That is right -- the one thing that changes the
+   * answer is the person having installed Node since the
+   * first screen decided. But on a machine whose npm hangs
+   * that probe takes five seconds, and the line claimed npm
+   * was starting while nothing of the sort was happening
+   * (Fable, pass 2, finding 4: "2s · starting npm… 6s ·
+   * starting npm…", then the bundled path). Once npm really
+   * does speak, `installLine` carries its own output and
+   * this is gone. Home and Settings show the same line (0.780).
+   */
+  const installLineShown = installing === undefined ? undefined : `${String(installElapsed)}s · ${installLine ?? 'checking for npm…'}`
   const installRuntime = (runtime: string): void => {
     const bridge = window.desktop
     if (!bridge || installing !== undefined) return
@@ -8593,6 +8608,11 @@ export default function App(): ReactElement {
                   .then(setRuntimeUpdates)
                   .catch(() => undefined)
               }}
+              onInstall={installRuntime}
+              {...(installing === undefined ? {} : { installing })}
+              {...(installLineShown === undefined ? {} : { installLine: installLineShown })}
+              {...(installFailure === undefined ? {} : { installFailure })}
+              npmMissing={runtimeState.phase === 'ready' && runtimeState.npmPresent === false}
               onUpdateAgent={(runtime) => {
                 void window.desktop
                   ?.updateRuntimeNow(runtime)
@@ -8955,25 +8975,7 @@ export default function App(): ReactElement {
                 onInstall={installRuntime}
                 installing={installing}
                 installLog={installLog}
-                installLine={
-                  installing === undefined
-                    ? undefined
-                    /*
-                      * "checking for npm", not "starting npm".
-                      *
-                      * Before an install runs, the installer re-asks which npm
-                      * to use. That is right -- the one thing that changes the
-                      * answer is the person having installed Node since the
-                      * first screen decided. But on a machine whose npm hangs
-                      * that probe takes five seconds, and the line claimed npm
-                      * was starting while nothing of the sort was happening
-                      * (Fable, pass 2, finding 4: "2s · starting npm… 6s ·
-                      * starting npm…", then the bundled path). Once npm really
-                      * does speak, `installLine` carries its own output and
-                      * this is gone.
-                      */
-                    : `${String(installElapsed)}s · ${installLine ?? 'checking for npm…'}`
-                }
+                installLine={installLineShown}
                 installFailure={installFailure}
                 npmMissing={runtimeState.phase === 'ready' && runtimeState.npmPresent === false}
                 npmIsBundled={runtimeState.phase === 'ready' && runtimeState.npmIsBundled === true}

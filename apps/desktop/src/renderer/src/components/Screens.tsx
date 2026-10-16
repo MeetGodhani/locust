@@ -1538,6 +1538,11 @@ export function SettingsScreen({
   runtimeUpdates,
   onKeepAgentsCurrent,
   onUpdateAgent,
+  onInstall,
+  installing,
+  installLine,
+  installFailure,
+  npmMissing,
   runtimeSetup,
   cliArtifacts,
   workspaceBrief,
@@ -1631,6 +1636,20 @@ export function SettingsScreen({
   readonly onKeepAgentsCurrent?: (automatic: boolean) => void
   /** Update pressed on a runtime's row. */
   readonly onUpdateAgent?: (runtime: string) => void
+  /**
+   * INSTALL FROM HERE TOO (0.780). The row said "Press Install" and only Home's list had the button; on a machine
+   * with no Node the npm line under it fails in the person's terminal, so the one way in was on another screen
+   * (clean-machine drive, packaged 0.779). Home's own install: one at a time, its line and its failure the same.
+   */
+  readonly onInstall?: (runtime: string) => void
+  /** The runtime being installed now, from Home or here. */
+  readonly installing?: string
+  /** The install's live line ("12s · npm's last line"), while it runs. */
+  readonly installLine?: string
+  /** Why the last install did not finish, and what to do. */
+  readonly installFailure?: { readonly what: string; readonly next: string }
+  /** No npm at all, the bundled one included: the button is off and says why. */
+  readonly npmMissing?: boolean
   /** Each runtime's own MCP servers and hooks, by runtime id; undefined until read. */
   readonly runtimeSetup: Readonly<Record<string, PublicRuntimeSetup>> | undefined
   /**
@@ -2104,7 +2123,11 @@ export function SettingsScreen({
         {shownPage === 'runtimes' && (
         <section className="lc-settings__section">
           <h2 className="lc-settings__heading">AI agents &amp; accounts</h2>
-          <RemoteControlSetting />
+          {/*
+            * Claude Code's own switch, only where Claude Code is (0.780). On a machine with only OpenCode it was the
+            * first thing on this page and could only fail (clean-machine drive, packaged 0.779).
+            */}
+          {runtimes.some((runtime) => runtime.id === 'claude' && runtime.installed) && <RemoteControlSetting />}
           <p className="lc-settings__lede">
             Each AI agent uses the account already signed in on this machine. Locust adds nothing of its own.
           </p>
@@ -2196,6 +2219,9 @@ export function SettingsScreen({
                     {status.tag === 'NOT INSTALLED' && installCommand(runtime.id) !== undefined && (
                       <InstallCommand command={installCommand(runtime.id)!} />
                     )}
+                    {installing === runtime.id && installLine !== undefined && (
+                      <div className="lc-runtimerow__detail lc-mono">{installLine}</div>
+                    )}
                     {runtimeSetup?.[runtime.id] !== undefined && <RuntimeSetupLine setup={runtimeSetup[runtime.id]!} />}
                     {/*
                       * What the person set up inside THIS CLI. It used to sit
@@ -2241,10 +2267,36 @@ export function SettingsScreen({
                       Update
                     </button>
                   )}
+                  {/* Home's Install, here too (0.780): the row's own sentence says to press it. */}
+                  {status.tag === 'NOT INSTALLED' && installCommand(runtime.id) !== undefined && onInstall !== undefined && (
+                    <button
+                      type="button"
+                      className="lc-runtimecell__install"
+                      disabled={installing !== undefined || npmMissing === true}
+                      title={
+                        npmMissing === true
+                          ? 'Node.js is not on this machine, and this installs through npm.'
+                          : installing !== undefined && installing !== runtime.id
+                            ? `Waiting for the ${installing} install to finish`
+                            : undefined
+                      }
+                      onClick={() => onInstall(runtime.id)}
+                    >
+                      {installing === runtime.id ? 'Installing…' : 'Install'}
+                    </button>
+                  )}
                 </div>
               )
             })}
           </div>
+          {/* An install that did not finish says why, here as on Home (0.780). */}
+          {installFailure !== undefined && installing === undefined && (
+            <div className="lc-settingrows">
+              <div className="lc-settingrow">
+                <span className="lc-settings__note" role="alert">{installFailure.what} {installFailure.next}</span>
+              </div>
+            </div>
+          )}
           {/*
             * Colin, 2026-09-23: "is there a way to make it so the models will
             * automatically update without messing up load times or
