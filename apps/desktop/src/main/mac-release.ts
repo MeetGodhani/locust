@@ -9,12 +9,18 @@
  * and when that is newer than itself, offers the download. Installing stays
  * the person's: open the image, drag Locust into Applications.
  *
- * Only a release's own download address on the releases repository is ever
- * offered, so a changed API answer cannot point the person anywhere else.
+ * Only an address on Locust's own downloads is ever offered, so a changed
+ * answer cannot point the person anywhere else.
+ *
+ * The list is Locust's own file since 0.783 (shared/locust-home.ts), written
+ * in the shape GitHub's releases API answered in, newest first: GitHub
+ * suspended the account it came from on 2026-10-16.
  */
 
-export const MAC_RELEASES_API = 'https://api.github.com/repos/locust-lol/locust-releases/releases?per_page=10'
-const DOWNLOAD_PREFIX = 'https://github.com/locust-lol/locust-releases/releases/download/'
+import { DOWNLOADS } from '../shared/locust-home.js'
+
+export const MAC_RELEASES_API = `${DOWNLOADS}mac-releases.json`
+const DOWNLOAD_PREFIX = DOWNLOADS
 
 export interface MacRelease {
   readonly version: string

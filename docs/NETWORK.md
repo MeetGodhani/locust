@@ -16,10 +16,10 @@ until it is listed here.
 
 | What | Where | When |
 | --- | --- | --- |
-| Its own updates (Windows) | `github.com/locust-lol/locust-releases` | 8 seconds after it starts, then every 6 hours while it is open, and when you press Check now |
-| Its own updates (Mac) | `api.github.com/repos/locust-lol/locust-releases`, then the disk image you choose | When it checks, and when you choose to update |
+| Its own updates (Windows) | `dl.locust.lol` (Locust's own downloads, on Cloudflare) | 8 seconds after it starts, then every 6 hours while it is open, and when you press Check now |
+| Its own updates (Mac) | `dl.locust.lol/mac-releases.json`, then the disk image you choose | When it checks, and when you choose to update |
 | Installing an AI agent | the npm registry (`registry.npmjs.org`, or the one your npm is set to use) | When you press Install for OpenCode, Claude Code, Codex CLI or Copilot CLI |
-| Keeping Codex CLI and Copilot CLI current | the npm registry, and `raw.githubusercontent.com/locust-lol/locust-releases/main/runtime-canary.json` | 45 seconds after the installed Locust starts, then at most every 6 hours |
+| Keeping Codex CLI and Copilot CLI current | the npm registry, and `dl.locust.lol/runtime-canary.json` | 45 seconds after the installed Locust starts, then at most every 6 hours |
 | The pet gallery | `openpets.dev`, addresses under `/pets/` only | When you open the gallery, and when you take a pet |
 | Testing one of your own models | the address you gave it in Settings > Your own models | When you press Test |
 | Skills from GitHub | `api.github.com` and `raw.githubusercontent.com`, for the public repository you name | When you press Look, Look for changes, or Keep in Settings > Teammates |

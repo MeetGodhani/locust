@@ -64,27 +64,17 @@ run('npx', ['vitest', 'run'], 'unit tests')
 // 2. A version nobody bumped ships the previous release's bytes under a new
 //    name, which is worse than not shipping.
 const version = JSON.parse(readFileSync(join(DESKTOP, 'package.json'), 'utf8')).version
-// Releases go to a DIFFERENT repository, so a local tag proves nothing: this
-// repo never sees them. Ask the releases repo itself.
-const RELEASES_REPO = 'locust-lol/locust-releases'
-//
-// Both spellings, because releases are tagged `0.333.0` and this asked for
-// `v0.333.0` -- a tag that never exists, so the gate could not fail
-// (L10, the code review). It did not, on 2026-09-24: 0.333.0 was rebuilt
-// and passed as "not published yet" a day after it shipped. And a gh that
-// cannot answer FAILS the gate: "could not ask" is not "not released".
-const releaseTagged = (tag) => spawnSync('gh', ['release', 'view', tag, '--repo', RELEASES_REPO, '--json', 'tagName'], {
-  cwd: ROOT,
-  shell: true,
-  encoding: 'utf8'
-})
-const answers = [version, `v${version}`].map((tag) => ({ tag, answer: releaseTagged(tag) }))
-const found = answers.find(({ answer }) => answer.status === 0)
-const unanswered = answers.find(({ answer }) => answer.status !== 0 && !/not found/i.test(`${answer.stderr ?? ''}${answer.stdout ?? ''}`))
-if (found !== undefined) {
-  bad(`version ${version} is not already released`, `${found.tag} is already published to ${RELEASES_REPO}`)
-} else if (unanswered !== undefined) {
-  bad(`version ${version} is not already released`, `gh could not say: ${String(unanswered.answer.stderr ?? '').trim().slice(0, 200)}`)
+// Releases go to Locust's own downloads since 0.783 (publish-downloads.mjs),
+// so a local tag proves nothing. Ask the downloads themselves: a published
+// version's feed file is kept there by name. An answer that is neither "there"
+// nor "not there" FAILS the gate: "could not ask" is not "not released"
+// (L10, the code review: 0.333.0 was rebuilt and passed a day after it shipped).
+const DOWNLOADS = 'https://dl.locust.lol/'
+const published = await fetch(`${DOWNLOADS}Locust-${version}.yml`, { method: 'HEAD' }).then((answer) => answer.status, (error) => String(error))
+if (published === 200) {
+  bad(`version ${version} is not already released`, `Locust-${version}.yml is already on ${DOWNLOADS}`)
+} else if (published !== 404) {
+  bad(`version ${version} is not already released`, `${DOWNLOADS} could not say (${String(published).slice(0, 200)})`)
 } else {
   ok(`version ${version} is not published yet`)
 }

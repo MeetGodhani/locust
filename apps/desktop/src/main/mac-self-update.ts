@@ -124,7 +124,7 @@ export function createMacUpdater(options: MacUpdaterOptions): UpdaterLike {
   let downloading: Promise<unknown> | undefined
 
   const fetchReleases = options.fetchReleases ?? (async () => {
-    const response = await fetch(MAC_RELEASES_API, { headers: { Accept: 'application/vnd.github+json' }, signal: AbortSignal.timeout(15_000) })
+    const response = await fetch(MAC_RELEASES_API, { signal: AbortSignal.timeout(15_000) })
     if (!response.ok) throw new Error(`The releases list answered ${String(response.status)}.`)
     return response.json() as Promise<unknown>
   })

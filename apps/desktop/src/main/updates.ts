@@ -28,6 +28,15 @@ export interface UpdaterLike {
   /** Take prereleases too: the "every build" lane (update-lane.ts). */
   allowPrerelease: boolean
   /**
+   * The feed file a lane reads, on Locust's own downloads since 0.783: `latest`
+   * (latest.yml) for the tester lane, `beta` (beta.yml) for every build. A
+   * generic feed has no prereleases to choose among, so the lane is the file.
+   * electron-updater turns `allowDowngrade` on whenever this is set, and it is
+   * turned off again at once: a lane switch is never a step back.
+   */
+  channel?: string | null
+  allowDowngrade?: boolean
+  /**
    * Whether the updater runs the installer when the app quits by any route.
    * Kept ON: the app's own shutdown handler cancels the first quit to flush
    * the ledger and then quits again itself, and a quitAndInstall() that
@@ -138,7 +147,12 @@ export function isNewer(a: string, b: string): boolean {
 
 export function createUpdateService(options: UpdateServiceOptions): UpdateService {
   let everyBuild = options.everyBuild === true
-  options.updater.allowPrerelease = everyBuild
+  const takeLane = (): void => {
+    options.updater.allowPrerelease = everyBuild
+    options.updater.channel = everyBuild ? 'beta' : 'latest'
+    options.updater.allowDowngrade = false
+  }
+  takeLane()
   let state: AppUpdateState = {
     phase: options.supported ? 'idle' : 'unsupported',
     currentVersion: options.currentVersion,
@@ -249,7 +263,7 @@ export function createUpdateService(options: UpdateServiceOptions): UpdateServic
 
     setEveryBuild(next) {
       everyBuild = next
-      options.updater.allowPrerelease = next
+      takeLane()
       return publish(state)
     },
 

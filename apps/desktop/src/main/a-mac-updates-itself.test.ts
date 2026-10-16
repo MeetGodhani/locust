@@ -20,11 +20,11 @@ afterEach(async () => {
   root = undefined
 })
 
-const base = 'https://github.com/locust-lol/locust-releases/releases/download'
+const base = 'https://dl.locust.lol'
 const IMAGE = Buffer.from('a disk image, for the test')
 const releases = (sha256: string) => [{
   tag_name: '0.517.0',
-  assets: [{ name: 'Locust-0.517.0-mac-arm64.dmg', browser_download_url: `${base}/0.517.0/Locust-0.517.0-mac-arm64.dmg`, size: IMAGE.length, digest: `sha256:${sha256}` }]
+  assets: [{ name: 'Locust-0.517.0-mac-arm64.dmg', browser_download_url: `${base}/Locust-0.517.0-mac-arm64.dmg`, size: IMAGE.length, digest: `sha256:${sha256}` }]
 }]
 const sha = createHash('sha256').update(IMAGE).digest('hex')
 

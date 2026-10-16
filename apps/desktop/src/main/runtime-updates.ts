@@ -5,6 +5,7 @@ import { releaseProcessTree } from '@teammate/runtime-adapters'
 import type { RuntimeDiscovery } from '@teammate/runtime-adapters'
 
 import type { RuntimeUpdateStatus, RuntimeUpdateView, RuntimeUpdatesState } from '../shared/ipc.js'
+import { DOWNLOADS } from '../shared/locust-home.js'
 import { runtimeInstallFacts } from '../shared/runtime-install.js'
 
 /**
@@ -452,9 +453,10 @@ function capture(command: string, args: readonly string[], timeoutMs: number): P
  */
 /**
  * Where Locust's release check publishes what it found (0.501), beside the
- * installers: `{ "packages": { "<npm package>": { "<version>": { "ok": boolean } } } }`.
+ * installers on Locust's own downloads since 0.783 (shared/locust-home.ts):
+ * `{ "packages": { "<npm package>": { "<version>": { "ok": boolean } } } }`.
  */
-export const CANARY_VERDICTS_URL = 'https://raw.githubusercontent.com/locust-lol/locust-releases/main/runtime-canary.json'
+export const CANARY_VERDICTS_URL = `${DOWNLOADS}runtime-canary.json`
 
 /** The versions the check ran and could not read, by package: a few kilobytes, asked with each look. */
 export function heldFrom(value: unknown): Readonly<Record<string, readonly string[]>> {

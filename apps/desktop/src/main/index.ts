@@ -5269,7 +5269,7 @@ if (!ownsSingleInstanceLock) {
       // A Mac that updates itself (0.516) says so through the ordinary update banner, not this one.
       if (macSelfUpdateTarget(process.execPath) !== undefined) return undefined
       try {
-        const response = await fetch(MAC_RELEASES_API, { headers: { Accept: 'application/vnd.github+json' }, signal: AbortSignal.timeout(10_000) })
+        const response = await fetch(MAC_RELEASES_API, { signal: AbortSignal.timeout(10_000) })
         if (!response.ok) return undefined
         return newerMacRelease(await response.json(), app.getVersion(), process.arch)
       } catch {

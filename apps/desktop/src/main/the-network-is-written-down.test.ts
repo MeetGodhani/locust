@@ -3,6 +3,8 @@ import { fileURLToPath } from 'node:url'
 
 import { describe, expect, it } from 'vitest'
 
+import { DOWNLOADS } from '../shared/locust-home.js'
+
 import { CATALOG_INDEX_URL } from './pet-library.js'
 import { MAC_RELEASES_API } from './mac-release.js'
 import { PAGE_LIBRARY_HOSTS } from './page-preview.js'
@@ -82,10 +84,10 @@ describe('the addresses are the ones the code uses', () => {
   })
   it('the update feed, the Mac release list, the verdict file, the pet gallery and the report page', () => {
     const feed = read('../../electron-builder.yml')
-    const owner = /owner:\s*(\S+)/.exec(feed)![1]
-    const repo = /repo:\s*(\S+)/.exec(feed)![1]
-    expect(NETWORK).toContain(`github.com/${owner!}/${repo!}`)
-    expect(NETWORK).toContain(new URL(MAC_RELEASES_API).host + new URL(MAC_RELEASES_API).pathname.replace(/\/releases$/, ''))
+    expect(/provider:\s*generic/.test(feed)).toBe(true)
+    expect(/url:\s*(\S+)/.exec(feed)![1]).toBe(DOWNLOADS)
+    expect(NETWORK).toContain(`\`${new URL(DOWNLOADS).host}\``)
+    expect(NETWORK).toContain(new URL(MAC_RELEASES_API).host + new URL(MAC_RELEASES_API).pathname)
     expect(NETWORK).toContain(CANARY_VERDICTS_URL.replace(/^https:\/\//, ''))
     expect(NETWORK).toContain(new URL(CATALOG_INDEX_URL).host)
     expect(new URL(CATALOG_INDEX_URL).pathname.startsWith('/pets/')).toBe(true)

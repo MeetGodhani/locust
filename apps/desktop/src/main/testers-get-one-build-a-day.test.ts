@@ -9,10 +9,9 @@ import type { UpdaterLike } from './updates.js'
  *
  * The beta handover, 2026-09-23: "Every release puts the update banner in
  * front of a tester, and the build they're reporting on is gone within the
- * hour. Testers should get at most one new build a day." Every build is a
- * GitHub prerelease; one a day is promoted to latest; electron-updater takes
- * prereleases only with `allowPrerelease` -- which is Settings' "every
- * build" switch, off unless turned on.
+ * hour. Testers should get at most one new build a day." Every build goes to
+ * the every-build feed; one a day is promoted to the tester lane's; which one
+ * a copy reads is Settings' "every build" switch, off unless turned on.
  */
 function updater(): UpdaterLike {
   return {
@@ -82,9 +81,35 @@ describe('the lane', () => {
     expect(found.ok && found.data.phase).toBe('available')
   })
 
+  /*
+   * Locust's own downloads (0.783) are a plain feed, with no prereleases to
+   * choose among: the lane is the file. latest.yml is the tester lane's,
+   * beta.yml every build's. electron-updater's own `channel` setter turns
+   * `allowDowngrade` on, which would take a lane switch as a step back.
+   */
+  it('reads its own feed file, and never steps back for it', () => {
+    let downgrade: boolean | undefined
+    let channel: string | null | undefined
+    // Shaped like electron-updater's AppUpdater: setting the channel allows downgrades.
+    const fake: UpdaterLike = {
+      ...updater(),
+      get channel() { return channel },
+      set channel(value) { channel = value; downgrade = true },
+      get allowDowngrade() { return downgrade },
+      set allowDowngrade(value) { downgrade = value }
+    }
+    const updates = service(fake)
+    expect([fake.channel, fake.allowDowngrade]).toEqual(['latest', false])
+    updates.setEveryBuild(true)
+    expect([fake.channel, fake.allowDowngrade]).toEqual(['beta', false])
+    updates.setEveryBuild(false)
+    expect([fake.channel, fake.allowDowngrade]).toEqual(['latest', false])
+  })
+
   it('starts on the saved lane', () => {
     const fake = updater()
     service(fake, true)
     expect(fake.allowPrerelease).toBe(true)
+    expect(fake.channel).toBe('beta')
   })
 })

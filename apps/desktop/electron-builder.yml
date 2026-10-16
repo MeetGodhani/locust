@@ -9,17 +9,15 @@ appId: com.automatedworkflow.locust
 productName: Locust
 copyright: Copyright © 2026 Automated Workflow
 
-# Where installed copies look for a newer version.
-#
-# A PUBLIC repository holding only installers, deliberately separate from the
-# source. Publishing to the private source repo would mean shipping a token
-# that can read it inside every installed copy, which is not a thing to hand
-# out; and this way the source can stay private while updates still work.
+# Where installed copies look for a newer version: Locust's own downloads, on
+# Cloudflare (src/shared/locust-home.ts says why). It was a public GitHub
+# repository of installers until GitHub suspended the account that held it on
+# 2026-10-16, and every copy's update check failed with it. The tester lane
+# reads latest.yml and "every build" reads beta.yml (src/main/updates.ts);
+# _tools/publish-downloads.mjs writes both.
 publish:
-  provider: github
-  owner: locust-lol
-  repo: locust-releases
-  releaseType: release
+  provider: generic
+  url: https://dl.locust.lol/
 
 directories:
   output: release
