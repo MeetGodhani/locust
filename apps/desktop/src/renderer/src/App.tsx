@@ -342,6 +342,8 @@ interface LiveRunState {
   readonly handoff?: {
     readonly from: MissionRuntimeId
     readonly to: MissionRuntimeId
+    readonly fromModel?: string
+    readonly toModel?: string
     readonly at: string | undefined
     readonly unsettledCount: number
     readonly omittedBriefing: readonly string[]
@@ -3102,6 +3104,8 @@ export default function App(): ReactElement {
                   switchedFrom: {
                     from: switched.runtime,
                     to: update.data.runtime,
+                    ...(switched.model === undefined ? {} : { fromModel: switched.model }),
+                    toModel: update.data.model,
                     at: new Date().toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }),
                     unsettledCount: switched.unsettledCount,
                     omittedBriefing: switched.omittedBriefing,
@@ -5388,6 +5392,8 @@ export default function App(): ReactElement {
                 switchedFrom: {
                   from: switched.runtime,
                   to: response.data.runtime,
+                  ...(switched.model === undefined ? {} : { fromModel: switched.model }),
+                  toModel: response.data.model,
                   at: new Date().toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }),
                   unsettledCount: switched.unsettledCount,
                   omittedBriefing: switched.omittedBriefing,
@@ -5531,6 +5537,7 @@ export default function App(): ReactElement {
     if (!bridge || current === undefined || runId === undefined || !liveRunIsActive(current)) return undefined
 
     const from = current.data?.runtime ?? route.runtime
+    const fromModel = current.data?.model
     const priorEvents = current.events
     setHandingOff(true)
     const phaseBefore = current.phase
@@ -5590,6 +5597,8 @@ export default function App(): ReactElement {
           handoff: {
             from,
             to: response.data.runtime,
+            ...(fromModel === undefined ? {} : { fromModel }),
+            toModel: response.data.model,
             at: new Date().toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }),
             unsettledCount: response.data.unsettledCount,
             omittedBriefing: response.data.omittedBriefing,

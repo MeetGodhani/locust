@@ -998,6 +998,8 @@ export interface ThreadProps {
     | {
         readonly from: MissionRuntimeId
         readonly to: MissionRuntimeId
+        readonly fromModel?: string
+        readonly toModel?: string
         readonly at: string | undefined
         readonly unsettledCount: number
         readonly omittedBriefing: readonly string[]
@@ -1716,6 +1718,8 @@ onResume,
             <HandoffDivider
               from={handoff.from}
               to={handoff.to}
+              {...(handoff.fromModel === undefined ? {} : { fromModel: handoff.fromModel })}
+              {...(handoff.toModel === undefined ? {} : { toModel: handoff.toModel })}
               at={handoff.at}
               unsettledCount={handoff.unsettledCount}
               omittedBriefing={handoff.omittedBriefing}

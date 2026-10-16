@@ -4972,6 +4972,8 @@ export function rootMission(
 export interface StitchedHandoff {
   readonly from: PublicRecoveredMission['runtime']
   readonly to: PublicRecoveredMission['runtime']
+  readonly fromModel?: string
+  readonly toModel?: string
   readonly at: string | undefined
   readonly unsettledCount: number
   readonly omittedBriefing: readonly string[]
@@ -5007,6 +5009,8 @@ export function stitchedHandoff(
   return {
     from: prior.runtime,
     to: mission.runtime,
+    fromModel: prior.model,
+    toModel: mission.model,
     at: new Date(mission.createdAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }),
     unsettledCount: checkpoint?.unsettledActions.length ?? 0,
     // Recorded since 0.519; an older switch recorded nothing, and nothing is guessed.
@@ -5081,6 +5085,9 @@ export function resolvedModelKey(runtime: MissionRuntimeId, model: string): stri
 export interface TurnSwitch {
   readonly from: MissionRuntimeId
   readonly to: MissionRuntimeId
+  /** The models on either side (0.779), named on the divider beside each runtime's mark; absent, the runtime is named. */
+  readonly fromModel?: string
+  readonly toModel?: string
   readonly at: string | undefined
   readonly unsettledCount: number
   readonly omittedBriefing: readonly string[]
@@ -5197,6 +5204,8 @@ export function switchOf(
   return {
     from: prior.runtime,
     to: mission.runtime,
+    fromModel: prior.model,
+    toModel: mission.model,
     at: new Date(mission.createdAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }),
     unsettledCount: checkpoint?.unsettledActions.length ?? 0,
     // Recorded since 0.519; an older switch recorded nothing, and nothing is guessed.

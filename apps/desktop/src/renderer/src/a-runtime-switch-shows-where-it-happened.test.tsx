@@ -18,7 +18,8 @@ describe('the divider', () => {
   it('names every runtime by its name', () => {
     const html = renderToStaticMarkup(<HandoffDivider from="codex" to="opencode" at={undefined} unsettledCount={0} omittedBriefing={[]} />)
     expect(html).toContain('aria-label="Handed off from Codex to OpenCode"')
-    expect(html).not.toContain('opencode')
+    // The words a person reads; a mark's `data-runtime` attribute carries the id (0.779).
+    expect(html.replace(/<[^>]*>/g, ' ')).not.toContain('opencode')
     const cursor = renderToStaticMarkup(<HandoffDivider from="cursor" to="claude" at={undefined} unsettledCount={0} omittedBriefing={[]} />)
     expect(cursor).toContain('aria-label="Handed off from Cursor Agent to Claude Code"')
   })

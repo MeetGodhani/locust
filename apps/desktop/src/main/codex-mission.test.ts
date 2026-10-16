@@ -2673,6 +2673,8 @@ describe('continuing a conversation', () => {
     expect(response.ok && response.data.switchedFrom).toEqual({
       missionId: 'mission_prior',
       runtime: 'claude',
+      // The model the turn before ran on, for the divider to name (0.779).
+      model: 'account-default',
       unsettledCount: 0,
       omittedBriefing: []
     })

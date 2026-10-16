@@ -3071,6 +3071,8 @@ export interface CodexMissionStartData extends MissionRouteSummary {
   readonly switchedFrom?: {
     readonly missionId: string
     readonly runtime: MissionRuntimeId
+    /** The model the turn before the seam ran on, for the divider to name (0.779). */
+    readonly model?: string
     /** Actions that had started and never reported back when that turn ended. */
     readonly unsettledCount: number
     /** Sections of the briefing dropped to fit the prompt bound, if any. */

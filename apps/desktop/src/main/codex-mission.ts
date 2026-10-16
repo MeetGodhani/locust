@@ -1829,6 +1829,7 @@ export function createCodexMissionService(options: CodexMissionServiceOptions): 
                 switchedFrom: {
                   missionId: prior.metadata.missionId,
                   runtime: prior.metadata.runtime,
+                  model: prior.metadata.model,
                   unsettledCount: checkpoint.unsettledActions.length,
                   omittedBriefing: briefing.omitted,
                   ...(briefing.leftOutByYou.length === 0 ? {} : { leftOutByYou: briefing.leftOutByYou })

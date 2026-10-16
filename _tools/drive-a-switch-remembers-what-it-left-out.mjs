@@ -83,7 +83,8 @@ try {
     await new Promise((r) => setTimeout(r, 500))
     return document.querySelector('.lc-handoff')?.innerText.replace(/\\s+/g, ' ').trim() ?? 'no divider'
   })()`)))
-  check('the divider is drawn between the two AI agents', /OpenCode → Codex/i.test(divider), divider)
+  // Since 0.779 each side is its model by name, beside its runtime's mark; Codex on its account default is "Codex".
+  check('the divider is drawn between the two AI agents', /Handed off\s*Mimo V2\.6 Flash( Free)?\s*→\s*Codex/i.test(divider), divider)
   check('and says, after a reopen, what the summary left out -- in words', /Left out of the summary to fit: its last reply and the earlier messages\./.test(divider), divider)
 } catch (error) {
   failures += 1

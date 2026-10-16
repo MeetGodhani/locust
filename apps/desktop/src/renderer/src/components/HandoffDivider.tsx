@@ -4,11 +4,22 @@ import type { MissionRuntimeId } from '@teammate/runtime-adapters'
 
 import { runtimeDisplayName } from '../../../shared/runtimes.js'
 import { leftOutInWords } from '../handoffPreview.js'
+import { modelDisplayName } from '../routeName.js'
+import { RuntimeMark } from './RuntimeMark.js'
 
 const RUNTIME_LABEL: Readonly<Record<string, string>> = {
   codex: 'Codex',
   claude: 'Claude Code',
   omniroute: 'OmniRoute'
+}
+
+/**
+ * A side of the seam by the model it ran (0.779), as a past turn is named -- its own id spelled, never today's
+ * meaning of an alias. The account's own default, or no model recorded, is the runtime's name.
+ */
+function sideName(runtime: MissionRuntimeId, model: string | undefined, runtimeLabel: string): string {
+  if (model === undefined || model.trim().length === 0 || model === 'account-default') return runtimeLabel
+  return modelDisplayName(runtime, model)
 }
 
 /**
@@ -30,10 +41,18 @@ export function HandoffDivider({
   unsettledCount,
   omittedBriefing,
   leftOutByYou = [],
-  carriedOn
+  carriedOn,
+  fromModel,
+  toModel
 }: {
   readonly from: MissionRuntimeId
   readonly to: MissionRuntimeId
+  /**
+   * The models either side (0.779). Colin, 2026-10-16, over another app's "Context handoff, GPT-6.1-Sol -> Claude
+   * Opus 5.5" line: "would be cool to have our ui do something similar to this w/ the logos when handoffs happen".
+   */
+  readonly fromModel?: string
+  readonly toModel?: string
   readonly at: string | undefined
   readonly unsettledCount: number
   readonly omittedBriefing: readonly string[]
@@ -46,17 +65,28 @@ export function HandoffDivider({
   // OpenCode read "Codex -> opencode" (drive-runtime-switch, packaged 0.309).
   const fromLabel = RUNTIME_LABEL[from] ?? runtimeDisplayName(from) ?? from
   const toLabel = RUNTIME_LABEL[to] ?? runtimeDisplayName(to) ?? to
+  const fromName = sideName(from, fromModel, fromLabel)
+  const toName = sideName(to, toModel, toLabel)
+  // Said whole for a screen reader: the model, and the runtime it ran on where that is not already its name.
+  const spoken = (name: string, label: string): string => (name === label ? label : `${name} on ${label}`)
 
   return (
-    <div className="lc-handoff" role="separator" aria-label={`Handed off from ${fromLabel} to ${toLabel}`}>
+    <div className="lc-handoff" role="separator" aria-label={`Handed off from ${spoken(fromName, fromLabel)} to ${spoken(toName, toLabel)}`}>
       <span className="lc-handoff__rule lc-handoff__rule--start" />
       <div className="lc-handoff__body">
         <span className="lc-handoff__title">
-          <span className="lc-handoff__from">{fromLabel}</span>
+          <span className="lc-handoff__label">Handed off</span>
+          <span className="lc-handoff__side lc-handoff__from" title={fromName === fromLabel ? undefined : fromLabel}>
+            <RuntimeMark runtime={from} size={13} />
+            {fromName}
+          </span>
           <span className="lc-handoff__arrow" aria-hidden="true">
             →
           </span>
-          <span className="lc-handoff__to">{toLabel}</span>
+          <span className="lc-handoff__side lc-handoff__to" data-runtime={to} title={toName === toLabel ? undefined : toLabel}>
+            <RuntimeMark runtime={to} size={13} />
+            {toName}
+          </span>
           {at !== undefined && <span className="lc-handoff__time">· {at}</span>}
         </span>
         {carriedOn === true && <span className="lc-handoff__note">{`${fromLabel} ran out of its plan, so Locust carried the work on with ${toLabel}.`}</span>}

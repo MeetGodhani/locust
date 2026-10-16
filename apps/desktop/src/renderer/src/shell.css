@@ -14378,18 +14378,43 @@ textarea.lc-compare__judgecriteria {
 
 .lc-handoff__title {
   display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: center;
   align-items: center;
-  gap: var(--lc-space-3);
+  gap: var(--lc-space-2) var(--lc-space-3);
+  color: var(--lc-text-muted);
+}
+
+/* The kind of line, small, as the thread's other markers are labelled. */
+.lc-handoff__label {
   font-family: var(--lc-font-mono);
   font-size: var(--lc-text-mono-label);
   letter-spacing: var(--lc-tracking-label);
   text-transform: uppercase;
-  color: var(--lc-text-muted);
 }
 
-/* The receiving runtime is where the reader's attention should land. */
+/* Each side: its runtime's mark, then the model it ran, as a person names it (0.779). */
+.lc-handoff__side {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  font-family: var(--lc-font-ui);
+  font-size: var(--lc-text-body);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.lc-handoff__from {
+  color: var(--lc-text-secondary);
+}
+
+/* The receiving side is where the reader's attention should land: in its brand's colour where it has one. */
 .lc-handoff__to {
   color: var(--lc-text-primary);
+}
+
+.lc-handoff__to[data-runtime='claude'] {
+  color: var(--lc-mark-claude);
 }
 
 .lc-handoff__arrow {
