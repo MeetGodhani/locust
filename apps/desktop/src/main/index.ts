@@ -839,7 +839,7 @@ const askRuntimes = async (only?: ReadonlySet<string>): Promise<readonly Runtime
   return [...keepWhatWasAnswered(settled, discoveryCache?.value ?? [])].sort((left, right) => rank(left.id) - rank(right.id))
 }
 /*
- * OpenCode's first start, done before the first message (0.780, opencode-first-start.ts): once a sweep finds it
+ * OpenCode's first start, done before the first message (0.780, opencode-first-start.ts): once the window finds it
  * ready and its plugin package is not there yet, it sets itself up in the background, once a launch.
  */
 const openCodeFirstStart = createOpenCodeFirstStart({
@@ -848,13 +848,7 @@ const openCodeFirstStart = createOpenCodeFirstStart({
   run: (command) => openCodeSetUpRunner.run(command),
   note: (line) => console.warn(line)
 })
-const discoverRuntimes = async (): Promise<readonly RuntimeDiscovery[]> => {
-  const found = await askRuntimes()
-  if (process.env.LOCUST_HIDE_RUNTIMES !== '1' && found.some((runtime) => runtime.id === 'opencode' && runtime.readiness === 'ready')) {
-    void openCodeFirstStart.ensure()
-  }
-  return found
-}
+const discoverRuntimes = (): Promise<readonly RuntimeDiscovery[]> => askRuntimes()
 /**
  * The connectors this machine has, read in the background and held.
  *
@@ -4037,6 +4031,8 @@ if (!ownsSingleInstanceLock) {
       // Cursor's connectors, read in the background as soon as the WINDOW finds Cursor (0.693): the
       // work-path sweep runs only when a turn starts, so warming there left the first turn waiting.
       if (answer.ok && answer.data.runtimes.some((runtime) => runtime.id === 'cursor' && runtime.ready)) warmCursorConnectors()
+      // And OpenCode's first-start setup, for the same reason (0.780): as the window finds it, not when a turn starts.
+      if (answer.ok && process.env.LOCUST_HIDE_RUNTIMES !== '1' && answer.data.runtimes.some((runtime) => runtime.id === 'opencode' && runtime.ready)) void openCodeFirstStart.ensure()
       return answer
     })
 
