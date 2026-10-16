@@ -1,7 +1,7 @@
 # Locust design system — handover
 
 **Artifact:** https://claude.ai/artifact/WcEj8AVt4QckXNHN7EXtbG
-**Built from:** `automatedworkflowllc-design/Locust` @ `main a6df5bb`, 2026-09-21
+**Built from:** `locust-lol/Locust` @ `main a6df5bb`, 2026-09-21
 **Companion doc:** `DESIGN-SYSTEM-REVIEW-2026-09-21.md` (open findings, five of them)
 
 This is an extraction of the design system that already exists in the Locust desktop

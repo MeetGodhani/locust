@@ -3,7 +3,7 @@
 //   node _tools/drive-a-pull-request-from-the-conversation.mjs --repo <a clone of a THROWAWAY GitHub repo> [--packaged <exe>]
 //
 // The unit tests stand in for `gh`; this one does not: it opens a real pull request on GitHub, so it only ever
-// runs on a throwaway repository named with --repo (2026-10-06: a private automatedworkflowllc-design/locust-pr-test,
+// runs on a throwaway repository named with --repo (2026-10-06: a private locust-lol/locust-pr-test,
 // made for it). Wren, on the free model in Ask, says one word so there is a conversation; the drive adds a file;
 // Commit offers "Open a pull request"; pressed, it commits on a new locust/<subject> branch, pushes, and GitHub has
 // the pull request against main -- while main, locally and on GitHub, is where it was. The drive closes the pull

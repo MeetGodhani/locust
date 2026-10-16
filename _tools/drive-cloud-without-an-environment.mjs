@@ -25,7 +25,7 @@ if (repo === undefined) {
 }
 const workspace = await scratchRepository('locust-drive-no-env-ws-')
 // On GitHub by its remote, with no Codex Cloud environment. Nothing is ever pushed.
-execFileSync('git', ['remote', 'add', 'origin', 'https://github.com/automatedworkflowllc-design/ai-teammate-platform.git'], { cwd: workspace })
+execFileSync('git', ['remote', 'add', 'origin', 'https://github.com/locust-lol/ai-teammate-platform.git'], { cwd: workspace })
 const profile = await mkdtemp(join(process.env.LOCUST_SCRATCH ?? tmpdir(), 'locust-drive-no-env-profile-'))
 await writeFile(join(profile, 'folders.json'), JSON.stringify({ folders: [{ id: 'ws_drive_clone', path: resolve(repo) }] }), 'utf8')
 const drive = await startDrive({

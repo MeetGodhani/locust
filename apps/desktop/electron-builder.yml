@@ -17,7 +17,7 @@ copyright: Copyright © 2026 Automated Workflow
 # out; and this way the source can stay private while updates still work.
 publish:
   provider: github
-  owner: automatedworkflowllc-design
+  owner: locust-lol
   repo: locust-releases
   releaseType: release
 

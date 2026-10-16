@@ -22,7 +22,7 @@ const { dirname, join } = require('node:path')
 const { gunzipSync } = require('node:zlib')
 
 const [oldVersion, newVersion, oldInstaller] = process.argv.slice(-3)
-const CHANNEL = 'https://github.com/automatedworkflowllc-design/locust-releases/releases/download'
+const CHANNEL = 'https://github.com/locust-lol/locust-releases/releases/download'
 const updater = dirname(require.resolve('electron-updater/package.json', { paths: [join(__dirname, '..', 'apps', 'desktop')] }))
 const runtime = dirname(require.resolve('builder-util-runtime/package.json', { paths: [updater] }))
 const { ElectronHttpExecutor } = require(join(updater, 'out', 'electronHttpExecutor'))

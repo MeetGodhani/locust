@@ -17,7 +17,7 @@ Trust primitives come before autonomy. A durable, append-only record of what eve
 
 ## M1 — Durable mission ledger (in progress)
 
-Tracked by [issue #1](https://github.com/automatedworkflowllc-design/ai-teammate-platform/issues/1).
+Tracked by [issue #1](https://github.com/locust-lol/ai-teammate-platform/issues/1).
 
 - ✅ Append-only, schema-versioned JSONL mission ledger (`packages/mission-store`) with strict revalidation on read, sequence contiguity, fsync on append, exclusive create, byte-offset tamper detection, truncated-tail recovery, and bounded file/record sizes.
 - ✅ Live Codex missions persist mission metadata, every normalized event, and host failures before they are shown; persistence failure is a first-class, surfaced outcome that aborts the run rather than continuing unrecorded.
@@ -29,7 +29,7 @@ Definition of done: a user starts a mission, kills the app mid-run, restarts, an
 
 ## M2 — Claude runtime parity and real model routing
 
-Tracked by [issue #3](https://github.com/automatedworkflowllc-design/ai-teammate-platform/issues/3) (Claude half, elevated ahead of OmniRoute).
+Tracked by [issue #3](https://github.com/locust-lol/ai-teammate-platform/issues/3) (Claude half, elevated ahead of OmniRoute).
 
 - Claude Code stream-json normalizer producing the same product-owned event types as the Codex normalizer, with the same privacy stance (no persisted reasoning, bounded redacted evidence).
 - Generalize the mission service, ledger metadata, and IPC contracts from `runtime: 'codex'` to a runtime union so a mission records which runtime ran it. Ledger schema version bumps with a migration-read path.
@@ -40,7 +40,7 @@ Definition of done: from one command dock, a user runs the same harmless mission
 
 ## M3 — Teammate profiles and the workroom
 
-Tracked by [issue #4](https://github.com/automatedworkflowllc-design/ai-teammate-platform/issues/4), from the 2026-08-31 owner direction.
+Tracked by [issue #4](https://github.com/locust-lol/ai-teammate-platform/issues/4), from the 2026-08-31 owner direction.
 
 - Teammate profiles: name, role, instructions, default runtime/model/route, and tool policy — stored locally, reusable across missions.
 - Teammate identity: each teammate gets a unique avatar and visual identity; the avatar IS the agent in the UI, Grok Bot-style, with the roster as the primary navigation.
@@ -52,7 +52,7 @@ Definition of done: two named teammates run missions side by side, exchange at l
 
 ## M4 — Checkpointed fallback and the curated gateway
 
-Remainder of [issue #1](https://github.com/automatedworkflowllc-design/ai-teammate-platform/issues/1) and [issue #3](https://github.com/automatedworkflowllc-design/ai-teammate-platform/issues/3).
+Remainder of [issue #1](https://github.com/locust-lol/ai-teammate-platform/issues/1) and [issue #3](https://github.com/locust-lol/ai-teammate-platform/issues/3).
 
 - Reconciled checkpoints at safe boundaries; quota/rate-limit classification (already normalized as `route.limit_detected`) settles the run at a checkpoint instead of failing opaquely.
 - Fallback policy Off / Ask / Automatic, capability-checked against the target route, with the switch recorded as a visible mission event.

@@ -13,8 +13,8 @@
  * offered, so a changed API answer cannot point the person anywhere else.
  */
 
-export const MAC_RELEASES_API = 'https://api.github.com/repos/automatedworkflowllc-design/locust-releases/releases?per_page=10'
-const DOWNLOAD_PREFIX = 'https://github.com/automatedworkflowllc-design/locust-releases/releases/download/'
+export const MAC_RELEASES_API = 'https://api.github.com/repos/locust-lol/locust-releases/releases?per_page=10'
+const DOWNLOAD_PREFIX = 'https://github.com/locust-lol/locust-releases/releases/download/'
 
 export interface MacRelease {
   readonly version: string

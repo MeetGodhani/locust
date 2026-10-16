@@ -24,7 +24,7 @@ import { createHash } from 'node:crypto'
 import { readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 
-const REPO = 'automatedworkflowllc-design/locust-releases'
+const REPO = 'locust-lol/locust-releases'
 const RELEASE = new URL('../apps/desktop/release/', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')
 const version = process.argv[2]
 const notesAt = process.argv.indexOf('--notes')

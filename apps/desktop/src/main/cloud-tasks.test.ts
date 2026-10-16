@@ -11,7 +11,7 @@ const ran = (stdout: string, code = 0, stderr = ''): Ran => ({ code, stdout, std
 
 describe('a folder on GitHub', () => {
   it('is named owner/repo from its remote, https or ssh', () => {
-    expect(githubRepoOf('https://github.com/automatedworkflowllc-design/locust-cloud-test.git')).toBe('automatedworkflowllc-design/locust-cloud-test')
+    expect(githubRepoOf('https://github.com/locust-lol/locust-cloud-test.git')).toBe('locust-lol/locust-cloud-test')
     expect(githubRepoOf('git@github.com:acme/widgets.git')).toBe('acme/widgets')
     expect(githubRepoOf('https://token@github.com/acme/widgets')).toBe('acme/widgets')
     expect(githubRepoOf('https://gitlab.com/acme/widgets.git')).toBeUndefined()
@@ -54,7 +54,7 @@ describe('starting a cloud task', () => {
 describe('whether a repository has a cloud environment (0.505)', () => {
   it('reads what `codex cloud list --env` answered on 2026-09-30', () => {
     expect(environmentAnswer(ran('https://chatgpt.com/codex/tasks/task_e_1\n  [READY] Add farewell function to greet.js\n'))).toBe('ready')
-    expect(environmentAnswer(ran('', 1, "Error: environment 'automatedworkflowllc-design/ai-teammate-platform' not found; run `codex cloud` to list available environments"))).toBe('missing')
+    expect(environmentAnswer(ran('', 1, "Error: environment 'locust-lol/ai-teammate-platform' not found; run `codex cloud` to list available environments"))).toBe('missing')
     expect(environmentAnswer(ran('', 1, 'Error: no cloud environments are available for this workspace'))).toBe('missing')
   })
 
@@ -65,17 +65,17 @@ describe('whether a repository has a cloud environment (0.505)', () => {
 
 describe('following a cloud task', () => {
   it('reads a finished task as Codex prints it, on three lines, with its change counted', () => {
-    expect(statusAnswer('[READY] Add farewell function to greet.js\nautomatedworkflowllc-design/locust-cloud-test  •  4m ago\n+9/-1 • 2 files\n'))
+    expect(statusAnswer('[READY] Add farewell function to greet.js\nlocust-lol/locust-cloud-test  •  4m ago\n+9/-1 • 2 files\n'))
       .toEqual({ state: 'ready', title: 'Add farewell function to greet.js', added: 9, removed: 1, files: 2 })
   })
 
   it('reads the same on one line', () => {
-    expect(statusAnswer('[READY] Update greeting in greet.js automatedworkflowllc-design/locust-cloud-test  •  1m ago +2/-2 • 2 files'))
+    expect(statusAnswer('[READY] Update greeting in greet.js locust-lol/locust-cloud-test  •  1m ago +2/-2 • 2 files'))
       .toEqual({ state: 'ready', title: 'Update greeting in greet.js', added: 2, removed: 2, files: 2 })
   })
 
   it('reads one still going, with nothing to count yet', () => {
-    expect(statusAnswer('[PENDING] Update greeting in greet.js automatedworkflowllc-design/locust-cloud-test  •  16s ago no diff'))
+    expect(statusAnswer('[PENDING] Update greeting in greet.js locust-lol/locust-cloud-test  •  16s ago no diff'))
       .toMatchObject({ state: 'pending', added: undefined, files: undefined })
   })
 

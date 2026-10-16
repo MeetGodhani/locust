@@ -17,7 +17,7 @@ const packaged = arg('--packaged')
 const gh = (args) => new Promise((resolve) => {
   execFile('gh', args, { windowsHide: true, timeout: 60_000 }, (error, stdout) => resolve(error ? '' : String(stdout)))
 })
-const listed = JSON.parse((await gh(['codespace', 'list', '--repo', 'automatedworkflowllc-design/locust-cloud-test', '--json', 'name,displayName'])) || '[]')
+const listed = JSON.parse((await gh(['codespace', 'list', '--repo', 'locust-lol/locust-cloud-test', '--json', 'name,displayName'])) || '[]')
 const name = listed.find((space) => space.displayName === 'locust-locust-cloud-test')?.name
 if (name === undefined) {
   say('no cloud computer for locust-cloud-test: make one first (drive-a-cloud-turn.mjs --keep)')

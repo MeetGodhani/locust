@@ -8,7 +8,7 @@
 //   node _tools/drive-a-cloud-turn.mjs [--packaged <exe>] [--fresh] [--keep]
 //
 // Spends nothing: a free OpenCode model, and GitHub's free codespace hours (2 CPUs, a few minutes). It works on the
-// throwaway repository made for Codex Cloud on 09-30 (automatedworkflowllc-design/locust-cloud-test), never one of
+// throwaway repository made for Codex Cloud on 09-30 (locust-lol/locust-cloud-test), never one of
 // Colin's own; the pull request it opens there is closed and its branch deleted at the end. `--fresh` deletes
 // Locust's cloud computer for it first, so the dialog makes one; `--keep` leaves the one the drive used (it stops
 // itself after 10 quiet minutes either way).
@@ -20,7 +20,7 @@ import { join } from 'node:path'
 
 import { openTeammateScript, recordRoot, say, sendAndWaitScript, sleep, startDrive } from './drive-lib.mjs'
 
-const REPO = 'automatedworkflowllc-design/locust-cloud-test'
+const REPO = 'locust-lol/locust-cloud-test'
 const arg = (name) => (process.argv.includes(name) ? process.argv[process.argv.indexOf(name) + 1] : undefined)
 const packaged = arg('--packaged')
 const fresh = process.argv.includes('--fresh')

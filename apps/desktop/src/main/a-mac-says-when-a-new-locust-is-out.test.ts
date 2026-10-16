@@ -7,7 +7,7 @@ import { newerMacRelease } from './mac-release.js'
  * newer one is out, with this chip's disk image. A tester on a Mac,
  * 2026-10-01: "oh no updates also, thats kind of rough".
  */
-const base = 'https://github.com/automatedworkflowllc-design/locust-releases/releases/download'
+const base = 'https://github.com/locust-lol/locust-releases/releases/download'
 const release = (tag: string, assets: readonly string[], extra: Record<string, unknown> = {}) => ({
   tag_name: tag,
   draft: false,

@@ -202,7 +202,7 @@ try {
     state.line
   )
   if (INSTALLED) {
-    const latest = await (await fetch('https://github.com/automatedworkflowllc-design/locust-releases/releases/latest/download/latest.yml')).text()
+    const latest = await (await fetch('https://github.com/locust-lol/locust-releases/releases/latest/download/latest.yml')).text()
     const newest = (latest.match(/^version:\s*(\S+)/m) || [])[1]
     say(`       newest release: ${newest ?? '(unreadable)'}`)
     if (newest !== undefined && newest !== state.version) {
@@ -277,8 +277,8 @@ say('3. the build tested carries its block map')
   // Its OWN release: since 0.307 most builds are prereleases, and latest is
   // the one a day testers get (_tools/promote-release.mjs).
   const channel = testedVersion === undefined
-    ? 'https://github.com/automatedworkflowllc-design/locust-releases/releases/latest/download'
-    : `https://github.com/automatedworkflowllc-design/locust-releases/releases/download/${testedVersion}`
+    ? 'https://github.com/locust-lol/locust-releases/releases/latest/download'
+    : `https://github.com/locust-lol/locust-releases/releases/download/${testedVersion}`
   const latest = await (await fetch(`${channel}/latest.yml`)).text()
   const installer = (latest.match(/^path:\s*(\S+)/m) || [])[1]
   const size = Number((latest.match(/^\s+size:\s*(\d+)/m) || [])[1])

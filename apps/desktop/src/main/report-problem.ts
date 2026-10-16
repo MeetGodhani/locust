@@ -29,7 +29,7 @@ export { SUPPORT_ADDRESS }
  */
 // The code repository since 10/08 (Colin): its bug and idea templates and SECURITY.md live there; locust-releases
 // is the downloads page. Blank issues stay on there, so the filled-in body still opens.
-export const REPORT_DESTINATION = 'https://github.com/automatedworkflowllc-design/locust/issues/new'
+export const REPORT_DESTINATION = 'https://github.com/locust-lol/locust/issues/new'
 
 /**
  * THE PRIVATE WAY (0.593, the PRD's R23). A GitHub issue is public and needs

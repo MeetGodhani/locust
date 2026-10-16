@@ -20,7 +20,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-const REPO = 'automatedworkflowllc-design/locust-releases'
+const REPO = 'locust-lol/locust-releases'
 const version = process.argv[2]
 const DRY = process.argv.includes('--dry-run')
 if (version === undefined || !/^\d+\.\d+\.\d+$/.test(version)) {

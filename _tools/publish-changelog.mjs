@@ -21,7 +21,7 @@ import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
-const REPO = 'automatedworkflowllc-design/locust-releases'
+const REPO = 'locust-lol/locust-releases'
 const PATH_IN_REPO = 'CHANGELOG.md'
 const LOCAL = fileURLToPath(new URL('../CHANGELOG.md', import.meta.url))
 const checkOnly = process.argv.includes('--check')

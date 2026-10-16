@@ -66,7 +66,7 @@ run('npx', ['vitest', 'run'], 'unit tests')
 const version = JSON.parse(readFileSync(join(DESKTOP, 'package.json'), 'utf8')).version
 // Releases go to a DIFFERENT repository, so a local tag proves nothing: this
 // repo never sees them. Ask the releases repo itself.
-const RELEASES_REPO = 'automatedworkflowllc-design/locust-releases'
+const RELEASES_REPO = 'locust-lol/locust-releases'
 //
 // Both spellings, because releases are tagged `0.333.0` and this asked for
 // `v0.333.0` -- a tag that never exists, so the gate could not fail

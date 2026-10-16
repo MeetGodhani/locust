@@ -19,7 +19,7 @@ import { join } from 'node:path'
 
 import { openTeammateScript, recordRoot, say, sleep, startDrive } from './drive-lib.mjs'
 
-const REPO = 'automatedworkflowllc-design/locust-cloud-test'
+const REPO = 'locust-lol/locust-cloud-test'
 const arg = (name) => (process.argv.includes(name) ? process.argv[process.argv.indexOf(name) + 1] : undefined)
 const packaged = arg('--packaged')
 const gh = (args) => new Promise((resolve) => {

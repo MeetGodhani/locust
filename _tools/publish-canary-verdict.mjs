@@ -12,7 +12,7 @@
 import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 
-const REPO = 'automatedworkflowllc-design/locust-releases'
+const REPO = 'locust-lol/locust-releases'
 const PATH_IN_REPO = 'runtime-canary.json'
 const PACKAGES = { codex: '@openai/codex', copilot: '@github/copilot' }
 

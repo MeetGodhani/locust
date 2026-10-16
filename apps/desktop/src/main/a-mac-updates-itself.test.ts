@@ -20,7 +20,7 @@ afterEach(async () => {
   root = undefined
 })
 
-const base = 'https://github.com/automatedworkflowllc-design/locust-releases/releases/download'
+const base = 'https://github.com/locust-lol/locust-releases/releases/download'
 const IMAGE = Buffer.from('a disk image, for the test')
 const releases = (sha256: string) => [{
   tag_name: '0.517.0',

@@ -7,7 +7,7 @@ on runtimes and models you choose, with a durable record of everything they did.
 (Not the Python load-testing tool of the same name, which is unrelated.)
 
 **Download the latest build** at [locust.lol](https://locust.lol) or from the
-[releases page](https://github.com/automatedworkflowllc-design/locust-releases/releases/latest)
+[releases page](https://github.com/locust-lol/locust-releases/releases/latest)
 (Windows and Mac). Neither build is signed by a publisher yet
 ([why, and the signing policy](docs/CODE-SIGNING.md)), so each asks once:
 

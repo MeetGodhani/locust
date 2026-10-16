@@ -144,7 +144,7 @@ export async function folderOnGitHub(folder: string, git: Runner): Promise<Folde
  * Whether Codex Cloud has an environment for `repo` -- asked before a task is
  * sent, not learned from its refusal (0.505). `codex cloud list --env <repo>`
  * is read-only: it lists that environment's tasks, or says it is not found.
- * MEASURED 2026-09-30: `automatedworkflowllc-design/locust-cloud-test` listed
+ * MEASURED 2026-09-30: `locust-lol/locust-cloud-test` listed
  * its tasks (exit 0); `.../ai-teammate-platform` answered "environment ... not
  * found" (exit 1).
  */
