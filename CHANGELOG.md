@@ -11,6 +11,13 @@ Settings shows this file as What's new. An entry may group its changes under
 about when they arrive on it carries `<!-- big -->` on the line under its
 heading: the home screen then shows it once, as a splash.
 
+## 0.781.0 - 2026-10-16
+
+### Fixed
+
+- **Antigravity's usage shows again, with Gemini 4 Argon's own limit.** Antigravity now reports a weekly limit for Gemini 4 Argon beside its Gemini and its Claude and GPT windows, and Locust threw the whole reading away when it met a group it did not know, so Antigravity's usage disappeared. Locust now reads any group Antigravity names, and Argon's weekly limit shows whenever it is lower than Gemini's.
+- **Locust's links follow its GitHub account's new name, locust-lol.** Updates, Report a problem and the page listing what Locust connects to now use github.com/locust-lol. Windows copies already installed keep updating through GitHub's redirect. A Mac copy on 0.780 or earlier will not find this update by itself: download it once from the releases page, and it updates itself from then on.
+
 ## 0.780.0 - 2026-10-16
 
 ### Improved
@@ -709,7 +716,7 @@ A sweep through Locust's code turned up 24 mistakes; each is fixed and has a tes
 ### Fixed
 
 - **A Claude teammate whose Claude Code isn't signed in says how to fix it, once.** It showed Claude Code's own "Not logged in · Please run /login" twice, naming a command Locust has no place for. It now says to open a terminal, run claude and sign in (with your Claude account, or an Anthropic Console account to pay with an API key), or to add a Claude API key in Settings, Your own models. An API key in your environment is never handed to an agent, so it does not count as signing in.
-- **Report a problem opens on Locust's own GitHub page** (github.com/automatedworkflowllc-design/locust), beside its bug and idea forms, instead of the downloads page. Reports by email still go to support@locust.lol.
+- **Report a problem opens on Locust's own GitHub page** (github.com/locust-lol/locust), beside its bug and idea forms, instead of the downloads page. Reports by email still go to support@locust.lol.
 
 ## 0.701.0 - 2026-10-07
 
@@ -1658,7 +1665,7 @@ A second AI model reviewed this week's new code and tried to break it. These are
   by its number says nothing more, and neither does a command that only
   mentions one of these.
 - **Locust is open source**, MIT licensed, at
-  github.com/automatedworkflowllc-design/locust-app.
+  github.com/locust-lol/locust-app.
 
 ## 0.577.0 - 2026-10-04
 
