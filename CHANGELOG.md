@@ -11,6 +11,12 @@ Settings shows this file as What's new. An entry may group its changes under
 about when they arrive on it carries `<!-- big -->` on the line under its
 heading: the home screen then shows it once, as a splash.
 
+## 0.782.0 - 2026-10-16
+
+### Fixed
+
+- **Changes shows only in a folder that uses Git.** The Changes panel lists what a folder's Git branch changed, so in a folder without Git it could only say "This folder is not a git repository". The button now appears only where there is a branch to show, as Commit already did. Each reply still lists the files it changed, and Undo still takes a turn back, with or without Git.
+
 ## 0.781.0 - 2026-10-16
 
 ### Fixed
