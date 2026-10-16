@@ -40,6 +40,7 @@ import type {
   RuntimeProcessRun,
   RuntimeProcessRunner, NormalizedRuntimeEvent } from '@teammate/runtime-adapters'
 import { workspaceIdFor } from './workspace.js'
+import { cursorChoiceFor, cursorModelsFrom } from './model-catalog.js'
 import { createStreamedEventBatcher } from './streamed-event-batches.js'
 import { deliverWhenRuntimeStarts } from './runtime-delivery.js'
 import { persistEventUpdates } from './durable-event-updates.js'
@@ -2109,11 +2110,13 @@ export function createCodexMissionService(options: CodexMissionServiceOptions): 
         /** Claude Code or Codex on the cloud computer (0.768): its own copy there, in the conversation's folder there. */
         let cloudLaunch: { readonly executable: ExecutableLaunch; readonly dir: string } | undefined
         const buildCommand = (promptText: string): RuntimeCommandSpec => {
-          const chosenEffort = route.effort
+          // Cursor's level lives in its id: turned into it from this run's own list (cursorChoiceFor).
+          const picked = runtime === 'cursor' ? cursorChoiceFor(cursorModelsFrom(runtimes), chosenModel, route.effort) : { model: chosenModel, effort: route.effort }
+          const chosenEffort = picked.effort
           const agentExecutable = cloudLaunch?.executable ?? executable
           const agentFolder = cloudLaunch?.dir ?? runCwd
           const choice = {
-            ...(chosenModel === undefined ? {} : { model: chosenModel }),
+            ...(picked.model === undefined ? {} : { model: picked.model }),
             ...(chosenEffort === undefined ? {} : { effort: chosenEffort }),
             ...(resumeThreadId === undefined ? {} : { resumeThreadId }),
             ...(side === undefined ? {} : { forkSession: true })

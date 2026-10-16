@@ -5,7 +5,7 @@ import type { MissionRuntimeId } from '@teammate/runtime-adapters'
 import type { PublicModel, PublicRuntimeStatus } from '../../../shared/ipc.js'
 import { OWN_MODELS_GROUP, ROUTE_GROUP_LIMIT, capRouteRows, integrationOf, modelFamily, orderRouteRows, recentRouteRows, routeRowStatus, routeRowTag, routeSearchText } from '../status.js'
 import type { RouteTag } from '../status.js'
-import { isOwnRoute, modelDisplayName, routeModelName } from '../routeName.js'
+import { isOwnRoute, modelDisplayName, routeFamilyName, routeModelName } from '../routeName.js'
 import { RuntimeMark } from './RuntimeMark.js'
 import { levelsLine } from '../effortScale.js'
 import { effortName } from '../effortLevels.js'
@@ -484,7 +484,7 @@ export function RoutePicker({
         onClick={() => {
           if (comparing && compare !== undefined) {
             // Named the way the chip names a route: "Nemotron 3 Ultra Free", not its id.
-            compare.onToggle({ ...choice, label: routeModelName(row.runtime, row.model, resolvedModels.get(`${row.runtime}:${row.model}`)) })
+            compare.onToggle({ ...choice, label: routeFamilyName(row, resolvedModels, models) })
             return
           }
           onSelect(choice)

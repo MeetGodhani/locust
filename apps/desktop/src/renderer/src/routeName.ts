@@ -255,6 +255,21 @@ export function freeTagOf(label: string): { readonly name: string; readonly free
 }
 
 /**
+ * A route's model by name, a Cursor family by the family: "Gemini 4 Argon", not
+ * "Gemini 4 Argon Low" -- the id it stands on names one level, and the level is
+ * its own control. A compare column named the id's level beside an effort set
+ * to High, and went out labelled "Gemini 4 Argon Low · High" (2026-10-16).
+ */
+export function routeFamilyName(
+  route: { readonly runtime: string; readonly model: string },
+  resolved: ReadonlyMap<string, string>,
+  models: readonly PublicModel[]
+): string {
+  const family = modelFamily(models, route.runtime, route.model)
+  return routeModelName(route.runtime, family?.variants !== undefined ? family.displayName : route.model, resolved.get(`${route.runtime}:${route.model}`))
+}
+
+/**
  * The effort a route runs at, found the way the composer's chip finds it
  * (0.386): the level chosen for it; else the level a variant id carries --
  * Cursor's `grok-4.7-medium` IS medium; else the model's default. Only for a
@@ -295,8 +310,7 @@ export function homeRouteOf(
   resolved: ReadonlyMap<string, string>,
   models: readonly PublicModel[] = []
 ): { readonly route: string; readonly model: string; readonly runtime?: MissionRuntimeId } {
-  const family = modelFamily(models, route.runtime, route.model)
-  const name = routeModelName(route.runtime, family?.variants !== undefined ? family.displayName : route.model, resolved.get(`${route.runtime}:${route.model}`))
+  const name = routeFamilyName(route, resolved, models)
   const effort = routeEffortOf(route, models)
   const level = effort === undefined ? undefined : splitEffort(effort)
   const withLevel = level === undefined ? name : `${name} · ${effortName(level.base)}${level.fast ? ' · Fast' : ''}`

@@ -432,6 +432,28 @@ export function cursorModelsFrom(runtimes: readonly RuntimeDiscovery[]): readonl
 }
 
 /**
+ * A Cursor route's level, put into the id it names, at the start of the run.
+ *
+ * The window does this too (`startRoute`), but only with the models it has
+ * been told: a teammate saved as "Gemini 4 Argon, High" is `gemini-4-argon-low`
+ * plus `high`, and sent before Cursor's list reached the window it went out as
+ * both, and Cursor's builder refused it -- "Cursor Agent takes no effort
+ * level" (2026-10-16, a teammate's first message seconds after launch). The
+ * run's own discovery has the list, so the level becomes its id here. A level
+ * the family does not list is left as it came, and the builder says so.
+ */
+export function cursorChoiceFor(
+  models: readonly PublicModel[],
+  model: string | undefined,
+  effort: string | undefined
+): { readonly model?: string; readonly effort?: string } {
+  if (effort === undefined || model === undefined) return { ...(model === undefined ? {} : { model }), ...(effort === undefined ? {} : { effort }) }
+  const family = models.find((entry) => entry.id === model || Object.values(entry.variants ?? {}).includes(model))
+  const id = family?.variants?.[effort]
+  return id === undefined ? { model, effort } : { model: id }
+}
+
+/**
  * OpenCode's models, from `opencode models` at discovery: one `provider/model`
  * id per line. The ones ending in `-free` cost nothing and need no sign-in,
  * which is the whole reason this runtime is here; they are named as free.

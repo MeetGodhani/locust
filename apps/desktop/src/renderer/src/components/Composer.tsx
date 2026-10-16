@@ -24,7 +24,7 @@ import {
   runtimeIsUsable
 } from '../status.js'
 import { defaultEffort, sendBlockedReason } from '../status.js'
-import { freeTagOf, isOwnRoute, routeModelName, shortRuntimeName } from '../routeName.js'
+import { freeTagOf, isOwnRoute, routeFamilyName, routeModelName, shortRuntimeName } from '../routeName.js'
 import type { MissionRuntimeId } from '@teammate/runtime-adapters'
 import { handoffPreviewParts, joinerBefore } from '../handoffPreview.js'
 import type { HandoffPreviewParts } from '../handoffPreview.js'
@@ -2236,7 +2236,7 @@ export function Composer({
                       recentRoutes={recentRoutes}
                       active={slotPicker === 'add' ? route : compare.picks[slotPicker] ?? route}
                       onSelect={(choice) => {
-                        const pick = { ...choice, label: routeModelName(choice.runtime, choice.model, resolvedModels.get(`${choice.runtime}:${choice.model}`)) }
+                        const pick = { ...choice, label: routeFamilyName(choice, resolvedModels, models) }
                         if (slotPicker === 'add') compare.onToggle(pick)
                         else compare.onReplace?.(slotPicker, pick)
                         setSlotPicker(undefined)
