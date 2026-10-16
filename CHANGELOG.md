@@ -11,6 +11,21 @@ Settings shows this file as What's new. An entry may group its changes under
 about when they arrive on it carries `<!-- big -->` on the line under its
 heading: the home screen then shows it once, as a splash.
 
+## 0.778.0 - 2026-10-15
+
+### Improved
+
+- **A long history no longer slows the window.** The conversation list now draws what you can see and adds more as you scroll. Each teammate's face appears as its row comes into view. With 700 conversations, a reply now streams at a full 60 frames a second, where it managed about 12, and clearing a search takes a tenth of a second instead of nearly two. Every conversation is still in the list, and the end of the list says how many are left to draw.
+- **Your phone's page reads your history only when it changes.** It used to read all of it every three seconds while the page was open.
+- **A very long turn counts "at least".** When some of a turn's middle is kept in its record but not shown, its summary now says "at least 596 tool calls". It no longer gives a count that reads as the whole turn.
+
+### Fixed
+
+- **A long answer sent in one piece no longer stops the run.** An agent that sent more than about 16,000 characters at once was stopped with "the mission ledger could not be written". This mostly hit agents you added yourself. Long text is now kept with its start and end, and the run carries on. The same goes for any other field that is too long, from any agent.
+- **The phone page answers every request.** A malformed key could leave a request unanswered and show "Locust hit a problem". It is now refused like any wrong key.
+- **A point that ends in a size is no longer a weight.** In a benchmark, "Draws a 3x3 grid" or "Works on Linux2" was read as a weighted point. A weight now needs a space before it, as in "Handles empty input x3".
+- **The send button rests on computers that can't draw its metal.** Without WebGL, for example on a remote desktop, it checked 60 times a second, forever. It now shows the plain button after three seconds.
+
 ## 0.777.0 - 2026-10-15
 <!-- big -->
 
