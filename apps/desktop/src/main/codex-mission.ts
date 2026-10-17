@@ -79,6 +79,7 @@ import type { MemoryBriefing } from './peer-exchange.js'
 import type { PeerExchange, TranscriptTracker } from './peer-exchange.js'
 import type { MissionPeerContext } from './workroom-briefing.js'
 import { openCodeReadOnlySection, planSection } from './workroom-briefing.js'
+import { undoneNote } from './undone-note.js'
 import { briefHeld, briefPlan, compactedDuring } from './brief-sessions.js'
 import type { BriefSessions } from './brief-sessions.js'
 import type { EndedMission, RelayOrigin, SharingMission } from './relay.js'
@@ -1671,6 +1672,8 @@ export function createCodexMissionService(options: CodexMissionServiceOptions): 
         /** A side question's running turn, when its copy predates it (0.515). */
         let sideRunningAsk: string | undefined
         let resumedMissionId: string | undefined
+        /** The run of the turn a follow-up continues, to tell it when the person undid that turn (0.784). */
+        let resumedRunId: string | undefined
         /*
          * A SIDE QUESTION forks the conversation's latest session, read-only,
          * on the conversation's own runtime -- the three that can fork one:
@@ -1873,6 +1876,7 @@ export function createCodexMissionService(options: CodexMissionServiceOptions): 
            */
           resumeThreadId = modeChanged ? undefined : resumableThreadOf(prior, runtime)
           resumedMissionId = prior.metadata.missionId
+          resumedRunId = prior.metadata.runId
           resumedCompacted = compactedDuring(prior.events)
           if (resumeThreadId === undefined) {
             const said = createTranscriptTracker()
@@ -2428,6 +2432,12 @@ ${sentPrompt.trim()}`
           })
           runtimePrompt = solo.runtimePrompt
           briefGiven = solo.given
+        }
+        // A follow-up to a turn the person undid starts with what Undo put back (0.784, undone-note.ts).
+        if (!bare && side === undefined && resumedRunId !== undefined) {
+          const undone = (await options.turnRecords?.get(resumedRunId).catch(() => undefined))?.undone
+          const told = undone === undefined ? undefined : undoneNote(undone)
+          if (told !== undefined) runtimePrompt = `${told}\n\n${runtimePrompt}`
         }
         // Plan first, for a teammate's mission or a plain one. Appended last
         // so it is the instruction closest to the model's answer.

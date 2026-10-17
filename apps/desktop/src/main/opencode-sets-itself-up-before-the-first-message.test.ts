@@ -107,7 +107,7 @@ describe("OpenCode's config folder", () => {
 describe('the start line while it does', () => {
   it('says the agent is setting itself up, and roughly how long', async () => {
     const { startPhaseLabel } = await import('../shared/start-phase.js')
-    expect(startPhaseLabel('runtime-first-setup', 'OpenCode')).toBe('Setting up OpenCode for its first start, about a minute')
+    expect(startPhaseLabel('runtime-first-setup', 'OpenCode')).toBe('Setting up OpenCode for its first start, about a minute and a half')
     expect(startPhaseLabel('starting-runtime', 'OpenCode')).toBe('Starting OpenCode')
   })
 })
