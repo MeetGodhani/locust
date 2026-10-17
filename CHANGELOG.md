@@ -11,6 +11,12 @@ Settings shows this file as What's new. An entry may group its changes under
 about when they arrive on it carries `<!-- big -->` on the line under its
 heading: the home screen then shows it once, as a splash.
 
+## 0.785.0 - 2026-10-17
+
+### Fixed
+
+- **No false memory warning after an Undo.** Told its last turn was undone, a teammate could try to forget the file it had made, and on a new computer the thread said in amber that it "could not" and "It is still remembered", though nothing had ever been remembered. A forget with nothing to forget now says nothing.
+
 ## 0.784.0 - 2026-10-17
 
 ### Fixed
