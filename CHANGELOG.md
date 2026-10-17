@@ -11,6 +11,14 @@ Settings shows this file as What's new. An entry may group its changes under
 about when they arrive on it carries `<!-- big -->` on the line under its
 heading: the home screen then shows it once, as a splash.
 
+## 0.784.0 - 2026-10-17
+
+### Fixed
+
+- **A teammate knows when you undid its last turn.** Undo puts your folder back without the teammate seeing it, so when you asked about the work afterwards it could answer from memory that the file it made "is still on disk". The next message after an Undo now tells it which files were put back and which were left as they are, so it works from the folder as it is.
+- **An app connected to Locust gets the new reply, not the last one.** When another AI app (connected in Settings > General) sent a teammate a follow-up and asked for the reply straight away, Locust could hand back the previous answer while the new turn was still starting. It now says the next turn is starting until it has. Found and fixed by Mit Godhani.
+- **OpenCode's first start says how long it takes.** On a new computer its line now says "about a minute and a half", which is what that setup took on clean machines, instead of "about a minute".
+
 ## 0.783.0 - 2026-10-16
 
 ### Improved
