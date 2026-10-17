@@ -43,6 +43,8 @@ export interface MemoryReader {
 }
 
 const quoted = (texts: readonly string[]): string => texts.map((text) => `"${text}"`).join('; ')
+/** Who wrote it, opening a notice: "a conversation" there starts a sentence. */
+const opening = (name: string): string => name.charAt(0).toUpperCase() + name.slice(1)
 
 export function createMemoryReader(options: MemoryReaderOptions): MemoryReader {
   return {
@@ -183,6 +185,16 @@ export function createMemoryReader(options: MemoryReaderOptions): MemoryReader {
               forgotten.push(...result.removed)
             } else if (waiting.length > 0) {
               // Proposed, not missed: it waits for the person.
+            } else if (result.refusal === 'nothing-remembered') {
+              /*
+               * Nothing is remembered here at all, so nothing is being
+               * briefed and there is nothing for the person to settle.
+               * Clean-machine drive, packaged 0.784, 2026-10-17: told its
+               * last turn was undone, a teammate on a new computer tried to
+               * forget the file it had handed over, and Locust answered in
+               * amber that it "could not ... It is still remembered." Nothing
+               * had ever been remembered (0.785).
+               */
             } else if (result.refusal === 'ambiguous') {
               missed.push(
                 `"${op.text}" matches more than one memory (${quoted(result.candidates)}), so none was forgotten. Quote one of them exactly.`
@@ -294,7 +306,7 @@ export function createMemoryReader(options: MemoryReaderOptions): MemoryReader {
           kind: 'relay-notice',
           runId: recovered.metadata.runId,
           missionId: mission.missionId,
-          message: `${by.name} tried to remember something and it was not kept. ${refused.join(' ')}`
+          message: `${opening(by.name)} tried to remember something and it was not kept. ${refused.join(' ')}`
         })
       }
       if (pastTheCap > 0) {
@@ -303,7 +315,7 @@ export function createMemoryReader(options: MemoryReaderOptions): MemoryReader {
           kind: 'relay-notice',
           runId: recovered.metadata.runId,
           missionId: mission.missionId,
-          message: `${by.name} wrote ${String(parsed.length + pastTheCap)} memory lines, and a reply keeps at most ${String(MAX_MEMORY_OPS_PER_REPLY)}, so the last ${pastTheCap === 1 ? 'one was' : `${String(pastTheCap)} were`} not kept.`,
+          message: `${opening(by.name)} wrote ${String(parsed.length + pastTheCap)} memory lines, and a reply keeps at most ${String(MAX_MEMORY_OPS_PER_REPLY)}, so the last ${pastTheCap === 1 ? 'one was' : `${String(pastTheCap)} were`} not kept.`,
           level: 'info'
         })
       }
@@ -327,7 +339,7 @@ export function createMemoryReader(options: MemoryReaderOptions): MemoryReader {
           kind: 'relay-notice',
           runId: recovered.metadata.runId,
           missionId: mission.missionId,
-          message: `${by.name} tried to forget something and could not. ${missed.join(' ')} It is still remembered.`
+          message: `${opening(by.name)} tried to forget something and could not. ${missed.join(' ')} It is still remembered.`
         })
       }
       /*

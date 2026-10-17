@@ -125,8 +125,10 @@ export interface ForgetResult {
   /**
    * Why nothing was removed. `ambiguous` carries the memories it could have
    * meant, so the teammate can quote one of them properly next time.
+   * `nothing-remembered`: this folder and everywhere hold no memory at all,
+   * so there was nothing it could have meant (0.785).
    */
-  readonly refusal: 'nothing-matched' | 'ambiguous' | undefined
+  readonly refusal: 'nothing-matched' | 'ambiguous' | 'nothing-remembered' | undefined
   readonly candidates: readonly string[]
   /** In ask mode: the kept memories now waiting for the person to agree they go. */
   readonly proposed?: readonly string[]
@@ -639,6 +641,7 @@ export function createMemoryStore(options: {
         const reachable = file.memories.filter(
           (memory) => (memory.scope === 'global' || memory.workspaceId === workspaceId) && !isChange(memory)
         )
+        if (reachable.length === 0) return { removed: [], refusal: 'nothing-remembered', candidates: [] }
         const match = forgetMatch(text, reachable.map((memory) => memoryKey(memory.text)))
         if (match.refusal !== undefined) {
           return {

@@ -49,6 +49,8 @@ const WHO_DECIDES = join(ROOT, 'src', 'shared', 'who-decides.ts')
 const APPROVAL_RULES = join(ROOT, 'src', 'shared', 'approval-rules.ts')
 
 const MCP_TOOLS = join(ROOT, 'src', 'main', 'locust-mcp-tools.ts')
+const MEMORY_STORE = join(ROOT, 'src', 'main', 'memory-store.ts')
+const MEMORY_READER = join(ROOT, 'src', 'main', 'memory-reader.ts')
 
 const MUTATIONS = [
   {
@@ -66,6 +68,22 @@ const MUTATIONS = [
     to: "      } finally { /* Deliberately leave the conversation claimed. */ }",
     expect: 'releases a conversation claim when starting its next turn rejects',
     tests: ['src/main/other-apps-can-only-ask-locust-teammates.test.ts']
+  },
+  {
+    file: MEMORY_STORE,
+    name: 'forget-nothing: a forget where nothing is remembered is a miss again',
+    from: "        if (reachable.length === 0) return { removed: [], refusal: 'nothing-remembered', candidates: [] }",
+    to: '        // (no answer of its own when nothing is remembered)',
+    expect: 'is answered as nothing remembered, by the store',
+    tests: ['src/main/a-forget-with-nothing-remembered-says-nothing.test.ts']
+  },
+  {
+    file: MEMORY_READER,
+    name: 'forget-nothing: a forget where nothing is remembered says it could not',
+    from: "            } else if (result.refusal === 'nothing-remembered') {",
+    to: '            } else if (false) {',
+    expect: 'says nothing in the thread',
+    tests: ['src/main/a-forget-with-nothing-remembered-says-nothing.test.ts']
   },
   {
     file: MISSIONS,
