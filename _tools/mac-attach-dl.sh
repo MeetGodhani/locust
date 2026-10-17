@@ -1,0 +1,56 @@
+#!/bin/bash
+# mac-attach-dl.sh VERSION [RUN_ID] (since 0.783): build VERSION's Mac images on StopBanning's PUBLIC ci.yml (free
+# minutes; never the private mac-build.yml, frozen at 0.646), require both macOS smokes to have PASSED in the job log,
+# and upload the two dmgs to dl.locust.lol. publish-dl.sh runs it after it has pushed main at VERSION's commit.
+# Found 10/09: no release from 0.701 to 0.711 carried a dmg, so Mac copies sat on 0.700 and the README's
+# "latest release" link offered Mac users nothing.
+V="$1"; RUN="$2"
+PUB=StopBanning/locust
+R=/c/work/locust
+[ -n "$V" ] || { echo "usage: mac-attach-dl.sh VERSION [RUN_ID]"; exit 1; }
+cd "$R" || exit 1
+if curl -sfI "https://dl.locust.lol/Locust-$V-mac.json" > /dev/null; then echo "MAC: $V already has its Mac images"; exit 0; fi
+git fetch -q stopbanning
+# SHA: the release commit, which a later commit on main may follow (the version is read from that commit).
+SHA=${SHA:-$(git rev-parse HEAD)}
+git show "$SHA:apps/desktop/package.json" | grep -q "\"version\": \"$V\"" || { echo "MAC: $SHA is not $V"; exit 1; }
+if [ -z "$RUN" ]; then
+  [ "$(git rev-parse stopbanning/main)" = "$SHA" ] || { echo "MAC: stopbanning/main is not $V's commit $SHA"; exit 1; }
+  # Only a run started by hand (workflow_dispatch) packages; a push runs the tests alone. Reuse a dispatched run of
+  # this commit if there is one, otherwise start one.
+  RUN=$(gh run list -R "$PUB" -w ci.yml -L 10 --json databaseId,headSha,event -q "[.[] | select(.headSha==\"$SHA\" and .event==\"workflow_dispatch\")][0].databaseId // empty")
+  if [ -z "$RUN" ]; then
+    gh workflow run ci.yml --ref main -R "$PUB" || { echo "MAC: could not start ci.yml"; exit 1; }
+    for i in $(seq 1 30); do
+      sleep 5
+      RUN=$(gh run list -R "$PUB" -w ci.yml -L 3 --json databaseId,headSha,event -q "[.[] | select(.headSha==\"$SHA\" and .event==\"workflow_dispatch\")][0].databaseId // empty")
+      [ -n "$RUN" ] && break
+    done
+  fi
+fi
+[ -n "$RUN" ] || { echo "MAC: no ci.yml run found for $SHA"; exit 1; }
+HEAD_OF_RUN=$(gh run view "$RUN" -R "$PUB" --json headSha -q .headSha)
+[ "$HEAD_OF_RUN" = "$SHA" ] || { echo "MAC: run $RUN built $HEAD_OF_RUN, not $V's commit $SHA"; exit 1; }
+echo "MAC: run $RUN on $SHA"
+# Not `gh run watch --exit-status`: on 10/16 it gave up on a run that then succeeded. Poll the run itself.
+until [ "$(gh run view "$RUN" -R "$PUB" --json status -q .status 2>/dev/null)" = completed ]; do sleep 60; done
+[ "$(gh run view "$RUN" -R "$PUB" --json conclusion -q .conclusion)" = success ] || { echo "MAC: run $RUN did not succeed"; exit 1; }
+JOB=$(gh run view "$RUN" -R "$PUB" --json jobs -q '.jobs[] | select(.name|test("macos")) | .databaseId')
+LOG="$TEMP/mac-$V.log"
+gh run view "$RUN" -R "$PUB" --log --job "$JOB" > "$LOG" 2>&1
+if ! grep -q "MAC STOP SMOKE PASSED" "$LOG" || ! grep -q "MAC UPDATE SMOKE PASSED" "$LOG"; then echo "MAC: a macOS check did not pass (see $LOG)"; exit 1; fi
+echo "MAC: $(grep -c '\[PASS\]' "$LOG") checks PASS on macOS, $(grep -c '\[FAIL\]' "$LOG") FAIL"
+# C:, not D: -- D: damages files at rest (memory d-drive-ntfs-corruption); these are deleted as soon as they are up.
+D=/c/work/scratch/mac-$V
+rm -rf "$D"; mkdir -p "$D"
+gh run download "$RUN" -R "$PUB" -n locust-macos-14 -D "$D" || { echo "MAC: download failed"; exit 1; }
+ARM="$D/Locust-$V-mac-arm64.dmg"; X64="$D/Locust-$V-mac-x64.dmg"
+[ -f "$ARM" ] && [ -f "$X64" ] || { echo "MAC: the images are not named for $V: $(ls "$D")"; exit 1; }
+# A disk image ends in its 512-byte "koly" trailer; a cut-off download does not.
+for f in "$ARM" "$X64"; do
+  [ "$(tail -c 512 "$f" | head -c 4)" = "koly" ] || { echo "MAC: $(basename "$f") has no disk-image trailer"; exit 1; }
+done
+node "$R/_tools/publish-downloads.mjs" "$V" --mac "$D" || { echo "MAC: upload failed"; exit 1; }
+node "$R/_tools/publish-downloads.mjs" "$V" --promote || { echo "MAC: the Mac list was not updated"; exit 1; }
+rm -rf "$D"
+echo "MAC ATTACHED: $V (arm64 + x64)"
