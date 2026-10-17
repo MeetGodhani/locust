@@ -11,6 +11,12 @@ Settings shows this file as What's new. An entry may group its changes under
 about when they arrive on it carries `<!-- big -->` on the line under its
 heading: the home screen then shows it once, as a splash.
 
+## 0.783.0 - 2026-10-16
+
+### Improved
+
+- **Updates come from Locust's own website now.** Locust used to download its updates from a GitHub account. On October 16 GitHub suspended that account without a reason, and every copy's update check stopped working ("The update check could not complete"). From this version on, updates and downloads come from dl.locust.lol, Locust's own address, so no single account can cut a copy off again. Copies older than this one still look at the old account, so they need this version installed by hand once, from locust.lol.
+
 ## 0.782.0 - 2026-10-16
 
 ### Fixed
