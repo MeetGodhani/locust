@@ -22,7 +22,9 @@ const { dirname, join } = require('node:path')
 const { gunzipSync } = require('node:zlib')
 
 const [oldVersion, newVersion, oldInstaller] = process.argv.slice(-3)
-const CHANNEL = 'https://github.com/locust-lol/locust-releases/releases/download'
+// Locust's own downloads since 0.783 (apps/desktop/src/shared/locust-home.ts): every file side by side, each
+// version's feed file kept by name.
+const CHANNEL = 'https://dl.locust.lol'
 const updater = dirname(require.resolve('electron-updater/package.json', { paths: [join(__dirname, '..', 'apps', 'desktop')] }))
 const runtime = dirname(require.resolve('builder-util-runtime/package.json', { paths: [updater] }))
 const { ElectronHttpExecutor } = require(join(updater, 'out', 'electronHttpExecutor'))
@@ -51,7 +53,7 @@ async function main() {
   const token = new CancellationToken()
   const text = async (url) => (await http.downloadToBuffer(new URL(url), { cancellationToken: token })).toString('utf8')
   const blockMap = async (version) => {
-    const data = await http.downloadToBuffer(new URL(`${CHANNEL}/${version}/Locust-${version}-setup.exe.blockmap`), { cancellationToken: token })
+    const data = await http.downloadToBuffer(new URL(`${CHANNEL}/Locust-${version}-setup.exe.blockmap`), { cancellationToken: token })
     return JSON.parse(gunzipSync(data).toString())
   }
 
@@ -61,7 +63,7 @@ async function main() {
   const logger = { info: (m) => lines.push(String(m)), warn: (m) => lines.push(`warn: ${String(m)}`), error: (m) => lines.push(`error: ${String(m)}`) }
   let planned
   try {
-    const yml = await text(`${CHANNEL}/${newVersion}/latest.yml`)
+    const yml = await text(`${CHANNEL}/Locust-${newVersion}.yml`)
     const published = {
       url: /^path:\s*(.+)$/m.exec(yml)[1].trim(),
       sha512: /^sha512:\s*(.+)$/m.exec(yml)[1].trim(),
@@ -71,7 +73,7 @@ async function main() {
     const beforeDownload = arrived
     const started = Date.now()
     await new GenericDifferentialDownloader(published, http, {
-      newUrl: new URL(`${CHANNEL}/${newVersion}/${published.url}`),
+      newUrl: new URL(`${CHANNEL}/${published.url}`),
       oldFile: oldInstaller,
       logger,
       newFile,
