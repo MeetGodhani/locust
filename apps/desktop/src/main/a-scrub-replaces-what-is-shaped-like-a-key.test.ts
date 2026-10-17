@@ -15,7 +15,8 @@ describe('scrubSecrets', () => {
     ['an Anthropic key', 'sk-ant-abcdefghijklmnopqrst'],
     ['an OpenAI key', 'sk-proj-abcdefghijklmnopqrstuvwx'],
     ['an AWS access key', 'AKIAABCDEFGHIJKLMNOP'],
-    ['a Google API key', 'AIzaSyA-abcdefghijklmnopqrstuvwxyz01234'],
+    // Built, not written out: written out, GitHub secret scanning took it for a real key in the public repo (2026-10-17).
+    ['a Google API key', `AIza${'Sy0123456'.repeat(3)}abcdefgh`],
     ['a GitHub token', 'ghp_abcdefghijklmnopqrst'],
     ['a fine-grained GitHub token', 'github_pat_abcdefghijklmnopqrstuv'],
     ['a GitLab token', 'glpat-abcdefghijklmnopqrst'],
