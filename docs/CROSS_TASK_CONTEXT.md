@@ -346,7 +346,7 @@ Entries since 2026-10-03, newest first. Earlier entries (2026-08-30 to
   Both package builds and both desktop TypeScript checks passed. The full
   gate exited 1 before its suites: the pinned recall-model download ended
   with UND_ERR_SOCKET (other side closed). No full-suite pass is claimed;
-  remaining full gates are deferred to CI at the contributor's explicit request.
+  full-suite validation remains pending in CI.
 - Limits: controlled offline callbacks, not live agent runs or a performance
   benchmark. The mission service has another conversation claim; duplicate
   real runtime launches were not established. Bug 2 is reported separately; no
