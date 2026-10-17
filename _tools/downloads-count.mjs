@@ -1,12 +1,22 @@
 // Who used dl.locust.lol, per day, from Cloudflare's own request analytics (Locust itself has no telemetry).
 // Counts distinct addresses, not requests, and leaves out this machine's own. Uses wrangler's OAuth login in place
 // (never printed). Usage: node _tools/downloads-count.mjs [days=1]
+import { spawnSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
+import { homedir } from 'node:os'
 import { join } from 'node:path'
 
 const ZONE = '06b01b5e069915054fa4e70bcdc80232'
 const days = Number(process.argv[2] ?? 1)
-const config = readFileSync(join(process.env.APPDATA, 'xdg.config', '.wrangler', 'config', 'default.toml'), 'utf8')
+const CONFIG = join(process.env.APPDATA, 'xdg.config', '.wrangler', 'config', 'default.toml')
+// The login lasts an hour. Any wrangler command renews it from its refresh token, so an expired one is renewed
+// with `wrangler whoami`, run from the site checkout that has wrangler installed.
+let config = readFileSync(CONFIG, 'utf8')
+const expires = Date.parse(/expiration_time\s*=\s*"([^"]+)"/.exec(config)?.[1] ?? '')
+if (!(expires > Date.now() + 60_000)) {
+  spawnSync('npx wrangler whoami', { cwd: join(homedir(), 'Documents', 'locust-site'), shell: true, stdio: 'ignore' })
+  config = readFileSync(CONFIG, 'utf8')
+}
 const token = /oauth_token\s*=\s*"([^"]+)"/.exec(config)?.[1]
 if (!token) { console.error('no wrangler login'); process.exit(1) }
 const me = /ip=(\S+)/.exec(await (await fetch('https://dl.locust.lol/cdn-cgi/trace')).text())?.[1]
