@@ -3,8 +3,9 @@
 //
 //   node _tools/publish-downloads.mjs <version>                every build: installer, block map, then beta.yml
 //   node _tools/publish-downloads.mjs <version> --mac <dir>    the Mac disk images for <version>, from the CI run
-//   node _tools/publish-downloads.mjs <version> --promote      the tester lane: latest.yml, Locust-Setup.exe and the
-//                                                              Mac release list, once a day
+//   node _tools/publish-downloads.mjs <version> --promote      the tester lane: latest.yml, Locust-Setup.exe, the
+//                                                              Mac release list, and release.json + CHANGELOG.md
+//                                                              for locust.lol, once a day
 //
 // WHY (0.783). GitHub suspended the account that held Locust's releases on 2026-10-16 and every installed copy's
 // update check failed with it (src/shared/locust-home.ts). The rules publish-release.mjs learned on GitHub hold
@@ -20,6 +21,7 @@ import { join } from 'node:path'
 const BUCKET = 'locust-downloads'
 const DOWNLOADS = 'https://dl.locust.lol/'
 const RELEASE = new URL('../apps/desktop/release/', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')
+const CHANGELOG = new URL('../CHANGELOG.md', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')
 const version = process.argv[2]
 const flag = (name) => (process.argv.includes(name) ? process.argv[process.argv.indexOf(name) + 1] ?? '' : undefined)
 const promote = process.argv.includes('--promote')
@@ -34,7 +36,7 @@ const fail = (line) => {
   console.error(`\nNOT PUBLISHED: ${line}\nThe feed files were not changed, so no installed Locust sees anything new.`)
   process.exit(1)
 }
-const TYPES = { '.exe': 'application/vnd.microsoft.portable-executable', '.dmg': 'application/x-apple-diskimage', '.yml': 'text/yaml; charset=utf-8', '.json': 'application/json', '.blockmap': 'application/octet-stream' }
+const TYPES = { '.exe': 'application/vnd.microsoft.portable-executable', '.dmg': 'application/x-apple-diskimage', '.yml': 'text/yaml; charset=utf-8', '.json': 'application/json', '.blockmap': 'application/octet-stream', '.md': 'text/plain; charset=utf-8' }
 const typeOf = (name) => TYPES[Object.keys(TYPES).find((ending) => name.endsWith(ending)) ?? '.blockmap']
 
 // No shell: wrangler is run by node from npx's own script, with fixed arguments.
@@ -50,7 +52,8 @@ function npxCli() {
 // What the world sees, not what the upload said: a HEAD over HTTPS, at the size on disk.
 async function served(key, size) {
   for (let attempt = 0; attempt < 5; attempt += 1) {
-    const answer = await fetch(`${DOWNLOADS}${key}?check=${String(Date.now())}`, { method: 'HEAD' }).catch(() => undefined)
+    // identity: Cloudflare compresses text files for a client that accepts gzip, and then sends no length.
+    const answer = await fetch(`${DOWNLOADS}${key}?check=${String(Date.now())}`, { method: 'HEAD', headers: { 'Accept-Encoding': 'identity' } }).catch(() => undefined)
     if (answer?.ok === true && Number(answer.headers.get('content-length')) === size) return
     await new Promise((resolve) => setTimeout(resolve, 3000))
   }
@@ -109,6 +112,20 @@ if (macDir !== undefined) {
   await upload('Locust-Setup.exe', local, { fresh: true })
   // The Mac release list, newest first, in the shape GitHub's releases API answered in (src/main/mac-release.ts).
   const mac = await fetchText(`Locust-${version}-mac.json`)
+  // What locust.lol's Download button reads: the tester lane's release in the shape of GitHub's /releases/latest,
+  // which the site read until the suspension -- the version, and the size and SHA-256 of Locust-Setup.exe.
+  const setup = readFileSync(local)
+  const release = {
+    tag_name: version,
+    draft: false,
+    prerelease: false,
+    assets: [
+      { name: 'Locust-Setup.exe', browser_download_url: `${DOWNLOADS}Locust-Setup.exe`, size: setup.length, digest: `sha256:${createHash('sha256').update(setup).digest('hex')}` },
+      ...(mac === undefined ? [] : JSON.parse(mac).assets),
+    ],
+  }
+  writeFileSync(join(dir, 'release.json'), `${JSON.stringify(release, null, 2)}
+`)
   if (mac === undefined) {
     say(`  no Mac images for ${version} yet: the Mac list is left as it is`)
   } else {
@@ -118,5 +135,7 @@ if (macDir !== undefined) {
     await upload('mac-releases.json', join(dir, 'mac-releases.json'), { fresh: true })
   }
   await upload('latest.yml', join(dir, 'latest.yml'), { fresh: true })
+  await upload('release.json', join(dir, 'release.json'), { fresh: true })
+  await upload('CHANGELOG.md', CHANGELOG, { fresh: true })
   say(`${version} is the tester lane's now.`)
 }
