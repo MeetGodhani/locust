@@ -85,6 +85,51 @@ describe('other apps can only ask Locust teammates', () => {
     await first
     expect(f.start).toHaveBeenCalledOnce()
   })
+
+  it('keeps a conversation claimed until its next turn has started', async () => {
+    const f = fixture()
+    let release!: (value: CodexMissionStartResponse) => void
+    f.start.mockImplementationOnce(() => new Promise(resolve => { release = resolve }))
+    const first = f.call('send_message', { conversation_id: 'mission_1', message: 'first' })
+    await vi.waitFor(() => expect(f.start).toHaveBeenCalledOnce())
+    const second = await f.call('send_message', { conversation_id: 'mission_1', message: 'second' })
+    const poll = await f.call('read_reply', { conversation_id: 'mission_1' })
+    release({ ok: true, data: { missionId: 'mission_2' } } as CodexMissionStartResponse)
+    expect(await first).toEqual(mcpText(JSON.stringify({ conversation_id: 'mission_1', mode: 'ask' })))
+    expect(second).toEqual(mcpText('Still working: starting the next turn.'))
+    expect(poll).toEqual(mcpText('Still working: starting the next turn.'))
+    expect(f.start).toHaveBeenCalledOnce()
+    await f.call('send_message', { conversation_id: 'mission_1', message: 'after startup' })
+    expect(f.start).toHaveBeenCalledTimes(2)
+  })
+  it('keeps a conversation claimed while looking up its next turn mode', async () => {
+    const f = fixture({ ownMode: () => true })
+    let release!: () => void
+    f.teammates.mockImplementationOnce(() => new Promise(resolve => { release = () => resolve(teammates) }))
+    const first = f.call('send_message', { conversation_id: 'mission_1', message: 'first' })
+    await vi.waitFor(() => expect(f.teammates).toHaveBeenCalledOnce())
+    const second = await f.call('send_message', { conversation_id: 'mission_1', message: 'second' })
+    release()
+    expect(await first).toEqual(mcpText(JSON.stringify({ conversation_id: 'mission_1', mode: 'auto' })))
+    expect(second).toEqual(mcpText('Still working: starting the next turn.'))
+    expect(f.teammates).toHaveBeenCalledOnce()
+    expect(f.start).toHaveBeenCalledOnce()
+  })
+  it('releases a conversation claim when starting its next turn rejects', async () => {
+    const f = fixture()
+    let reject!: (reason: Error) => void
+    f.start.mockImplementationOnce(() => new Promise((_, fail) => { reject = fail }))
+    const first = f.call('send_message', { conversation_id: 'mission_1', message: 'first' })
+    const failed = expect(first).rejects.toThrow('start unavailable')
+    await vi.waitFor(() => expect(f.start).toHaveBeenCalledOnce())
+    const second = await f.call('send_message', { conversation_id: 'mission_1', message: 'second' })
+    reject(new Error('start unavailable'))
+    await failed
+    expect(second).toEqual(mcpText('Still working: starting the next turn.'))
+    expect(f.start).toHaveBeenCalledOnce()
+    expect(await f.call('send_message', { conversation_id: 'mission_1', message: 'after failure' })).toEqual(mcpText(JSON.stringify({ conversation_id: 'mission_1', mode: 'ask' })))
+    expect(f.start).toHaveBeenCalledTimes(2)
+  })
 })
 
 describe(`with "each teammate's own mode" on (0.703)`, () => {

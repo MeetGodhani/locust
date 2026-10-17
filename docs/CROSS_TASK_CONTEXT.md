@@ -326,3 +326,28 @@ Entries since 2026-10-03, newest first. Earlier entries (2026-08-30 to
   full puppet checks. Neither sends a turn. The normal drive is unchanged
   unless an observation option is supplied.
 - Evidence and verification limits: `docs/REPORT-2026-10-05-first-launch-blocked.md`.
+
+### 2026-10-17 — MCP follow-up startup claim
+
+- Scope: `fix/mcp-async-handling`, based on `b510ad94` (0.783.0).
+  No version, dependency, lockfile, changelog, retry or permission changes.
+- Fixed: `send_message` now awaits `started(...)` inside its existing
+  `try/finally`, retaining the conversation claim through saved-mode lookup
+  and asynchronous startup. Concurrent sends and polls keep the pending-start
+  response; success and rejection both release the claim.
+- Tests: three deferred-start regressions cover pending startup and polling,
+  pending saved-mode lookup, and cleanup after rejection. Two `mcp-startup`
+  mutation controls require named assertion failures when the await or cleanup
+  is removed.
+- Validation: MCP tools, host-token and stdio-bridge suites passed 48/48 with the normal
+  Vitest config. Focused mutation verification collected 27 tests each time:
+  baseline/restored all pass; removing await fails three assertions; removing
+  cleanup fails two. The repository mutation runner caught both controls.
+  Both package builds and both desktop TypeScript checks passed. The full
+  gate exited 1 before its suites: the pinned recall-model download ended
+  with UND_ERR_SOCKET (other side closed). No full-suite pass is claimed;
+  remaining full gates are deferred to CI at the contributor's explicit request.
+- Limits: controlled offline callbacks, not live agent runs or a performance
+  benchmark. The mission service has another conversation claim; duplicate
+  real runtime launches were not established. Bug 2 is reported separately; no
+  OpenCode source change is included in this branch.

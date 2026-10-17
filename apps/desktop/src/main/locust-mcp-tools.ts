@@ -222,7 +222,8 @@ export function createLocustMcpTools(options: {
           if (!text(args.message, 8_000)) return mcpText('Give a message of up to 8,000 characters. Nothing was sent.', true)
           const owner = await options.owner(mission.missionId)
           if (owner === undefined) return mcpText('That conversation no longer has a teammate. Nothing was sent.', true)
-          return started({ prompt: args.message, teammateId: owner, followUpOf: mission.missionId }, id)
+          // Keep the claim until startup settles, including the saved-mode lookup.
+          return await started({ prompt: args.message, teammateId: owner, followUpOf: mission.missionId }, id)
         }
         return answerOf(mission)
       } finally { if (name === 'send_message') starting.delete(id) }

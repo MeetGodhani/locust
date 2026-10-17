@@ -48,7 +48,25 @@ const STEERING = join(ROOT, 'src', 'renderer', 'src', 'steering.ts')
 const WHO_DECIDES = join(ROOT, 'src', 'shared', 'who-decides.ts')
 const APPROVAL_RULES = join(ROOT, 'src', 'shared', 'approval-rules.ts')
 
+const MCP_TOOLS = join(ROOT, 'src', 'main', 'locust-mcp-tools.ts')
+
 const MUTATIONS = [
+  {
+    file: MCP_TOOLS,
+    name: 'mcp-startup: a conversation claim is released before its turn starts',
+    from: '          return await started({ prompt: args.message, teammateId: owner, followUpOf: mission.missionId }, id)',
+    to: '          return started({ prompt: args.message, teammateId: owner, followUpOf: mission.missionId }, id)',
+    expect: 'keeps a conversation claimed until its next turn has started',
+    tests: ['src/main/other-apps-can-only-ask-locust-teammates.test.ts']
+  },
+  {
+    file: MCP_TOOLS,
+    name: 'mcp-startup: a rejected start leaves its conversation claimed',
+    from: "      } finally { if (name === 'send_message') starting.delete(id) }",
+    to: "      } finally { /* Deliberately leave the conversation claimed. */ }",
+    expect: 'releases a conversation claim when starting its next turn rejects',
+    tests: ['src/main/other-apps-can-only-ask-locust-teammates.test.ts']
+  },
   {
     file: MISSIONS,
     name: 'relay-delivery: process launch consumes a waiting message',
