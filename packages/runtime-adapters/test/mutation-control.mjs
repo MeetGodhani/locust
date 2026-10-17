@@ -28,11 +28,82 @@ const CURSOR_EVENTS = join(ROOT, 'src', 'cursor-events.ts')
 const CODEX_EVENTS = join(ROOT, 'src', 'codex-events.ts')
 const PROVIDER_ERROR = join(ROOT, 'src', 'provider-error.ts')
 const OPENCODE_EVENTS = join(ROOT, 'src', 'opencode-events.ts')
+const OPENCODE_SERVE = join(ROOT, 'src', 'opencode-serve-run.ts')
 const COPILOT_EVENTS = join(ROOT, 'src', 'copilot-events.ts')
 const PROCESS_RUNNER = join(ROOT, 'src', 'process-runner.ts')
 const ANTIGRAVITY_EVENTS = join(ROOT, 'src', 'antigravity-events.ts')
 
 const MUTATIONS = [
+  {
+    file: OPENCODE_SERVE,
+    name: 'opencode-eof: an overlapping poll leaves its expired timer armed',
+    from: "    if (beginCheck !== undefined) clearTimeout(beginCheck);\n    beginCheck = undefined;\n    if (checking) return;",
+    to: "    if (checking) return;\n    if (beginCheck !== undefined) clearTimeout(beginCheck);\n    beginCheck = undefined;",
+    expect: 'keeps polling when the prompt receipt arrives during an EOF status query'
+  },
+  {
+    file: OPENCODE_SERVE,
+    name: 'opencode-eof: a closed stream leaves the run pending',
+    from: '      streamClosed = true;',
+    to: '      return;',
+    expect: 'fails a begun run and ends its records when the stream closes without idle'
+  },
+  {
+    file: OPENCODE_SERVE,
+    name: 'opencode-eof: paced text is discarded when the stream closes',
+    from: '      flushPartials();\n',
+    to: '',
+    expect: 'flushes paced reply text before reporting the lost stream'
+  },
+  {
+    file: OPENCODE_SERVE,
+    name: 'opencode-eof: startup sends a prompt after the event stream was lost',
+    from: '    // Session creation may finish after the event stream was already lost.\n    if (settled || cancelled) return;\n',
+    to: '',
+    expect: 'never sends a prompt after the stream was lost during session creation'
+  },
+  {
+    file: OPENCODE_SERVE,
+    name: 'opencode-eof: a busy session is treated as idle',
+    from: '      if (busy) return void scheduleBeginCheck();\n',
+    to: '',
+    expect: 'polls busy and retry states before recovering a verified completed answer'
+  },
+  {
+    file: OPENCODE_SERVE,
+    name: 'opencode-eof: an unobserved historical answer counts as current',
+    from: 'roles.get(id) === "assistant"',
+    to: 'true',
+    expect: 'does not treat an older unobserved answer as this turn\'s completion'
+  },
+  {
+    file: OPENCODE_SERVE,
+    name: 'opencode-eof: resumed history counts as proof of completion',
+    from: 'options.resumeSessionId === undefined ? messages.find',
+    to: 'true ? messages.find',
+    expect: 'does not infer a resumed turn\'s completion from historical messages'
+  },
+  {
+    file: OPENCODE_SERVE,
+    name: 'opencode-eof: the recovery deadline is ignored',
+    from: '      }, options.streamCloseTimeoutMs ?? 10_000);',
+    to: '      }, 60_000);',
+    expect: 'bounds and aborts a status request that never answers'
+  },
+  {
+    file: OPENCODE_SERVE,
+    name: 'opencode-eof: the watchdog and EOF start competing status requests',
+    from: '    if (checking) return;\n',
+    to: '',
+    expect: 'reuses an in-flight watchdog query when the stream closes'
+  },
+  {
+    file: OPENCODE_SERVE,
+    name: 'opencode-eof: cancellation waits forever for an abort response',
+    from: '    stopTimeout = setTimeout(finish, 1_500);\n',
+    to: '',
+    expect: 'ends cancellation even when the server never answers abort'
+  },
   {
     file: PROVIDER_ERROR,
     name: 'provider JSON is left as raw display text',
@@ -560,6 +631,12 @@ const MUTATIONS = [
   }
 ]
 
+// A name filter targets a change's controls; the default still runs the inventory.
+const filter = process.argv[2]
+const selected = filter === undefined ? MUTATIONS : MUTATIONS.filter(mutation => mutation.name.includes(filter))
+if (selected.length === 0) { console.error('No mutation controls match the filter.'); process.exit(1) }
+if (filter !== undefined) console.error(`filtered to ${selected.length} of ${MUTATIONS.length} mutations`)
+
 const REPORT = join(ROOT, 'mutation-result.json')
 
 function runSuite() {
@@ -595,6 +672,7 @@ const originals = new Map([
   [LOCATOR, readFileSync(LOCATOR, 'utf8')],
   [DISCOVERY, readFileSync(DISCOVERY, 'utf8')],
   [OPENCODE_EVENTS, readFileSync(OPENCODE_EVENTS, 'utf8')],
+  [OPENCODE_SERVE, readFileSync(OPENCODE_SERVE, 'utf8')],
   [ANTIGRAVITY_EVENTS, readFileSync(ANTIGRAVITY_EVENTS, 'utf8')],
   [COPILOT_EVENTS, readFileSync(COPILOT_EVENTS, 'utf8')],
   [PROCESS_RUNNER, readFileSync(PROCESS_RUNNER, 'utf8')],
@@ -615,7 +693,7 @@ try {
   }
   console.error(`baseline green (${baseline.total} tests)\n`)
 
-  for (const mutation of MUTATIONS) {
+  for (const mutation of selected) {
     const target = mutation.file
     const original = originals.get(target)
     if (!original.includes(mutation.from)) {

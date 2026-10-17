@@ -84,6 +84,9 @@ export interface OpenCodeServeRunOptions {
   readonly startupTimeoutMs?: number;
   /** How long a taken message may show no sign of the model before the server is asked whether it began (0.763). */
   readonly beginCheckMs?: number;
+  /** Bound observation recovery after premature event-stream EOF. */
+  readonly streamCloseTimeoutMs?: number;
+  readonly streamClosePollMs?: number;
 }
 
 const LISTENING = /listening on (http:\/\/127\.0\.0\.1:\d+)/;
@@ -194,6 +197,8 @@ export function startOpenCodeServeRun(options: OpenCodeServeRunOptions): Runtime
     if (settled) return;
     settled = true;
     if (beginCheck !== undefined) clearTimeout(beginCheck);
+    if (streamCloseTimeout !== undefined) clearTimeout(streamCloseTimeout);
+    if (stopTimeout !== undefined) clearTimeout(stopTimeout);
     events.abort();
     records.end();
     try {
@@ -232,6 +237,7 @@ export function startOpenCodeServeRun(options: OpenCodeServeRunOptions): Runtime
   const call = async (path: string, body?: unknown): Promise<Response> =>
     request(`${base!}${path}`, {
       method: "POST",
+      signal: events.signal,
       headers: { ...auth, "content-type": "application/json" },
       body: JSON.stringify(body ?? {}),
     });
@@ -276,24 +282,78 @@ export function startOpenCodeServeRun(options: OpenCodeServeRunOptions): Runtime
    */
   let begun = false;
   let beginCheck: ReturnType<typeof setTimeout> | undefined;
+  let streamClosed = false;
+  let streamCloseTimeout: ReturnType<typeof setTimeout> | undefined;
+  let stopTimeout: ReturnType<typeof setTimeout> | undefined;
+  let checking = false;
+  let busy = false;
+  const closedReason = "OpenCode's event stream closed before the turn finished.";
+  // Reuse the watchdog's status/message check after EOF, even if the model began.
   const checkBegun = async (): Promise<void> => {
+    if (beginCheck !== undefined) clearTimeout(beginCheck);
     beginCheck = undefined;
-    if (settled || begun || base === undefined || sessionId === undefined) return;
+    if (checking) return;
+    if (settled || cancelled || (!streamClosed && begun) || base === undefined || sessionId === undefined) return;
+    checking = true;
     try {
-      const statuses: unknown = await (await request(`${base}/session/status`, { headers: auth })).json().catch(() => undefined);
-      // Busy, or trying the model again: it is at work.
-      if (isObject(statuses) && isObject(statuses[sessionId])) return void scheduleBeginCheck();
-      const messages: unknown = await (await request(`${base}/session/${encodeURIComponent(sessionId)}/message`, { headers: auth })).json().catch(() => undefined);
-      const answered = Array.isArray(messages) && messages.some((one) => isObject(one) && (text(isObject(one.info) ? one.info.role : undefined) ?? text(one.role)) === "assistant");
-      if (answered || settled || begun) return void scheduleBeginCheck();
-      lose("OpenCode took the message but never began on it: its own storage was likely busy with another OpenCode on this computer. Send it again.");
+      const signal = options.signal === undefined ? events.signal : AbortSignal.any([events.signal, options.signal]);
+      const response = await request(`${base}/session/status`, { headers: auth, signal });
+      if (settled || cancelled) return;
+      if (!response.ok) throw new Error("OpenCode's session status could not be read.");
+      const statuses: unknown = await response.json();
+      if (settled || cancelled) return;
+      if (!isObject(statuses)) throw new Error("OpenCode's session status was not readable.");
+      const status = statuses[sessionId];
+      const kind = isObject(status) ? text(status.type) : undefined;
+      if (status !== undefined && kind !== "busy" && kind !== "retry" && kind !== "idle") throw new Error("OpenCode's session status could not be identified.");
+      busy = kind === "busy" || kind === "retry";
+      if (busy) return void scheduleBeginCheck();
+      const messagesResponse = await request(`${base}/session/${encodeURIComponent(sessionId)}/message`, { headers: auth, signal });
+      if (settled || cancelled) return;
+      if (!messagesResponse.ok) throw new Error("OpenCode's session messages could not be read.");
+      const messages: unknown = await messagesResponse.json();
+      if (settled || cancelled) return;
+      if (!Array.isArray(messages)) throw new Error("OpenCode's session messages were not readable.");
+      if (!streamClosed) {
+        const answered = messages.some((one: unknown) => isObject(one) && (text(isObject(one.info) ? one.info.role : undefined) ?? text(one.role)) === "assistant");
+        if (answered || begun) return void scheduleBeginCheck();
+        lose("OpenCode took the message but never began on it: its own storage was likely busy with another OpenCode on this computer. Send it again.");
+        return;
+      }
+      // A resumed session needs a prompt receipt before historical output can
+      // prove this turn finished. A fresh session can recover its observed reply.
+      const completed = options.resumeSessionId === undefined ? messages.find((message: unknown) => {
+        if (!isObject(message) || !isObject(message.info) || !Array.isArray(message.parts)) return false;
+        const info = message.info;
+        const id = text(info.id);
+        return id !== undefined && roles.get(id) === "assistant" && info.role === "assistant"
+          && info.sessionID === sessionId && info.finish === "stop" && info.error === undefined
+          && isObject(info.time) && typeof info.time.completed === "number" && Number.isFinite(info.time.completed)
+          && message.parts.some((part: unknown) => isObject(part) && part.messageID === id
+            && part.sessionID === sessionId && part.type === "step-finish" && part.reason === "stop");
+      }) as JsonObject | undefined : undefined;
+      if (completed === undefined || !isObject(completed.info) || !Array.isArray(completed.parts)) {
+        lose(`${closedReason} The session is no longer busy, but this turn's completion could not be confirmed.`);
+        return;
+      }
+      const id = text(completed.info.id)!;
+      for (const part of completed.parts) {
+        if (isObject(part) && part.messageID === id && part.sessionID === sessionId) {
+          accept({ type: "message.part.updated", properties: { sessionID: sessionId, part } });
+        }
+      }
+      finish();
     } catch {
-      scheduleBeginCheck();
+      if (streamClosed) {
+        if (!settled && !cancelled) lose(`${closedReason} The server's final status could not be read; its outcome could not be confirmed.`);
+      } else scheduleBeginCheck();
+    } finally {
+      checking = false;
     }
   };
   const scheduleBeginCheck = (): void => {
-    if (settled || begun || beginCheck !== undefined) return;
-    beginCheck = setTimeout(() => void checkBegun(), options.beginCheckMs ?? 60_000);
+    if (settled || cancelled || (!streamClosed && begun) || beginCheck !== undefined) return;
+    beginCheck = setTimeout(() => void checkBegun(), streamClosed ? options.streamClosePollMs ?? 250 : options.beginCheckMs ?? 60_000);
   };
 
   const children = new Set<string>();
@@ -423,6 +483,20 @@ export function startOpenCodeServeRun(options: OpenCodeServeRunOptions): Runtime
         if (isObject(event)) accept(event);
       }
     }
+    if (!settled && !cancelled) {
+      streamClosed = true;
+      flushPartials();
+      if (beginCheck !== undefined) clearTimeout(beginCheck);
+      beginCheck = undefined;
+      if (sessionId === undefined || !prompted) {
+        lose(`${closedReason} Its outcome could not be confirmed.`);
+        return;
+      }
+      streamCloseTimeout = setTimeout(() => {
+        if (!settled && !cancelled) lose(`${closedReason} ${busy ? "The session was still busy" : "The status check did not finish"} before the recovery deadline; its outcome could not be confirmed.`);
+      }, options.streamCloseTimeoutMs ?? 10_000);
+      await checkBegun();
+    }
   };
 
   const begin = async (): Promise<void> => {
@@ -438,6 +512,8 @@ export function startOpenCodeServeRun(options: OpenCodeServeRunOptions): Runtime
       sessionId = isObject(body) ? text(body.id) : undefined;
       if (!created.ok || sessionId === undefined) throw new Error("OpenCode's server would not start a session.");
     }
+    // Session creation may finish after the event stream was already lost.
+    if (settled || cancelled) return;
     if (options.slashCommand !== undefined) {
       // Answered only when the command's turn is over, so it is not awaited:
       // the turn is read from the event stream like any other, and a refusal
@@ -495,9 +571,8 @@ export function startOpenCodeServeRun(options: OpenCodeServeRunOptions): Runtime
     }
     // Asked to stop first, so the session is left settled for a later turn;
     // the server goes either way.
-    void call(`/session/${encodeURIComponent(sessionId)}/abort`).catch(() => undefined).finally(() => {
-      setTimeout(finish, 1_500);
-    });
+    stopTimeout = setTimeout(finish, 1_500);
+    void call(`/session/${encodeURIComponent(sessionId)}/abort`).catch(() => undefined);
   };
   if (options.signal !== undefined) {
     if (options.signal.aborted) stop();
