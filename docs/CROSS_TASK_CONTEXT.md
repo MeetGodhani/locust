@@ -213,6 +213,9 @@ continue; report exact validation results, and say what was not run.
 - Limits: controlled fake-server and captured-part tests, not a live provider
   turn, packaged UI, process-tree termination drive, macOS test or release.
   Next: review the focused patch for Issue #2 and run ordinary upstream CI.
+- Merged: squashed as `8b8fc884` after the PR's CI (tests and public guard)
+  passed and a local rerun on main (the 36 tests, the adapter suite and all
+  ten mutation controls), for 0.786.
 
 ### 2026-10-17 — MCP follow-up startup claim (MeetGodhani)
 
