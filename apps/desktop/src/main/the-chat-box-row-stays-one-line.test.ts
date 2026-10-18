@@ -10,7 +10,7 @@ import { describe, expect, it } from 'vitest'
  * the model chip (metal-composer drive, packaged 0.368; one line on 0.29x).
  * Below a 720px box the folder chip steps down to its icon first: its name is
  * in the title bar and in the chip's hover, and is kept for a screen reader.
- * A missing folder keeps its words, because they are a warning.
+ * A missing folder keeps its words, because they are a warning; so does a folder like .claude, in amber (0.790).
  */
 const css = readFileSync(new URL('../renderer/src/shell.css', import.meta.url), 'utf8')
 // Found without writing a brace here (the check that every test asserts
@@ -18,7 +18,7 @@ const css = readFileSync(new URL('../renderer/src/shell.css', import.meta.url), 
 const OPEN = String.fromCharCode(123)
 const CLOSE = String.fromCharCode(125)
 const query = css.indexOf(`@container (max-width: 720px) ${OPEN}`)
-const selector = '.lc-composer__controls .lc-control--folder:not(.is-missing) .lc-control__folder'
+const selector = '.lc-composer__controls .lc-control--folder:not(.is-missing):not(.is-caution) .lc-control__folder'
 const at = css.indexOf(selector, query)
 const rule = at < 0 ? '' : css.slice(at, css.indexOf(CLOSE, at))
 

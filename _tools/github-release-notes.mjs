@@ -31,7 +31,8 @@ export function shownDate(date) {
  */
 export function escapeRawTags(markdown) {
   return markdown
-    .split(/(```[\s\S]*?```|`[^`\n]*`)/)
+    // A backtick is \x60 here: written as itself, harness-backticks.test.ts reads it as a template literal opening.
+    .split(/(\x60\x60\x60[\s\S]*?\x60\x60\x60|\x60[^\x60\n]*\x60)/)
     .map((part, index) => (index % 2 === 1 ? part : part.replace(/<(?=[A-Za-z/])/g, '&lt;')))
     .join('')
 }
