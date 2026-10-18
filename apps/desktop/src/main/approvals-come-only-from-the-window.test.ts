@@ -62,9 +62,10 @@ describe('who may answer an approval', () => {
       return ''
     }
     expect(calls.map(({ at }) => enclosing(at)).sort()).toEqual(['APPROVAL_RULE_FROM_CARD_CHANNEL', 'answerByDecision', 'answerByDecision', 'decideApproval'])
-    // decideApproval is the person's: their click in the window, or their tap on their paired phone (0.775).
+    // The editor's private API owns only new turns minted under its per-session capability. The MCP bridge
+    // offers no such tool. Its once-only answer uses the same guarded path as the window and paired phone.
     const decideCalls = index.map((line, at) => ({ line, at })).filter(({ line }) => /decideApproval\(/.test(line))
-    expect(decideCalls.map(({ at }) => (/ipcMain\.handle\(MISSION_APPROVAL_DECIDE_CHANNEL/.test(index[at - 2] ?? '') ? 'window' : /decide: async \(approvalId, approve\)/.test(index[at - 1] ?? '') ? 'phone' : `line ${String(at + 1)}`))).toEqual(['window', 'phone'])
+    expect(decideCalls.map(({ at }) => (/ipcMain\.handle\(MISSION_APPROVAL_DECIDE_CHANNEL/.test(index[at - 2] ?? '') ? 'window' : /decide: async \(approvalId, approve\)/.test(index[at - 1] ?? '') ? 'phone' : /answer: async \(approvalId, approve\)/.test(index[at - 1] ?? '') ? 'editor' : `line ${String(at + 1)}`))).toEqual(['window', 'editor', 'phone'])
     for (const channel of ['MISSION_APPROVAL_DECIDE_CHANNEL', 'APPROVAL_RULE_FROM_CARD_CHANNEL']) {
       const handler = index.findIndex((line) => line.includes(`ipcMain.handle(${channel}`))
       expect(index[handler + 1], channel).toContain('fromOwnWindow(event)')

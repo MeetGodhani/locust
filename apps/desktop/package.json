@@ -25,6 +25,7 @@
     "voice-glow": "0.3.0"
   },
   "devDependencies": {
+    "@teammate/cli": "workspace:*",
     "@teammate/mission-store": "workspace:*",
     "@teammate/runtime-adapters": "workspace:*",
     "@types/node": "^24.0.0",

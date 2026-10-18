@@ -7,7 +7,7 @@ as a short account of what was planned and what was built instead.
 ## What runs where
 
 Locust is one Electron application (`apps/desktop`) with three parts, and two
-workspace packages it is built from (`pnpm-workspace.yaml`: `apps/*` and
+workspace packages plus a command-line package (`pnpm-workspace.yaml`: `apps/*` and
 `packages/*`).
 
 **The main process** (`apps/desktop/src/main/`) owns everything that touches
@@ -34,6 +34,21 @@ came from Locust's own window and its top frame (`fromOwnWindow` in
 `main/index.ts`): a request from a previewed page's frame is refused.
 
 So the window can show, and ask. It cannot do.
+
+**The terminal and ACP editors** (`packages/cli`) reach the existing opt-in,
+authenticated loopback MCP listener, never an agent directly. The `locust`
+command lists teammates and recent status, streams a new conversation's text,
+and cancels its own turn. `locust acp` presents that same client as an ACP v1
+agent for editors. A private API (`main/locust-cli-sessions.ts`), not tools in
+the MCP bridge, issues a process-local capability for each new conversation.
+Cards wait in the window unless the person turns on Let editors answer cards
+for their own turns (Settings, shown once an editor has connected): every app
+connected to Locust holds the key a session is opened with. With it on, an
+editor can answer only its own current action's card, once, through the
+window's guarded decision path; questions stay in Locust. Existing window,
+phone and MCP conversations cannot be adopted. A lost heartbeat cancels owned
+work, including a late start. No editor filesystem or terminal is offered,
+and no agent credentials or global configuration are read or changed.
 
 Home's decorative cover holds its current frame after 45 seconds without
 pointer, keyboard, wheel or arriving run activity, and immediately while

@@ -29,7 +29,8 @@ import { createVoiceSettingsStore } from './voice-settings.js'
 import { MCP_CONNECTION_FILE, createLocustMcpHost } from './locust-mcp-host.js'
 import { claudeAppConfigFile, claudeAppStartedAt, createClaudeAppConnector, relaunchClaudeApp } from './claude-app-connection.js'
 import { createLocustMcpTools } from './locust-mcp-tools.js'
-import { LOCUST_MCP_CLAUDE_APP, LOCUST_MCP_CLAUDE_APP_RESTART, LOCUST_MCP_CLAUDE_APP_SET, LOCUST_MCP_GET, LOCUST_MCP_SET, LOCUST_MCP_SET_OWN_MODE } from '../shared/locust-mcp.js'
+import { createLocustCliSessions } from './locust-cli-sessions.js'
+import { LOCUST_MCP_CLAUDE_APP, LOCUST_MCP_CLAUDE_APP_RESTART, LOCUST_MCP_CLAUDE_APP_SET, LOCUST_MCP_GET, LOCUST_MCP_SET, LOCUST_MCP_SET_EDITOR_ANSWERS, LOCUST_MCP_SET_OWN_MODE } from '../shared/locust-mcp.js'
 import { createPageServer, fromPagePreview, pageMayReach, PAGE_SCHEME } from './page-preview.js'
 import { CANCEL_SCRIPT, captureRectOf, pageFrameOf, pickInFrame } from './page-pick.js'
 import { createRuntimeCommands } from './runtime-commands.js'
@@ -8639,8 +8640,49 @@ if (!ownsSingleInstanceLock) {
       routineSteps: () => routineRunner?.running() ?? [],
       routineLastStep: id => routineLastStep.get(id)
     })
+    const cliSessions = createLocustCliSessions({
+      teammates: async () => {
+        const list = await listTeammates()
+        if (!list.ok) throw new Error(list.error.message)
+        return list.data.teammates.map(t => ({ id: t.teammateId, name: t.name, runtime: t.route?.runtime ?? null,
+          model: t.route?.model ?? null, runs_in: mcpHost.ownMode() ? t.route?.mode ?? 'ask' : 'ask' }))
+      },
+      workspace: () => workspaceChosen ? workspacePath : undefined,
+      start: async (request, update) => {
+        const response = await startMission(request, event => { sendToWindow(event); update(event) }, { kind: 'mcp' })
+        if (response.ok) sendToWindow({ kind: 'mission-started', runId: response.data.runId, missionId: response.data.missionId,
+          teammateId: request.teammateId, prompt: request.prompt, data: response.data, startedBy: { kind: 'mcp' } })
+        return response
+      },
+      cancel: runId => { if (!codexMissions.cancel(runId).ok) antigravityMissions.cancel(runId) },
+      approvals: () => raisedApprovals.waiting().map(a => a.request),
+      // Off until the person turns on Let editors answer cards for their own turns (0.790): cards wait in the window.
+      editorAnswers: () => mcpHost.editorAnswers(),
+      opened: () => { void mcpHost.noteEditor() },
+      // Only cliSessions' capability-checked current turn reaches this, never a tool in the MCP bridge.
+      answer: async (approvalId, approve) => {
+        const answered = await decideApproval({ approvalId, decision: approve ? 'approve-once' : 'deny' })
+        const target = approvalWindow
+        if (answered && target && !target.isDestroyed() && !target.webContents.isDestroyed()) target.webContents.send(MISSION_APPROVAL_WITHDRAWN_CHANNEL, approvalId)
+        return answered
+      },
+      status: async () => {
+        const history = await readMissionHistory(missionLedger, undefined, workspacePath)
+        if (!history.ok) throw new Error(history.error.message)
+        const owners = await teammates.missionOwners()
+        const team = await teammates.list()
+        return { workspace: workspacePath, turns: history.data.missions.slice(0, 50).map(mission => ({
+          missionId: mission.missionId,
+          teammate: team.find(t => t.teammateId === owners[mission.missionId])?.name ?? 'A teammate no longer here',
+          state: raisedApprovals.waitingOn(mission.missionId) ? 'waiting' as const
+            : codexMissions.hasMission(mission.missionId) || antigravityMissions.liveMissionIds().includes(mission.missionId) ? 'running' as const : mission.phase
+        })) }
+      }
+    })
     const mcpHost = createLocustMcpHost({ directory: app.getPath('userData'), node: process.execPath,
-      bridge: app.isPackaged ? join(process.resourcesPath, 'locust-mcp-bridge.mjs') : join(__dirname, '../../resources/locust-mcp-bridge.mjs'), call: mcpTools })
+      bridge: app.isPackaged ? join(process.resourcesPath, 'locust-mcp-bridge.mjs') : join(__dirname, '../../resources/locust-mcp-bridge.mjs'),
+      call: (name, args) => name.startsWith('cli/') ? cliSessions.call(name, args) : mcpTools(name, args) })
+    app.once('will-quit', () => cliSessions.dispose())
     /*
      * THE CALL'S COPY (0.739): what a voice call's Codex hands work over with. The same tools another app gets,
      * but a turn runs in the teammate's own mode -- the person asked for it aloud, in Locust, and heard it read
@@ -8764,6 +8806,7 @@ if (!ownsSingleInstanceLock) {
     ipcMain.handle(LOCUST_MCP_GET, event => fromOwnWindow(event) ? mcpHost.settings() : { enabled: false, ownMode: false })
     ipcMain.handle(LOCUST_MCP_SET, (event, enabled: unknown) => fromOwnWindow(event) ? mcpHost.setEnabled(enabled) : { enabled: false, ownMode: false })
     ipcMain.handle(LOCUST_MCP_SET_OWN_MODE, (event, ownMode: unknown) => fromOwnWindow(event) ? mcpHost.setOwnMode(ownMode) : { enabled: false, ownMode: false })
+    ipcMain.handle(LOCUST_MCP_SET_EDITOR_ANSWERS, (event, editorAnswers: unknown) => fromOwnWindow(event) ? mcpHost.setEditorAnswers(editorAnswers) : { enabled: false, ownMode: false })
     // Locust in the Claude app's tools, in one press (0.740): Add turns the local server on and writes the one entry.
     const mcpBridge = app.isPackaged ? join(process.resourcesPath, 'locust-mcp-bridge.mjs') : join(__dirname, '../../resources/locust-mcp-bridge.mjs')
     const claudeApp = createClaudeAppConnector({

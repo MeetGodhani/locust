@@ -24,6 +24,7 @@ export function LocustMcpSettings({ heading, api = typeof window === 'undefined'
   }
   const toggle = () => change(current => api!.setEnabled(!current.enabled))
   const toggleOwnMode = () => change(current => api!.setOwnMode(!current.ownMode))
+  const toggleEditorAnswers = () => change(current => api!.setEditorAnswers!(current.editorAnswers !== true))
   /** One press: Add turns the server on and puts Locust in Claude's tools; Remove takes it out; Restart closes and reopens Claude. */
   const pressClaude = async (what: 'add' | 'remove' | 'restart') => {
     if (!api || busy) return
@@ -54,10 +55,24 @@ export function LocustMcpSettings({ heading, api = typeof window === 'undefined'
       <div className="lc-settingline__text">
         <h3 className="lc-settings__heading">Use each teammate's own mode</h3>
         <p className="lc-settings__lede">{state.ownMode
-          ? 'On. A turn another app starts runs in the mode the teammate is set to here, so it can edit files. Approval cards appear in this window and only you can answer them; Auto runs only if Auto is on in Settings.'
+          ? `On. A turn another app starts runs in the mode the teammate is set to here, so it can edit files. ${state.editorAnswers === true ? 'Approval cards appear in this window, and an editor can answer the ones for turns it started.' : 'Approval cards appear in this window and only you can answer them.'} Auto runs only if Auto is on in Settings.`
           : 'Off. Every turn another app starts is Ask mode (read only), whatever mode the teammate is set to.'}</p>
       </div>
       <button type="button" className={`lc-switch${state.ownMode ? ' is-on' : ''}`} role="switch" aria-label="Use each teammate's own mode" aria-checked={state.ownMode} disabled={busy} onClick={() => { void toggleOwnMode() }}><span /></button>
+    </div>}
+    {/*
+      * EDITORS ANSWER ONLY WHEN YOU SAY SO (0.790). Every app connected to Locust holds the key an editor session is
+      * opened with, so an editor answering its own turn's cards is the person's choice, like pairing a phone. Shown
+      * once an editor has connected: nobody who has never used one reads about it.
+      */}
+    {state?.enabled && (state.editorSeen === true || state.editorAnswers === true) && <div className="lc-settingline lc-settingline--sub">
+      <div className="lc-settingline__text">
+        <h3 className="lc-settings__heading">Let editors answer cards for their own turns</h3>
+        <p className="lc-settings__lede">{state.editorAnswers === true
+          ? 'On. An editor that starts a turn can approve or deny that turn’s cards there. Questions are still answered here, and no app can answer a card for a turn it did not start.'
+          : 'Off. Cards for a turn an editor starts wait in this window, and only you answer them.'}</p>
+      </div>
+      <button type="button" className={`lc-switch${state.editorAnswers === true ? ' is-on' : ''}`} role="switch" aria-label="Let editors answer cards for their own turns" aria-checked={state.editorAnswers === true} disabled={busy || api?.setEditorAnswers === undefined} onClick={() => { void toggleEditorAnswers() }}><span /></button>
     </div>}
     {/*
       * THE CLAUDE APP, IN ONE PRESS (0.740). Colin: "asking me to do the pythagorean theorem for a basic feature

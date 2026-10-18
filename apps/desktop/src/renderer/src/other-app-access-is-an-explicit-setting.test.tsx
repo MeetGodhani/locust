@@ -99,6 +99,26 @@ describe('other-app access is an explicit setting', () => {
     expect(html).toContain('only you can answer them')
     expect(html).toContain('Auto runs only if Auto is on in Settings')
   })
+  it('shows the editor switch only once an editor has connected, off until a press, and says who answers', async () => {
+    const plain = api({ ...enabled, ownMode: true })
+    surface(plain); await Promise.resolve()
+    expect(renderToStaticMarkup(surface(plain))).not.toContain('Let editors answer cards')
+    hooks.values = []; hooks.mounted = false
+    const first: LocustMcpState = { ...enabled, ownMode: true, editorSeen: true }
+    const seen = { ...api(first), setEditorAnswers: vi.fn(async (editorAnswers: boolean) => ({ ...first, editorAnswers })) }
+    surface(seen); await Promise.resolve()
+    let html = renderToStaticMarkup(surface(seen))
+    expect(html).toContain('aria-label="Let editors answer cards for their own turns" aria-checked="false"')
+    expect(html).toContain('Cards for a turn an editor starts wait in this window, and only you answer them.')
+    expect(html).toContain('only you can answer them')
+    button(surface(seen), 2).onClick()
+    await vi.waitFor(() => expect(hooks.values[0]).toEqual({ ...first, editorAnswers: true }))
+    expect(seen.setEditorAnswers).toHaveBeenCalledWith(true)
+    expect(seen.setOwnMode).not.toHaveBeenCalled()
+    html = renderToStaticMarkup(surface(seen))
+    expect(html).toContain('An editor that starts a turn can approve or deny that turn’s cards there.')
+    expect(html).toContain('an editor can answer the ones for turns it started')
+  })
   it('keeps an externally sent message visible without turning it into relay instructions', () => {
     expect(turnPromptLine({ prompt: 'Review this.', startedBy: { kind: 'mcp' } })).toBe('Review this.')
   })

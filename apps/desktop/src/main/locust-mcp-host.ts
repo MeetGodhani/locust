@@ -108,11 +108,16 @@ export function createLocustMcpHost(options: {
   let disposed = false
   // Read by every tool call, so a turn started after the switch goes off is Ask.
   let ownMode = false
+  // Let editors answer cards for their own turns (0.790), and whether an editor has ever connected to show it.
+  let editorAnswers = false
+  let editorSeen = false
   let queue: Promise<unknown> = Promise.resolve()
-  const state = (message?: string): LocustMcpState => ({ enabled: server !== undefined, ownMode, ...(server === undefined ? {} : setup), ...(message === undefined ? {} : { message }) })
+  const state = (message?: string): LocustMcpState => ({ enabled: server !== undefined, ownMode,
+    ...(editorAnswers ? { editorAnswers } : {}), ...(editorSeen ? { editorSeen } : {}),
+    ...(server === undefined ? {} : setup), ...(message === undefined ? {} : { message }) })
   const save = async (): Promise<void> => {
     await mkdir(options.directory, { recursive: true })
-    await writeFile(settings + '.tmp', JSON.stringify({ enabled: server !== undefined, ownMode }), 'utf8')
+    await writeFile(settings + '.tmp', JSON.stringify({ enabled: server !== undefined, ownMode, ...(editorAnswers ? { editorAnswers } : {}), ...(editorSeen ? { editorSeen } : {}) }), 'utf8')
     await replaceFile(settings + '.tmp', settings)
   }
   const stop = async (): Promise<void> => {
@@ -163,9 +168,11 @@ export function createLocustMcpHost(options: {
       if (disposed || server !== undefined) return state()
       await rm(connection, { force: true }) // a crashed process's token is never reused
       try {
-        const saved = JSON.parse(await readFile(settings, 'utf8')) as { readonly enabled?: unknown; readonly ownMode?: unknown }
-        // Only a literal true widens anything; a missing or odd value is Ask.
+        const saved = JSON.parse(await readFile(settings, 'utf8')) as { readonly enabled?: unknown; readonly ownMode?: unknown; readonly editorAnswers?: unknown; readonly editorSeen?: unknown }
+        // Only a literal true widens anything; a missing or odd value is Ask, and cards answered only here.
         ownMode = saved.ownMode === true
+        editorAnswers = saved.editorAnswers === true
+        editorSeen = saved.editorSeen === true
         if (saved.enabled === true) await start()
       } catch { /* Missing, unreadable or failed setup stays off. */ }
       return state()
@@ -194,7 +201,28 @@ export function createLocustMcpHost(options: {
         return state('The mode setting could not be saved. It is unchanged.')
       }
     }),
+    setEditorAnswers: (next: unknown) => serial(async () => {
+      if (disposed || typeof next !== 'boolean') return state('That setting was not changed.')
+      const before = editorAnswers
+      editorAnswers = next
+      try {
+        await save()
+        return state()
+      } catch {
+        // As with the mode: not saved means not changed.
+        editorAnswers = before
+        return state('The setting could not be saved. It is unchanged.')
+      }
+    }),
+    /** An editor opened a session: kept, so Settings shows its switch from now on. */
+    noteEditor: () => serial(async () => {
+      if (disposed || editorSeen) return state()
+      editorSeen = true
+      try { await save() } catch { editorSeen = false }
+      return state()
+    }),
     ownMode: (): boolean => ownMode,
+    editorAnswers: (): boolean => editorAnswers,
     dispose: async (): Promise<void> => { disposed = true; await queue; await stop() }
   }
 }

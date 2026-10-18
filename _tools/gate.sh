@@ -47,6 +47,7 @@ LOGS="$(mktemp -d)"
 node "$W/_tools/vendor-recall.mjs" > /dev/null
 cd "$W/packages/runtime-adapters" && npx tsc -p tsconfig.json
 cd "$W/packages/mission-store" && npx tsc -p tsconfig.json
+cd "$W/packages/cli" && npx tsc -p tsconfig.json
 cd "$W/apps/desktop"
 npx tsc --noEmit -p tsconfig.node.json
 npx tsc --noEmit -p tsconfig.web.json
@@ -70,6 +71,7 @@ red() {
 (cd "$W" && pnpm -r --filter "./packages/**" run build > "$LOGS/pkg.log" 2>&1) || { tail -20 "$LOGS/pkg.log"; echo "GATE: package build FAILED (full logs kept in $LOGS)"; exit 1; }
 suite ra "$W/packages/runtime-adapters" || red ra adapters
 suite ms "$W/packages/mission-store" || red ms mission-store
+suite cli "$W/packages/cli" || red cli cli
 RETRIED=
 if ! suite d "$W/apps/desktop"; then
   if again="$(node "$SUPPORT" retry-files "$LOGS/d.log")"; then
@@ -94,9 +96,9 @@ fi
 echo "GATE: app build ok"
 
 if [ -z "$RETRIED" ]; then
-  grep -h "Tests " "$LOGS/ra.log" "$LOGS/ms.log" "$LOGS/d.log"
+  grep -h "Tests " "$LOGS/ra.log" "$LOGS/ms.log" "$LOGS/cli.log" "$LOGS/d.log"
 else
-  grep -h "Tests " "$LOGS/ra.log" "$LOGS/ms.log"
+  grep -h "Tests " "$LOGS/ra.log" "$LOGS/ms.log" "$LOGS/cli.log"
   echo "GATE: desktop first run -- $(grep -h '^ *Tests ' "$LOGS/d.log" | sed 's/^ *//')"
   echo "GATE: desktop retry run -- $(grep -h '^ *Tests ' "$LOGS/d2.log" | sed 's/^ *//')  (${#files[@]} timed-out file(s), run again)"
   echo "GATE: note -- the desktop suite needed one timeout-only retry; the files are named above"

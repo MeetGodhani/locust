@@ -3,7 +3,7 @@ import { APPEARANCE_CHANGED_CHANNEL, APPEARANCE_GET_CHANNEL, APPEARANCE_SET_CHAN
 import type { AppearanceState, ThemeChoice } from '../shared/appearance.js'
 import { ACP_AGENTS_LIST_CHANNEL, ACP_AGENTS_REMOVE_CHANNEL, ACP_AGENTS_SAVE_CHANNEL, ACP_AGENTS_TEST_CHANNEL } from '../shared/acp-agents.js'
 import { PHONE_FORGET_CHANNEL, PHONE_SET_ENABLED_CHANNEL, PHONE_SETTINGS_CHANNEL } from '../shared/phone.js'
-import { LOCUST_MCP_CLAUDE_APP, LOCUST_MCP_CLAUDE_APP_RESTART, LOCUST_MCP_CLAUDE_APP_SET, LOCUST_MCP_GET, LOCUST_MCP_SET, LOCUST_MCP_SET_OWN_MODE } from '../shared/locust-mcp.js'
+import { LOCUST_MCP_CLAUDE_APP, LOCUST_MCP_CLAUDE_APP_RESTART, LOCUST_MCP_CLAUDE_APP_SET, LOCUST_MCP_GET, LOCUST_MCP_SET, LOCUST_MCP_SET_EDITOR_ANSWERS, LOCUST_MCP_SET_OWN_MODE } from '../shared/locust-mcp.js'
 import { VOICE_READY, VOICE_DOWNLOAD, VOICE_TRANSCRIBE, VOICE_CANCEL, VOICE_PROGRESS, VOICE_SETTINGS_READ, VOICE_SETTINGS_SAVE, VOICE_OPENAI_CONSENT } from '../shared/voice.js'
 import { CALLS_LIST, CALLS_SAVE } from '../shared/calls.js'
 import { DIAGRAM_DRAW_CHANNEL, type DiagramResponse } from '../shared/diagram.js'
@@ -453,6 +453,7 @@ const desktopApi: DesktopApi = {
     settings: () => ipcRenderer.invoke(LOCUST_MCP_GET),
     setEnabled: (enabled) => ipcRenderer.invoke(LOCUST_MCP_SET, enabled),
     setOwnMode: (ownMode) => ipcRenderer.invoke(LOCUST_MCP_SET_OWN_MODE, ownMode),
+    setEditorAnswers: (editorAnswers) => ipcRenderer.invoke(LOCUST_MCP_SET_EDITOR_ANSWERS, editorAnswers),
     claudeApp: () => ipcRenderer.invoke(LOCUST_MCP_CLAUDE_APP),
     setClaudeApp: (added) => ipcRenderer.invoke(LOCUST_MCP_CLAUDE_APP_SET, added),
     restartClaudeApp: () => ipcRenderer.invoke(LOCUST_MCP_CLAUDE_APP_RESTART)

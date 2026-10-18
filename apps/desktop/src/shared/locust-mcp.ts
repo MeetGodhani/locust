@@ -1,6 +1,7 @@
 export const LOCUST_MCP_GET = 'locust-mcp:get'
 export const LOCUST_MCP_SET = 'locust-mcp:set'
 export const LOCUST_MCP_SET_OWN_MODE = 'locust-mcp:set-own-mode'
+export const LOCUST_MCP_SET_EDITOR_ANSWERS = 'locust-mcp:set-editor-answers'
 /** Locust in the Claude app's tools (0.740): read where it stands, and add or remove it in one press. */
 export const LOCUST_MCP_CLAUDE_APP = 'locust-mcp:claude-app'
 export const LOCUST_MCP_CLAUDE_APP_SET = 'locust-mcp:claude-app-set'
@@ -31,6 +32,13 @@ export interface LocustMcpState {
    * window and Auto only where Settings allows it (0.703).
    */
   readonly ownMode: boolean
+  /**
+   * Off (the default): a card for a turn an editor started through the locust command waits in this window, and
+   * only the person answers it. On: that editor may approve or deny the cards of the turns it started (0.790).
+   */
+  readonly editorAnswers?: boolean
+  /** An editor has connected to this Locust at least once, so Settings shows the switch above. */
+  readonly editorSeen?: boolean
   readonly claudeCommand?: string
   readonly codexConfig?: string
   /** OpenClaw's `openclaw mcp add` line (0.754): its chat apps reach the team through it. */
@@ -41,6 +49,7 @@ export interface LocustMcpApi {
   settings(): Promise<LocustMcpState>
   setEnabled(enabled: boolean): Promise<LocustMcpState>
   setOwnMode(ownMode: boolean): Promise<LocustMcpState>
+  setEditorAnswers?(editorAnswers: boolean): Promise<LocustMcpState>
   claudeApp?(): Promise<ClaudeAppConnection>
   setClaudeApp?(added: boolean): Promise<ClaudeAppResult>
   /** Close the Claude app and open it again, so it reads Locust's entry. */

@@ -215,6 +215,19 @@ reads of your folder stays on this machine.
   is asked to that listener from wherever it was asked: with OpenClaw's line
   (0.754), a message you send OpenClaw from a chat app on your phone reaches
   your teammates, through OpenClaw's own connections, not Locust's.
+- **The locust command and ACP editors** (`packages/cli`) use that same opt-in
+  loopback listener and only Locust's connection file. No new port or external
+  destination is introduced. The private CLI API grants a per-session
+  capability for a new conversation; an editor can cancel that conversation,
+  and answer its own current action's approval once only if you turned on Let
+  editors answer cards for their own turns (off by default; every app
+  connected to Locust holds the key a session is opened with). The existing MCP bridge
+  does not advertise those methods or answer approvals. Questions stay in
+  Locust. Editor disconnects and lost heartbeat leases cancel owned work;
+  neither prompts nor uncertain requests are automatically retried. The
+  editor supplies text, never programs or an MCP server to execute. Turns
+  preserve the local server's Ask/own-mode choice and the app's existing
+  permission and monthly-limit guards.
 - **Your phone** (Settings > General) is off by default, and it is the one
   listener that is not on `127.0.0.1` only. When enabled, Locust listens for
   your home network on port 47740 (any free port when that one is taken), and
