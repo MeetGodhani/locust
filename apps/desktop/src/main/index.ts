@@ -227,7 +227,7 @@ import { createAttention, finishFrom } from './attention.js'
 import { boundedShutdown } from './bounded-shutdown.js'
 import { createPermissionHost } from './permission-host.js'
 import { codexCommandGuardConfig, otherCodexHooks, writeCommandGuard, writeCopilotCommandGuard, writeOpenCodeCommandGuard } from './command-guard.js'
-import { chooseFolderCaution, isInsideDirectory, notATeammateFolder, readRememberedWorkspace, resolveWorkspacePath, WORKSPACE_ARGUMENT, writeRememberedWorkspace, workspaceIdFor } from './workspace.js'
+import { chooseFolderCaution, isInsideDirectory, notATeammateFolder, readConfirmedFolders, readRememberedWorkspace, resolveWorkspacePath, sameFolder, WORKSPACE_ARGUMENT, writeConfirmedFolders, writeRememberedWorkspace, workspaceIdFor } from './workspace.js'
 import { createUnwrittenAnswers } from './approval-record-note.js'
 import { createRaisedApprovals } from './raised-approvals.js'
 import { createOutstandingChecks } from './outstanding-checks.js'
@@ -361,6 +361,7 @@ import {
   TEAMMATE_CONNECTORS_CHANNEL,
   TEAMMATE_FOLDER_CHANNEL,
   WORKSPACE_CHOOSE_CHANNEL,
+  WORKSPACE_CONFIRM_CHANNEL,
   FOLDER_LIST_CHANNEL,
   SIDE_ASK_CHANNEL,
   FOLDER_SWITCH_CHANNEL,
@@ -1872,6 +1873,21 @@ if (!ownsSingleInstanceLock) {
       memoryWorkspaceName = basename(full) || full
       await folders.use(full)
       return { path: full, id: memoryWorkspaceId, name: memoryWorkspaceName }
+    }
+    /*
+     * FOLDERS LIKE HOME OR .claude, SAID YES TO (0.790, workspace.ts startHereCaution): the person is asked once per
+     * folder, in the picker or before the first conversation there, and the answer is kept here.
+     */
+    const folderCautionsFile = join(app.getPath('userData'), 'folder-cautions.json')
+    let confirmedFolders = readConfirmedFolders(folderCautionsFile)
+    const folderCaution = (folder: string): string | undefined =>
+      notATeammateFolder(folder, app.getPath('home'), process.platform, process.env.SystemRoot)
+    const folderConfirmed = (folder: string): boolean => confirmedFolders.some((kept) => sameFolder(kept, folder, process.platform))
+    const confirmFolder = async (folder: string): Promise<void> => {
+      if (folderConfirmed(folder)) return
+      confirmedFolders = [...confirmedFolders, resolvePath(folder)]
+      // Not kept means asked again next time, which is the safe way round.
+      await writeConfirmedFolders(folderCautionsFile, confirmedFolders).catch(() => undefined)
     }
     /*
      * A folder id with no known path, from before folders were kept: found in
@@ -4682,6 +4698,14 @@ if (!ownsSingleInstanceLock) {
       })
     })
 
+    // Start here, on the window's question about a folder like home or .claude (0.790): the CURRENT folder is kept as
+    // said yes to. The window cannot name another, and a project folder has nothing to say yes to.
+    ipcMain.handle(WORKSPACE_CONFIRM_CHANNEL, async (event) => {
+      if (!fromOwnWindow(event) || !workspaceChosen || folderCaution(workspacePath) === undefined) return false
+      await confirmFolder(workspacePath)
+      return true
+    })
+
     ipcMain.handle(WORKSPACE_CHOOSE_CHANNEL, async (event) => {
       const owner = BrowserWindow.fromWebContents(event.sender)
       if (owner === null || !fromOwnWindow(event)) {
@@ -4703,10 +4727,14 @@ if (!ownsSingleInstanceLock) {
         // refused (0.582, chooseFolderCaution). Launch adoption already
         // declined these; a folder picked here had no word at all.
         const why = notATeammateFolder(next, app.getPath('home'), process.platform, process.env.SystemRoot)
-        if (why === undefined) break
+        if (why === undefined || folderConfirmed(next)) break
         const caution = chooseFolderCaution(next, why)
         const answer = await dialog.showMessageBox(owner, { type: 'warning', message: caution.message, detail: caution.detail, buttons: [...caution.buttons], defaultId: 0, cancelId: 0, noLink: true })
-        if (answer.response === 1) break
+        // Said yes to here, so its first conversation does not ask again (0.790).
+        if (answer.response === 1) {
+          await confirmFolder(next)
+          break
+        }
       }
       if (isInsideDirectory(next, installDirectory, process.platform)) {
         return {
@@ -7934,6 +7962,8 @@ if (!ownsSingleInstanceLock) {
         workspaceName: workspaceChosen ? basename(workspacePath) || workspacePath : '',
         workspacePath: workspaceChosen ? workspacePath : '',
         workspaceMade,
+        // A folder like home or .claude (0.790): the folder chip says so, in amber, whatever was answered.
+        ...(workspaceChosen && folderCaution(workspacePath) !== undefined ? { workspaceCaution: folderCaution(workspacePath)! } : {}),
         // Where the receipts live. The renderer needs it for one thing: when a
         // write to the ledger fails, the card offers to open the folder, and
         // an offer to show someone a place has to know which place.
@@ -8602,10 +8632,21 @@ if (!ownsSingleInstanceLock) {
         } as const
       }
     }
-    ipcMain.handle(CODEX_MISSION_START_CHANNEL, (event, request: unknown) => {
+    ipcMain.handle(CODEX_MISSION_START_CHANNEL, async (event, request: unknown) => {
       const owner = BrowserWindow.fromWebContents(event.sender)
       if (!owner || !event.senderFrame || event.senderFrame.parent !== null) {
         return { ok: false, error: { code: 'INTERNAL_ERROR', message: 'The Codex mission request was rejected.' } } as const
+      }
+      /*
+       * A NEW CONVERSATION IN A FOLDER LIKE HOME OR .claude (0.790): not started until the person says so, once per
+       * folder, since a teammate reads such a folder as its project, sign-in files included. The window asks, in a
+       * card over the message box (Composer.tsx); its Start here comes back through WORKSPACE_CONFIRM_CHANNEL. A
+       * reply, an edited message or a cloud turn is not asked: the conversation has its folder, or works in none here.
+       */
+      const fresh = typeof request === 'object' && request !== null && !('followUpOf' in request) && !('rewind' in request) && (request as { readonly cloud?: unknown }).cloud !== true
+      const why = fresh && workspaceChosen && !folderConfirmed(workspacePath) ? folderCaution(workspacePath) : undefined
+      if (why !== undefined) {
+        return { ok: false, error: { code: 'FOLDER_NOT_CONFIRMED', message: `Not started: this is ${why}.`, folderCaution: why } } as const
       }
       return startMission(request, update => {
         if (!owner.isDestroyed() && !owner.webContents.isDestroyed()) owner.webContents.send(CODEX_MISSION_UPDATE_CHANNEL, update)

@@ -533,6 +533,11 @@ export interface AppInfo {
    */
   readonly workspaceMade: boolean
   /**
+   * The folder is no place for teammates (0.790): "your home folder", or ".claude, where the agents keep their own
+   * settings" (main/workspace.ts notATeammateFolder). The folder chip says so, in amber.
+   */
+  readonly workspaceCaution?: string
+  /**
    * Where the durable receipts are written. Carried so that the one card
    * about a ledger that cannot be written can offer to open the folder;
    * nothing else in the renderer needs it.
@@ -831,6 +836,8 @@ export type OpenInTerminalResponse =
 export const WORKSPACE_SETTINGS_READ_CHANNEL = 'workspace-settings:read'
 export const WORKSPACE_SETTINGS_WRITE_CHANNEL = 'workspace-settings:write'
 export const WORKSPACE_CHOOSE_CHANNEL = 'workspace:choose'
+/** Start here, on the window's question about a folder like home or `.claude` (0.790): the current folder is kept. */
+export const WORKSPACE_CONFIRM_CHANNEL = 'workspace:confirm'
 /** Every folder worked in, and the window's (0.458). */
 export const FOLDER_LIST_CHANNEL = 'folder:list'
 /** Ask a question on the side of a conversation: read-only, on a copy of its session (0.461). */
@@ -2423,6 +2430,11 @@ export type CodexMissionErrorCode =
    * there yet (0.768). Nothing was started; the window offers the one-click sign-in.
    */
   | 'CLOUD_SIGN_IN_NEEDED'
+  /**
+   * A new conversation in a folder like home or `.claude` that the person has not said yes to (0.790). Nothing was
+   * started; the words go back in the box, and the window asks once, over it: Choose another folder, or Start here.
+   */
+  | 'FOLDER_NOT_CONFIRMED'
 
 export interface CodexMissionError {
   readonly code: CodexMissionErrorCode
@@ -2439,6 +2451,8 @@ export interface CodexMissionError {
   readonly cloudSetup?: { readonly repo: string; readonly branch?: string; readonly permission?: true }
   /** On CLOUD_SIGN_IN_NEEDED only: which cloud computer, and which agent on it. */
   readonly cloudSignIn?: { readonly computer: string; readonly repo: string; readonly agent: CloudAgent }
+  /** On FOLDER_NOT_CONFIRMED only: why the folder is no place for teammates ("your home folder", ".claude, where ..."). */
+  readonly folderCaution?: string
   /**
    * On HANDOFF_REFUSED only: the refusal came before anything was stopped,
    * so the mission is still running where it was (M9). Without it the window
@@ -3856,6 +3870,8 @@ export interface DesktopApi {
   readWorkspaceSettings(): Promise<WorkspaceSettings>
   /** Pick the folder the teammates work in. Reopens the app there on success. */
   chooseWorkspace(): Promise<WorkspaceChooseResponse>
+  /** Start here on the question about a folder like home or `.claude` (0.790): true when the folder was kept. */
+  confirmWorkspace(): Promise<boolean>
   listFolders(): Promise<FolderListResponse>
   /** `of` is the conversation's (or the side chat's) latest turn; `question` counts from 1. */
   askOnTheSide(of: string, question: string, count: number): Promise<SideAskResponse>

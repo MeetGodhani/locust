@@ -42,6 +42,7 @@ describe('choosing a folder that is no place for teammates', () => {
     expect(picker).toContain('notATeammateFolder(next')
     expect(picker).toContain('chooseFolderCaution(next, why)')
     expect(picker).toMatch(/defaultId: 0, cancelId: 0/)
-    expect(picker).toContain('if (answer.response === 1) break')
+    // Working there anyway is kept (0.790), so the first conversation there does not ask again.
+    expect(picker).toMatch(/if \(answer\.response === 1\) \{\s+await confirmFolder\(next\)\s+break/)
   })
 })

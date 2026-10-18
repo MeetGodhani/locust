@@ -107,6 +107,7 @@ import {
   WORKSPACE_SETTINGS_READ_CHANNEL,
   WORKSPACE_SETTINGS_WRITE_CHANNEL,
   WORKSPACE_CHOOSE_CHANNEL,
+  WORKSPACE_CONFIRM_CHANNEL,
   FOLDER_LIST_CHANNEL,
   SIDE_ASK_CHANNEL,
   FOLDER_SWITCH_CHANNEL,
@@ -734,6 +735,7 @@ const desktopApi: DesktopApi = {
   readWorkspaceSettings: () =>
     ipcRenderer.invoke(WORKSPACE_SETTINGS_READ_CHANNEL) as Promise<WorkspaceSettings>,
   chooseWorkspace: () => ipcRenderer.invoke(WORKSPACE_CHOOSE_CHANNEL) as Promise<WorkspaceChooseResponse>,
+  confirmWorkspace: () => ipcRenderer.invoke(WORKSPACE_CONFIRM_CHANNEL) as Promise<boolean>,
   listFolders: () => ipcRenderer.invoke(FOLDER_LIST_CHANNEL) as Promise<FolderListResponse>,
   askOnTheSide: (of: string, question: string, count: number) => ipcRenderer.invoke(SIDE_ASK_CHANNEL, of, question, count) as Promise<SideAskResponse>,
   switchFolder: (id: string) => ipcRenderer.invoke(FOLDER_SWITCH_CHANNEL, id) as Promise<FolderSwitchResponse>,

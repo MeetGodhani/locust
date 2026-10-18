@@ -58,7 +58,9 @@ export const BACKED_UP_FILES = [
   // without this list each would come back as a conversation.
   'panel-runs.json',
   // Dark, Light or Match computer (0.789): a restored Locust looks the way its person chose.
-  'appearance.json'
+  'appearance.json',
+  // The folders like home or .claude the person said to work in anyway (0.790): a restore does not ask again.
+  'folder-cautions.json'
 ] as const
 
 /**

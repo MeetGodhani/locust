@@ -178,3 +178,37 @@ export async function writeRememberedWorkspace(file: string, path: string): Prom
   const record: RememberedWorkspaceFile = { schemaVersion: 1, path }
   await writeFile(file, `${JSON.stringify(record, null, 2)}\n`, 'utf8')
 }
+
+/*
+ * FOLDERS LIKE THESE, SAID YES TO (0.790). The picker asks when such a folder is chosen, but a folder can be the
+ * window's without that question -- picked again from the folder menu, or chosen before 0.582 -- and on 2026-10-18
+ * three handoffs started in `.claude` with nobody noticing. So the first conversation in one is asked about too, in
+ * the window (Composer.tsx), once per folder, as an editor asks once whether to trust one: the answers are kept here.
+ */
+interface FolderCautionsFile {
+  readonly schemaVersion: 1
+  /** The folders like these that the person said to work in anyway, each asked about once. */
+  readonly confirmed: readonly string[]
+}
+
+/** The folders the person said to work in anyway, or none when the file is missing or unreadable. */
+export function readConfirmedFolders(file: string): readonly string[] {
+  try {
+    const parsed: unknown = JSON.parse(readFileSync(file, 'utf8'))
+    if (typeof parsed !== 'object' || parsed === null) return []
+    const confirmed = (parsed as Partial<FolderCautionsFile>).confirmed
+    return Array.isArray(confirmed) ? confirmed.filter((folder): folder is string => typeof folder === 'string' && isAbsolute(folder)) : []
+  } catch {
+    return []
+  }
+}
+
+/** The same folder, not one inside it: confirming `.claude` says nothing about `.claude\skills`. */
+export function sameFolder(left: string, right: string, platform: NodeJS.Platform): boolean {
+  return isInsideDirectory(left, right, platform) && isInsideDirectory(right, left, platform)
+}
+
+export async function writeConfirmedFolders(file: string, confirmed: readonly string[]): Promise<void> {
+  const record: FolderCautionsFile = { schemaVersion: 1, confirmed }
+  await writeFile(file, `${JSON.stringify(record, null, 2)}\n`, 'utf8')
+}

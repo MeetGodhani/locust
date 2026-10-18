@@ -347,6 +347,14 @@ export interface ComposerProps {
   /** The whole path, for the chip's tooltip -- a name alone is ambiguous across projects. */
   readonly workspacePath: string | undefined
   readonly workspaceMade?: boolean
+  /** Why the folder is no place for teammates, when it is not (0.790): "your home folder", ".claude, where ...". */
+  readonly workspaceCaution?: string
+  /**
+   * The question before the first conversation in such a folder (0.790): the send came back unstarted, and the box
+   * asks over itself. Start here keeps the folder (onConfirmFolder) and sends what is in the box.
+   */
+  readonly folderQuestion?: { readonly name: string; readonly why: string }
+  readonly onConfirmFolder?: () => Promise<boolean>
   readonly onChooseFolder: () => void
   /**
    * Folders already worked in, newest first, for the chip's menu (0.458, as
@@ -466,6 +474,9 @@ export function Composer({
   workspaceName,
   workspacePath,
   workspaceMade = false,
+  workspaceCaution,
+  folderQuestion,
+  onConfirmFolder,
   onChooseFolder,
   folders = [],
   currentFolderId,
@@ -1131,6 +1142,8 @@ export function Composer({
    * control keeps its press, and a press on the field itself is the field's.
    */
   const field = useRef<HTMLTextAreaElement>(null)
+  // Start here on the folder question sends through the form itself, so it goes exactly as Send would (0.790).
+  const formRef = useRef<HTMLFormElement>(null)
   // Handed back (C9): the words and files return to the box, ready to send.
   useEffect(() => {
     if (handBack === undefined) return
@@ -1539,6 +1552,30 @@ export function Composer({
             </div>
           </div>
         )}
+        {/*
+          * BEFORE THE FIRST CONVERSATION IN A FOLDER LIKE .claude (0.790): asked here, over the box, once per folder.
+          * Start here keeps the folder and sends the words still in the box, as Send would; Choose another folder
+          * opens the picker, and the words wait.
+          */}
+        {folderQuestion !== undefined && (
+          <div className="lc-queued is-editing lc-folderask" role="group" aria-label={`Start this conversation in ${folderQuestion.name}?`}>
+            <div className="lc-queued__meta">
+              <Icon name="folder" size={12} />
+              <span className="lc-queued__note">
+                <span className="lc-folderask__question">Start this conversation in {folderQuestion.name}?</span>{' '}
+                This is {folderQuestion.why}, and a teammate here reads it as its project, sign-in files included.
+              </span>
+              <button type="button" className="lc-queued__action" onClick={onChooseFolder}>
+                Choose another folder
+              </button>
+              <button type="button" className="lc-queued__action" onClick={() => {
+                void onConfirmFolder?.().then((kept) => { if (kept) formRef.current?.requestSubmit() })
+              }}>
+                Start here
+              </button>
+            </div>
+          </div>
+        )}
         {editingEarlier !== undefined && (
           <div className="lc-queued is-editing" role="status" aria-live="polite">
             <div className="lc-queued__meta">
@@ -1874,7 +1911,7 @@ export function Composer({
             })}
           </div>
         )}
-        <form className="command-dock lc-composer__form" onSubmit={submit}>
+        <form ref={formRef} className="command-dock lc-composer__form" onSubmit={submit}>
           {cloud?.on === true && cloud.where === 'claude' && cloud.environment !== undefined && <CloudEnvironmentField {...cloud.environment} />}
           <VoiceBeam className={`lc-composerbeam${voice === 'listening' ? ' is-listening' : ''}`} active={voice === 'listening'} level={glowLevel} theme="auto" colorVariant="colorful" reach={1.5}>
           <div className="lc-composer__box" onMouseDown={pressBox}>
@@ -2194,15 +2231,18 @@ export function Composer({
                 )}
               <button
                 type="button"
-                className={`lc-control lc-control--folder${workspacePath === undefined ? ' is-missing' : ''}`}
+                className={`lc-control lc-control--folder${workspacePath === undefined ? ' is-missing' : workspaceCaution !== undefined ? ' is-caution' : ''}`}
                 aria-haspopup="menu"
                 aria-expanded={folderOpen}
                 title={
                   workspacePath === undefined
                     ? 'No folder chosen. Every teammate works inside one project folder.'
-                    : workspaceMade
-                      ? `Teammates work in ${workspacePath}. Locust made this folder; pick any other to work there instead.`
-                      : `New conversations work in ${workspacePath}`
+                    : workspaceCaution !== undefined
+                      // Amber, and said (0.790): three handoffs started in .claude on 2026-10-18 with nobody noticing.
+                      ? `New conversations work in ${workspacePath}. This is ${workspaceCaution}: a teammate here reads it as its project, sign-in files included. A project folder of its own is the safer place.`
+                      : workspaceMade
+                        ? `Teammates work in ${workspacePath}. Locust made this folder; pick any other to work there instead.`
+                        : `New conversations work in ${workspacePath}`
                 }
                 onClick={() => (folders.length === 0 ? onChooseFolder() : setFolderOpen(!folderOpen))}
               >

@@ -2562,6 +2562,10 @@ export default function App(): ReactElement {
   // Only the ledger-failure card reads this: it offers to open the folder.
   const [ledgerPath, setLedgerPath] = useState<string | undefined>(undefined)
   const [workspaceMade, setWorkspaceMade] = useState(false)
+  // A folder like home or .claude (0.790): the folder chip names why, in amber.
+  const [workspaceCaution, setWorkspaceCaution] = useState<string | undefined>(undefined)
+  // And the question over the box before its first conversation there, on the view it was asked from.
+  const [folderQuestion, setFolderQuestion] = useState<{ readonly why: string; readonly key: string | undefined } | undefined>(undefined)
   // A word about the folder, at shell level: a refused start, a refused
   // choice, or the reopen that follows a successful one.
   const [workspaceNotice, setWorkspaceNotice] = useState<string>()
@@ -3193,6 +3197,7 @@ export default function App(): ReactElement {
           setWorkspaceName(info.workspaceName)
           setWorkspacePath(info.workspacePath.length === 0 ? undefined : info.workspacePath)
           setWorkspaceMade(info.workspaceMade === true)
+          setWorkspaceCaution(info.workspaceCaution)
           setLedgerPath(info.ledgerPath.length === 0 ? undefined : info.ledgerPath)
         }
       })
@@ -5328,6 +5333,21 @@ export default function App(): ReactElement {
           startRefusal.current = `Not sent: ${response.error.message} Your message is back in the box.`
           return false
         }
+        /*
+         * A FOLDER LIKE HOME OR .claude, NOT YET SAID YES TO (0.790). Nothing started: the words go back in the box,
+         * and the box asks, in a card over it -- Choose another folder, or Start here, which sends them (Composer.tsx).
+         * In the window, not a Windows dialog: Colin, 2026-10-18, "maybe make it part of the app?".
+         */
+        if (response.error.code === 'FOLDER_NOT_CONFIRMED') {
+          setRuns((current) => {
+            const next = new Map(current)
+            next.delete(key)
+            return next
+          })
+          setShownKey((current) => (current === key ? previousKey : current))
+          setFolderQuestion({ why: response.error.folderCaution ?? workspaceCaution ?? 'a folder that is no place for teammates', key: previousKey })
+          return false
+        }
         // A ledger that cannot be written is the same failure whether it hits
         // on the FIRST write or the fortieth, and only the second one used to
         // reach the card that explains it. The first -- a ledger folder that
@@ -6443,10 +6463,17 @@ export default function App(): ReactElement {
         if (response.ok) {
           // A folder chosen is where the next conversation starts (0.458).
           setShownKey(undefined)
+          setFolderQuestion(undefined)
           refreshForFolder()
         } else if (response.error.code !== 'CANCELLED') setWorkspaceNotice(response.error.message)
       })
       .catch(() => setWorkspaceNotice('The folder could not be chosen. The workspace is unchanged.'))
+  }
+  /** Start here, on the question over the box (0.790): the folder is kept as said yes to, then the box sends. */
+  const confirmFolder = async (): Promise<boolean> => {
+    const kept = await window.desktop?.confirmWorkspace().catch(() => false) ?? false
+    if (kept) setFolderQuestion(undefined)
+    return kept
   }
   const historyById = useMemo(
     () => new Map(history.map((mission) => [mission.missionId, mission] as const)),
@@ -6650,6 +6677,9 @@ export default function App(): ReactElement {
       setWorkspaceName(info.workspaceName)
       setWorkspacePath(info.workspacePath.length === 0 ? undefined : info.workspacePath)
       setWorkspaceMade(info.workspaceMade === true)
+      setWorkspaceCaution(info.workspaceCaution)
+      // Another folder: the question, if any, was about the one before.
+      setFolderQuestion(undefined)
     }).catch(() => undefined)
     void bridge.readWorkspaceSettings().then((settings) => setCheckCommand(settings.checkCommand ?? '')).catch(() => undefined)
     refreshRuntimeSetup()
@@ -9618,6 +9648,8 @@ export default function App(): ReactElement {
             workspaceName={workspaceName.length === 0 ? undefined : workspaceName}
             workspacePath={workspacePath}
             workspaceMade={workspaceMade}
+            {...(workspaceCaution === undefined ? {} : { workspaceCaution })}
+            {...(folderQuestion === undefined || folderQuestion.key !== shownKey ? {} : { folderQuestion: { name: workspaceName, why: folderQuestion.why }, onConfirmFolder: confirmFolder })}
             onChooseFolder={chooseWorkspace}
             folders={folders.filter((folder) => folder.installFolder !== true)}
             {...(workspaceId === undefined ? {} : { currentFolderId: workspaceId })}
