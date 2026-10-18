@@ -11,6 +11,12 @@ Settings shows this file as What's new. An entry may group its changes under
 about when they arrive on it carries `<!-- big -->` on the line under its
 heading: the home screen then shows it once, as a splash.
 
+## 0.786.0 - 2026-10-18
+
+### Fixed
+
+- **An OpenCode turn no longer hangs when its connection drops.** If OpenCode's live connection closed before a turn finished, the turn could sit on Working forever. Locust now asks OpenCode how the turn went: it keeps the answer when it can confirm the turn finished, and otherwise ends the turn with a message to send it again. Stop also always ends an OpenCode turn now, even when OpenCode never answers it. Found and fixed by Mit Godhani.
+
 ## 0.785.0 - 2026-10-17
 
 ### Fixed
