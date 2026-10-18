@@ -22,6 +22,9 @@ describe('managed controls', () => {
     expect(html).toContain('Managed by your organization')
     expect(html).toContain('/admin/Locust/policy.json')
     for (const phrase of ['Allowed AI agents', 'Allowed models', 'Highest permission mode', 'Maximum monthly limit', 'Phone pairing', 'Cloud computers and tasks', 'Access from other AI apps']) expect(html).toContain(phrase)
+    // In words, not the file's JSON (0.792): names, the mode as the mode menu says it, dollars a month.
+    for (const words of ['Allowed AI agents</strong>: Codex CLI', 'Allowed models</strong>: Codex CLI: safe', 'Highest permission mode</strong>: Plan', '$10 a month', 'Phone pairing</strong>: Off']) expect(html).toContain(words)
+    expect(html).not.toMatch(/\[&quot;|\{&quot;|accept-edits/)
     expect(renderToStaticMarkup(<OrganizationPolicySettings />)).toBe('')
   })
 

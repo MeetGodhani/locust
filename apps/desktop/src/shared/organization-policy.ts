@@ -93,6 +93,34 @@ export function policyTurnRefusal(state: OrganizationPolicyState | undefined, tu
   return undefined
 }
 
+const agentWords = (runtime: PolicyRuntimeId): string => runtime === 'omniroute' ? 'OmniRoute' : runtime === 'acp' ? 'Agents you added' : runtimeDisplayName(runtime)
+
+/**
+ * A policy setting as Settings says it (0.792): agents and modes by name, a limit in dollars a month. It was the
+ * file's own JSON -- `["codex"]`, `{"codex":["gpt-*"]}`, `accept-edits` -- which an administrator wrote and the
+ * person reading Settings did not.
+ */
+export function policySettingWords(key: string, value: unknown): string {
+  switch (key) {
+    case 'allowedAgents':
+      return Array.isArray(value) && value.length > 0 ? (value as PolicyRuntimeId[]).map(agentWords).join(', ') : 'None: no AI agent can run'
+    case 'allowedModels': {
+      const each = Object.entries((value ?? {}) as Partial<Record<PolicyRuntimeId, readonly string[]>>)
+      return each.length === 0 ? 'Any' : each.map(([runtime, patterns]) => `${agentWords(runtime as PolicyRuntimeId)}: ${patterns === undefined || patterns.length === 0 ? 'none' : patterns.join(', ')}`).join('; ')
+    }
+    case 'highestMode':
+      return MODE_NAMES[value as MissionMode] ?? String(value)
+    case 'monthlyLimitUsd':
+      return value === 0 ? '$0, so nothing that spends can start' : `$${Number.isInteger(value) ? String(value) : Number(value).toFixed(2)} a month`
+    case 'otherApps':
+    case 'phone':
+    case 'cloud':
+      return value === false ? 'Off' : 'Allowed'
+    default:
+      return String(value)
+  }
+}
+
 export function policyMonthlyLimit(state: OrganizationPolicyState | undefined, personal: number | undefined): number | undefined {
   const cap = state?.policy.monthlyLimitUsd
   return cap === undefined ? personal : personal === undefined ? cap : Math.min(cap, personal)

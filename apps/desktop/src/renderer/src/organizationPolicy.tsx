@@ -1,5 +1,5 @@
 import { createContext, useContext, type ReactNode } from 'react'
-import type { OrganizationPolicyState } from '../../shared/organization-policy.js'
+import { policySettingWords, type OrganizationPolicyState } from '../../shared/organization-policy.js'
 
 export const OrganizationPolicyContext = createContext<OrganizationPolicyState | undefined>(undefined)
 export const useOrganizationPolicy = (): OrganizationPolicyState | undefined => useContext(OrganizationPolicyContext)
@@ -27,7 +27,7 @@ export function OrganizationPolicySettings({ heading }: { readonly heading?: Rea
     {heading ?? <h2 className="lc-settings__heading">Managed by your organization</h2>}
     <p className="lc-settings__note">{state.path}</p>
     {state.error !== undefined ? <p className="lc-settings__note lc-tone-amber" role="alert">{state.error}</p> : <>
-      <ul>{settings.map(([key, value]) => <li key={key}><strong>{NAMES[key] ?? key}</strong>: {typeof value === 'boolean' ? value ? 'Available' : 'Off' : typeof value === 'object' ? JSON.stringify(value) : String(value)}</li>)}</ul>
+      <ul>{settings.map(([key, value]) => <li key={key}><strong>{NAMES[key] ?? key}</strong>: {policySettingWords(key, value)}</li>)}</ul>
       {settings.length === 0 && <p className="lc-settings__note">This policy sets no restrictions.</p>}
       <p className="lc-settings__note">Your choices can be more restrictive. Policy changes take effect when Locust restarts.</p>
     </>}
