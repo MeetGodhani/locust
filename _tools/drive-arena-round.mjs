@@ -5,7 +5,7 @@
 //
 // Colin approved these rounds on 2026-10-09 (in the site session, Beta/Promo: "yes sounds good"), which gave the
 // prompts and the lineup: trio = Opus 5.5, Sonnet 5.5, GPT-6.1-Sol; pair = Fable 5.1 + GPT-6-Astra, run LAST;
-// fable = Fable 5.1 beside Muse Spark Free, a filler column whose work is NOT counted, for when Astra is skipped
+// fable = Fable 5.1 beside the free route, a filler column whose work is NOT counted, for when Astra is skipped
 // (a Blind compare needs two). The prompt is read word for word from --prompt, so it cannot drift. High effort,
 // Auto, Blind, each column its own fresh copy under the drive's profile, sent once. A limit or an error STOPS
 // it: no retry. Any question is DENIED. Every column is copied out byte for byte, and Locust's own record kept,
@@ -14,7 +14,7 @@
 // voxel (2026-10-13, Colin: "yeah we can run those areana runs"; the lineup and prompt from Beta/Promo): six models
 // at Max -- claude = Opus 5.5, Sonnet 5.5 (it held Fable 5.1 too in that round, which was wrong: a correction sent
 // three hours before the run said High and no Fable, and was missed); muse-sol = Muse Wonder 1.0 (Muse Code) + GPT-6.1-Sol; astra =
-// GPT-6-Astra beside Muse Spark Free, the filler a Blind compare needs, whose work is NOT counted. Run with --effort max.
+// GPT-6-Astra beside the free route, the filler a Blind compare needs, whose work is NOT counted. Run with --effort max.
 // argon = Gemini 4 Argon through Cursor (on Colin's Cursor plan, "nah its just plan usage"), at High, the most it
 // offers there, beside the same filler. A Cursor run rewrites Cursor's default model: save it before, put it back after.
 //
@@ -27,7 +27,7 @@ import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { requiredPathArgument } from './required-path-argument.mjs'
 
-import { recordRoot, say, sleep, startDrive } from './drive-lib.mjs'
+import { FREE_ROW, FREE_SEARCH, recordRoot, say, sleep, startDrive } from './drive-lib.mjs'
 
 const arg = (name) => (process.argv.includes(name) ? process.argv[process.argv.indexOf(name) + 1] : undefined)
 const packaged = arg('--packaged')
@@ -40,6 +40,7 @@ if (!SETS.includes(SET ?? '')) throw new Error(`--set ${SETS.join(', ')}`)
 const EFFORT = arg('--effort') ?? 'high'
 if (EFFORT !== 'high' && EFFORT !== 'max') throw new Error('--effort high or max')
 const EFFORT_WORD = EFFORT === 'max' ? 'Max' : 'High'
+const FREE_NAME = new RegExp(FREE_ROW.slice(1, FREE_ROW.lastIndexOf('/')), 'i')
 /** Each round's prompt opens with these words and ends with the same sentence: the wrong file stops it. */
 const OPENS = {
   portrait: 'Make a self-portrait in a single self-contained file, index.html.',
@@ -68,7 +69,7 @@ const WANT = SET === 'trio'
     : SET === 'fable'
       ? [
           { search: 'fable', row: /^Fable 5\.1$/i, runtime: /^Claude Code/i },
-          { search: 'muse spark', row: /^Muse Spark 1\.3 Contributor Free$/i, runtime: /^OpenCode/i }
+          { search: FREE_SEARCH, row: FREE_NAME, runtime: /^OpenCode/i }
         ]
       : SET === 'claude'
         ? [
@@ -83,11 +84,11 @@ const WANT = SET === 'trio'
           : SET === 'astra'
             ? [
                 { search: 'astra', row: /^GPT-6-Astra$/i, runtime: /^Codex/i },
-                { search: 'muse spark', row: /^Muse Spark 1\.3 Contributor Free$/i, runtime: /^OpenCode/i }
+                { search: FREE_SEARCH, row: FREE_NAME, runtime: /^OpenCode/i }
               ]
             : [
                 { search: 'argon', row: /^Gemini 4 Argon$/i, runtime: /^Cursor/i },
-                { search: 'muse spark', row: /^Muse Spark 1\.3 Contributor Free$/i, runtime: /^OpenCode/i }
+                { search: FREE_SEARCH, row: FREE_NAME, runtime: /^OpenCode/i }
               ]
 
 // Fable never shares a compare with another Claude model (Colin, 2026-10-13: "swore that we agreed to not run fable

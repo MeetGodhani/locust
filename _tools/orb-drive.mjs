@@ -17,13 +17,13 @@
 //
 //   node _tools/orb-drive.mjs [--model <words>] [--packaged <exe>] [--out <dir>]
 //
-// --model picks the free row by name (default "muse"); on 2026-09-23 Muse
-// Spark hung and Nemotron 3.5 Lightning answered.
+// --model picks the free row by name (default the free route's own words); on
+// 2026-09-23 the day's free model hung and Nemotron 3.5 Lightning answered.
 
-import { FREE_ROUTE, pickRouteScript, say, scratchRepository, sendAndWaitScript, startDrive, teammateFace } from './drive-lib.mjs'
+import { FREE_ROUTE, FREE_SEARCH, pickRouteScript, say, scratchRepository, sendAndWaitScript, startDrive, teammateFace } from './drive-lib.mjs'
 
 const arg = (name) => (process.argv.includes(name) ? process.argv[process.argv.indexOf(name) + 1] : undefined)
-const MODEL = arg('--model') ?? 'muse'
+const MODEL = arg('--model') ?? FREE_SEARCH
 const packaged = arg('--packaged')
 const out = arg('--out')
 

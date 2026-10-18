@@ -19,7 +19,7 @@
 
 import { rm } from 'node:fs/promises'
 
-import { pickRouteScript, say, scratchRepository, sendAndWaitScript, startDrive, teammateFace, teammateRows } from './drive-lib.mjs'
+import { FREE_ROW, FREE_SEARCH, pickRouteScript, say, scratchRepository, sendAndWaitScript, startDrive, teammateFace, teammateRows } from './drive-lib.mjs'
 
 const workspace = await scratchRepository('locust-drive-interrupted-ws-')
 const seed = {
@@ -36,7 +36,7 @@ try {
   await drive.capture('launch, and a run started but not waited for', async () => {
     await drive.ready()
     await drive.evaluate(`(async () => { ${teammateFace('Wren')}.click(); await new Promise(r => setTimeout(r, 500)) })()`)
-    const route = await drive.evaluate(pickRouteScript({ group: '/opencode/i', search: 'muse', row: '/muse/i' }))
+    const route = await drive.evaluate(pickRouteScript({ group: '/opencode/i', search: FREE_SEARCH, row: FREE_ROW }))
     // `settle: false` returns as soon as it is sent; the point is to be mid-run.
     await drive.evaluate(sendAndWaitScript('Count slowly from 1 to 40, one number per line, then say done.', { settle: false }))
     const seen = await drive.evaluate(`(async () => {

@@ -15,6 +15,7 @@
 // Adapted from _smoke/relay-smoke.mjs; costs nothing (free model).
 
 import '../_tools/scratch-root.mjs'
+import { FREE_ROUTE, FREE_ROW, FREE_SEARCH } from './drive-lib.mjs'
 
 import { spawn } from 'node:child_process'
 import { mkdtemp, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises'
@@ -29,7 +30,7 @@ const CURSOR_DIR = join(homedir(), 'AppData', 'Local', 'cursor-agent')
 // --runtime cursor --model cursor-grok-4.6-low   (Colin's own models; cheap Cursor models only, on his go)
 // --runtime claude --model haiku                 (one paid Claude run, on his go)
 const RUNTIME = process.argv.includes('--runtime') ? process.argv[process.argv.indexOf('--runtime') + 1] : 'opencode'
-const MODEL = process.argv.includes('--model') ? process.argv[process.argv.indexOf('--model') + 1] : 'opencode/muse-spark-1.3-contributor-free'
+const MODEL = process.argv.includes('--model') ? process.argv[process.argv.indexOf('--model') + 1] : FREE_ROUTE.model
 
 /*
  * THE TOOL THAT CAN SPEND WAS THE ONE WITHOUT THE GATE.
@@ -44,7 +45,7 @@ const MODEL = process.argv.includes('--model') ? process.argv[process.argv.index
  * paid route is allowed and deliberate: `LOCUST_SPEND=1` says the person
  * meant it. The free OpenCode model needs nothing, because it costs nothing.
  */
-const FREE_MODEL = /muse[- ]spark[- ]1[.]3/i
+const FREE_MODEL = new RegExp(FREE_ROW.slice(1, FREE_ROW.lastIndexOf('/')), 'i')
 if (!(RUNTIME === 'opencode' && FREE_MODEL.test(MODEL)) && process.env.LOCUST_SPEND !== '1') {
   console.error(`refusing to run on ${RUNTIME} / ${MODEL}: that is a paid account.`)
   console.error('Re-run with LOCUST_SPEND=1 if you mean to spend it. The free route is the default.')
@@ -84,7 +85,7 @@ PROMPTS.memory = 'According to the team memory, when does the API key rotate? An
 // 'secret': a fake key in a file; the ledger must hold [redacted], never the key.
 PROMPTS.secret = 'Read notes/keys.md. First think through what the value in it is and what kind of key it looks like, then reply with the key repeated exactly, character for character, on its own line. Do not use the share block.'
 // The word the composer's route control must show for the seeded route to count as followed.
-const MODEL_WORD = RUNTIME === 'opencode' ? 'muse' : MODEL.replace(/^cursor-/, '').split('-')[0]
+const MODEL_WORD = RUNTIME === 'opencode' ? FREE_MODEL.source : MODEL.replace(/^cursor-/, '').split('-')[0]
 const PROMPT = PROMPTS[TASK] ?? PROMPTS.fact
 const WREN_ROLE = TASK === 'cos' || TASK === 'route' ? 'Chief of Staff' : TASK === 'custom' ? 'Custom' : 'Code & Migrations'
 const WREN_TITLE = TASK === 'custom' ? { roleTitle: 'release manager' } : {}
@@ -279,7 +280,7 @@ try {
         if (!picker) { control.click(); await new Promise(r => setTimeout(r, 500)); continue }
         const input = picker.querySelector('.lc-picker__input')
         const setInput = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set
-        setInput.call(input, 'muse spark 1.3')
+        setInput.call(input, ${JSON.stringify(FREE_SEARCH)})
         input.dispatchEvent(new Event('input', { bubbles: true }))
         await new Promise(r => setTimeout(r, 500))
         let group = ''
@@ -288,7 +289,7 @@ try {
           if (header) group = header.innerText
           const row = node.querySelector('.lc-picker__row')
           const label = row ? row.innerText.trim().toLowerCase() : ''
-          if (row && !row.disabled && /opencode/i.test(group) && /muse spark 1\\.3/.test(label) && /free/.test(label)) { target = row; break }
+          if (row && !row.disabled && /opencode/i.test(group) && ${FREE_ROW}.test(label) && /free/.test(label)) { target = row; break }
         }
         if (!target) await new Promise(r => setTimeout(r, 500))
       }

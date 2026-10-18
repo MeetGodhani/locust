@@ -21,7 +21,7 @@
 import { readdir, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 
-import { pickRouteScript, say, scratchRepository, sendAndWaitScript, startDrive, teammateFace } from './drive-lib.mjs'
+import { FREE_ROW, FREE_SEARCH, pickRouteScript, say, scratchRepository, sendAndWaitScript, startDrive, teammateFace } from './drive-lib.mjs'
 
 const TURNS = 15
 const workspace = await scratchRepository('locust-drive-long-ws-')
@@ -91,7 +91,7 @@ try {
   await drive.capture('launch, on the free OpenCode model', async () => {
     await drive.ready()
     await drive.evaluate(`(async () => { ${teammateFace('Wren')}.click(); await new Promise(r => setTimeout(r, 500)) })()`)
-    return drive.evaluate(pickRouteScript({ group: '/opencode/i', search: 'muse', row: '/muse/i' }))
+    return drive.evaluate(pickRouteScript({ group: '/opencode/i', search: FREE_SEARCH, row: FREE_ROW }))
   })
 
   for (let turn = 1; turn <= TURNS; turn += 1) {

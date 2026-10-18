@@ -26,7 +26,7 @@
 import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
-import { pickRouteScript, say, scratchRepository, startDrive, teammateFace, teammateRows } from './drive-lib.mjs'
+import { FREE_ROW, FREE_SEARCH, pickRouteScript, say, scratchRepository, startDrive, teammateFace, teammateRows } from './drive-lib.mjs'
 
 const MARKS = { Wren: 'WREN-WAS-HERE', Gem: 'GEM-WAS-HERE' }
 const SHARED = 'shared.md'
@@ -57,7 +57,7 @@ const startFor = async (name) => {
     ${teammateFace(name)}.click()
     await new Promise(r => setTimeout(r, 350))
   })()`)
-  await drive.evaluate(pickRouteScript({ group: '/opencode/i', search: 'muse', row: '/muse/i' }))
+  await drive.evaluate(pickRouteScript({ group: '/opencode/i', search: FREE_SEARCH, row: FREE_ROW }))
   return drive.evaluate(`(async () => {
     const field = document.querySelector('form.command-dock textarea')
     const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set

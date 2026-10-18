@@ -7,7 +7,7 @@
 // waiting; Settings and Memory must count it; Keep on the Memory screen
 // makes it kept; Wren then quotes it.
 
-import { FREE_ROUTE, pickRouteScript, say, scratchRepository, sendAndWaitScript, startDrive, teammateFace } from './drive-lib.mjs'
+import { FREE_ROUTE, FREE_ROW, FREE_SEARCH, pickRouteScript, say, scratchRepository, sendAndWaitScript, startDrive, teammateFace } from './drive-lib.mjs'
 
 // C6 (plan 2026-09-24): the same drive against a packaged build.
 const packaged = process.argv.includes('--packaged') ? process.argv[process.argv.indexOf('--packaged') + 1] : undefined
@@ -43,7 +43,7 @@ try {
    * what it meant rather than relying on that refusal to notice.
    */
   await drive.capture('pick the free route', () =>
-    drive.evaluate(pickRouteScript({ group: '/opencode/i', search: 'muse', row: '/free/i' }))
+    drive.evaluate(pickRouteScript({ group: '/opencode/i', search: FREE_SEARCH, row: FREE_ROW }))
   )
   await drive.capture('ask Booty to remember the deploy command', async () => {
     await drive.evaluate(pick('Booty'))

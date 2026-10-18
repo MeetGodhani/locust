@@ -15,7 +15,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
-import { recordRoot, say, scratchRepository, sleep, startDrive } from './drive-lib.mjs'
+import { FREE_ROUTE, recordRoot, say, scratchRepository, sleep, startDrive } from './drive-lib.mjs'
 
 const arg = (name) => (process.argv.includes(name) ? process.argv[process.argv.indexOf(name) + 1] : undefined)
 const packaged = arg('--packaged')
@@ -56,7 +56,7 @@ await ledger.appendEvents(missionId, [
 ])
 await ledger.flush()
 
-const route = { runtime: 'opencode', model: 'opencode/muse-spark-1.3-contributor-free', mode: 'accept-edits' }
+const route = { ...FREE_ROUTE, mode: 'accept-edits' }
 const drive = await startDrive({
   ...(packaged === undefined ? {} : { packaged }),
   name: `save-the-record-${tag}`,

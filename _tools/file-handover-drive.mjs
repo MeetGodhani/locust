@@ -20,6 +20,7 @@
 // send on any other route.
 
 import '../_tools/scratch-root.mjs'
+import { FREE_ROW, FREE_SEARCH } from './drive-lib.mjs'
 
 import { spawn } from 'node:child_process'
 import { mkdtemp, mkdir, rm, stat, writeFile } from 'node:fs/promises'
@@ -144,7 +145,7 @@ try {
   const picked = await cdp.eval(`(async () => {
     const control = [...document.querySelectorAll('.lc-control')].find(b => b.getAttribute('aria-haspopup') === 'listbox')
     if (!control) return JSON.stringify({ control: false })
-    if (/muse[- ]spark[- ]1[.]3/i.test(control.innerText)) return JSON.stringify({ picked: true, text: control.innerText })
+    if (${FREE_ROW}.test(control.innerText)) return JSON.stringify({ picked: true, text: control.innerText })
     control.click()
     await new Promise(r => setTimeout(r, 500))
     let target
@@ -153,7 +154,7 @@ try {
       if (!picker) { control.click(); await new Promise(r => setTimeout(r, 500)); continue }
       const input = picker.querySelector('.lc-picker__input')
       const setInput = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set
-      setInput.call(input, 'muse spark 1.3')
+      setInput.call(input, ${JSON.stringify(FREE_SEARCH)})
       input.dispatchEvent(new Event('input', { bubbles: true }))
       await new Promise(r => setTimeout(r, 500))
       let group = ''
@@ -162,7 +163,7 @@ try {
         if (header) group = header.innerText
         const row = node.querySelector('.lc-picker__row')
         const label = row ? row.innerText.trim().toLowerCase() : ''
-        if (row && !row.disabled && /opencode/i.test(group) && /muse[- ]spark[- ]1[.]3/.test(label) && /free/.test(label)) { target = row; break }
+        if (row && !row.disabled && /opencode/i.test(group) && ${FREE_ROW}.test(label) && /free/.test(label)) { target = row; break }
       }
       if (!target) await new Promise(r => setTimeout(r, 500))
     }
@@ -186,7 +187,7 @@ try {
    * Both are required. One flag is a typo; two is a decision.
    */
   const paid = process.argv.includes('--spend') && process.env.LOCUST_SPEND === '1'
-  const onFree = /muse[- ]spark[- ]1[.]3/i.test(JSON.parse(picked).text ?? '')
+  const onFree = new RegExp(FREE_ROW.slice(1, FREE_ROW.lastIndexOf('/')), 'i').test(JSON.parse(picked).text ?? '')
   if (paid) {
     say(`   SPENDING DELIBERATELY: ${JSON.parse(picked).text ?? '(unknown route)'}`)
   } else {

@@ -12,12 +12,12 @@ import { mkdir, mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-import { recordRoot, say, scratchRepository, startDrive } from './drive-lib.mjs'
+import { FREE_ROUTE, recordRoot, say, scratchRepository, startDrive } from './drive-lib.mjs'
 
 const arg = (name) => (process.argv.includes(name) ? process.argv[process.argv.indexOf(name) + 1] : undefined)
 const packaged = arg('--packaged')
 const tag = arg('--tag') ?? 'local'
-const MODELS = ['opencode/muse-spark-1.3-contributor-free', 'opencode/nemotron-3-ultra-free']
+const MODELS = [FREE_ROUTE.model, 'opencode/nemotron-3-ultra-free']
 const OUT = join(recordRoot('free-stays-on-the-chip-2026-09-30'), `free-${tag}`)
 await mkdir(OUT, { recursive: true })
 

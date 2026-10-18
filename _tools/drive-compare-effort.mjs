@@ -13,7 +13,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import { execFileSync } from 'node:child_process'
-import { recordRoot, say, scratchRepository, sleep, startDrive } from './drive-lib.mjs'
+import { FREE_ROW, FREE_SEARCH, recordRoot, say, scratchRepository, sleep, startDrive } from './drive-lib.mjs'
 
 const arg = (name) => (process.argv.includes(name) ? process.argv[process.argv.indexOf(name) + 1] : undefined)
 const packaged = arg('--packaged')
@@ -23,11 +23,12 @@ const tag = arg('--tag') ?? 'local'
 // not the model's default (arena round 2's reveal: "You kept Sonnet 5.5 · High" over a box saying Medium).
 const KEEP = process.argv.includes('--keep')
 const SEND = process.argv.includes('--send') || process.argv.includes('--changes') || KEEP
+const FREE_NAME = new RegExp(FREE_ROW.slice(1, FREE_ROW.lastIndexOf('/')), 'i')
 // --changes: the two models change the project, in Auto, in a git folder (Sol, 0.491: a column wrote to
 // the real folder). Checks the folder is untouched before Keep and no column works inside it.
 const CHANGES = process.argv.includes('--changes')
 const FREE = [
-  { search: 'muse', row: '/Muse Spark.*(Contributor|Free)/i', level: 'Low', effort: 'low', model: /muse-spark/ },
+  { search: FREE_SEARCH, row: FREE_ROW, level: 'Low', effort: 'low', model: FREE_NAME },
   { search: 'bunny', row: '/Space Bunny/i', level: 'Max', effort: 'max', model: /space-bunny/ }
 ]
 const OUT = join(recordRoot('compare-effort-2026-09-30'), `compare-effort-${tag}`)

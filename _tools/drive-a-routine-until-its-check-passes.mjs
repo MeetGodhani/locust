@@ -14,12 +14,12 @@ import { mkdtemp, readFile, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-import { recordRoot, say, scratchRepository, startDrive } from './drive-lib.mjs'
+import { FREE_ROUTE, recordRoot, say, scratchRepository, startDrive } from './drive-lib.mjs'
 
 const arg = (name) => (process.argv.includes(name) ? process.argv[process.argv.indexOf(name) + 1] : undefined)
 const packaged = arg('--packaged')
 const tag = arg('--tag') ?? 'local'
-const MODEL = process.env.LOCUST_FREE_MODEL ?? 'opencode/muse-spark-1.3-contributor-free'
+const MODEL = FREE_ROUTE.model
 const workspace = await scratchRepository('locust-drive-goal-ws-')
 await writeFile(join(workspace, 'check.js'), [
   "const { readFileSync } = require('node:fs')",

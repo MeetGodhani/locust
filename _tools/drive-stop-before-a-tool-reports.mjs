@@ -15,11 +15,11 @@
 import { readdir } from 'node:fs/promises'
 import { join } from 'node:path'
 
-import { openTeammateScript, recordRoot, say, scratchRepository, sleep, startDrive } from './drive-lib.mjs'
+import { FREE_ROUTE, openTeammateScript, recordRoot, say, scratchRepository, sleep, startDrive } from './drive-lib.mjs'
 
 const arg = (name) => (process.argv.includes(name) ? process.argv[process.argv.indexOf(name) + 1] : undefined)
 const packaged = arg('--packaged')
-const MODEL = process.env.LOCUST_FREE_MODEL ?? 'opencode/muse-spark-1.3-contributor-free'
+const MODEL = FREE_ROUTE.model
 const tag = arg('--tag') ?? 'local'
 const workspace = await scratchRepository('locust-drive-stop-early-ws-')
 const drive = await startDrive({

@@ -20,7 +20,7 @@ import { existsSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 
-import { APP_DIR, pickRouteScript, say, scratchRepository, startDrive } from './drive-lib.mjs'
+import { APP_DIR, FREE_ROUTE, pickRouteScript, say, scratchRepository, startDrive } from './drive-lib.mjs'
 
 /*
  * PROVE IT CANNOT SPEND, rather than declare that it does not.
@@ -64,7 +64,7 @@ const drive = await startDrive({
         hue: 'lime',
         role: 'Code & Migrations',
         createdAt: '2026-09-05T05:00:00.000Z',
-        route: { runtime: 'opencode', model: 'opencode/muse-spark-1.3-contributor-free', mode: 'ask' }
+        route: { runtime: 'opencode', model: FREE_ROUTE.model, mode: 'ask' }
       }
     ],
     missionOwners: {},

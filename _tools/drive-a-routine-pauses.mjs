@@ -10,7 +10,7 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
-import { recordRoot, say, scratchRepository, startDrive } from './drive-lib.mjs'
+import { FREE_ROUTE, recordRoot, say, scratchRepository, startDrive } from './drive-lib.mjs'
 import { mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 
@@ -21,7 +21,7 @@ const workspace = await scratchRepository('locust-drive-pause-ws-')
 const profile = await mkdtemp(join(tmpdir(), 'locust-drive-pause-profile-'))
 const outPath = join(recordRoot('a-routine-pauses-2026-10-08'), tag)
 const now = new Date().toISOString()
-const ROUTE = { runtime: 'opencode', model: 'opencode/muse-spark-1.3-contributor-free', mode: 'ask' }
+const ROUTE = { ...FREE_ROUTE, mode: 'ask' }
 const ROUTINES = [
   { routineId: 'rt_digest', name: 'Morning digest', teammateId: 'tm_wren', route: ROUTE, steps: ['Say good morning.'], learnedFrom: [], createdAt: now, lastRunAt: now, runs: 1, schedule: { kind: 'every', hours: 24 } },
   { routineId: 'rt_hand', name: 'By hand', teammateId: 'tm_wren', route: ROUTE, steps: ['Say hello.'], learnedFrom: [], createdAt: now, runs: 0 }

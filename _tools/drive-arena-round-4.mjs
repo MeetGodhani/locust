@@ -5,7 +5,7 @@
 //
 // Colin approved round 4 on 2026-10-09 ("We can run arena whenever"); the site session (Beta/Promo) gave the prompt
 // and lineup. trio = Opus 5.5, Sonnet 5.5, GPT-6.1-Sol; pair = Fable 5.1 + GPT-6-Astra, run LAST (Colin is watching
-// the Codex week); fable = Fable 5.1 beside Muse Spark Free, a filler column whose page is NOT counted, for when
+// the Codex week); fable = Fable 5.1 beside the free route, a filler column whose page is NOT counted, for when
 // Astra is skipped -- a Blind compare needs two. The prompt is read word for word from --prompt, so it cannot drift.
 // High effort, Auto, Blind, each column its own fresh copy under ~/.locust/compare, sent once. A limit or an error
 // STOPS it: no retry. Any question is DENIED. Every column is copied out byte for byte, and Locust's own record kept,
@@ -17,12 +17,13 @@ import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { requiredPathArgument } from './required-path-argument.mjs'
 
-import { recordRoot, say, sleep, startDrive } from './drive-lib.mjs'
+import { FREE_ROW, FREE_SEARCH, recordRoot, say, sleep, startDrive } from './drive-lib.mjs'
 
 const arg = (name) => (process.argv.includes(name) ? process.argv[process.argv.indexOf(name) + 1] : undefined)
 const packaged = arg('--packaged')
 const SEND = process.argv.includes('--send')
 const SET = arg('--set')
+const FREE_NAME = new RegExp(FREE_ROW.slice(1, FREE_ROW.lastIndexOf('/')), 'i')
 if (SET !== 'trio' && SET !== 'pair' && SET !== 'fable') throw new Error('--set trio, pair or fable')
 const promptPath = requiredPathArgument('--prompt')
 const OUT = join(recordRoot('arena-round-4-2026-10-09'), `${SEND ? 'run' : 'look'}-${SET}`)
@@ -44,7 +45,7 @@ const WANT = SET === 'trio'
       ]
     : [
         { search: 'fable', row: /^Fable 5\.1$/i, runtime: /^Claude Code/i },
-        { search: 'muse spark', row: /^Muse Spark 1\.3 Contributor Free$/i, runtime: /^OpenCode/i }
+        { search: FREE_SEARCH, row: FREE_NAME, runtime: /^OpenCode/i }
       ]
 
 const workspace = await mkdtemp(join(tmpdir(), 'locust-arena-4-'))

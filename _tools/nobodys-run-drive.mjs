@@ -21,6 +21,7 @@
 // Live: ONE real exchange on the free model. No quota.
 
 import '../_tools/scratch-root.mjs'
+import { FREE_ROW, FREE_SEARCH } from './drive-lib.mjs'
 
 import { spawn } from 'node:child_process'
 import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises'
@@ -172,7 +173,7 @@ try {
   const picked = await cdp.eval(`(async () => {
     const control = [...document.querySelectorAll('.lc-control')].find(b => b.getAttribute('aria-haspopup') === 'listbox')
     if (!control) return JSON.stringify({ control: false })
-    if (/muse[- ]spark[- ]1[.]3/i.test(control.innerText)) return JSON.stringify({ control: true, already: true, text: control.innerText })
+    if (${FREE_ROW}.test(control.innerText)) return JSON.stringify({ control: true, already: true, text: control.innerText })
     control.click()
     await new Promise(r => setTimeout(r, 500))
     let target
@@ -181,7 +182,7 @@ try {
       if (!picker) { control.click(); await new Promise(r => setTimeout(r, 500)); continue }
       const input = picker.querySelector('.lc-picker__input')
       const setInput = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set
-      setInput.call(input, 'muse spark 1.3')
+      setInput.call(input, ${JSON.stringify(FREE_SEARCH)})
       input.dispatchEvent(new Event('input', { bubbles: true }))
       await new Promise(r => setTimeout(r, 500))
       let group = ''
@@ -190,10 +191,9 @@ try {
         if (header) group = header.innerText
         const row = node.querySelector('.lc-picker__row')
         const label = row ? row.innerText.trim().toLowerCase() : ''
-        // Spelled either way: with a teammate picked the row reads "Muse
-        // Spark 1.3 Contributor Free"; with nobody picked it reads the raw
-        // id, "muse-spark-1.3-contributor-free".
-        if (row && !row.disabled && /opencode/i.test(group) && /muse[- ]spark[- ]1[.]3/.test(label) && /free/.test(label)) { target = row; break }
+        // Spelled either way: with a teammate picked the row reads the
+        // display name; with nobody picked it reads the raw model id.
+        if (row && !row.disabled && /opencode/i.test(group) && ${FREE_ROW}.test(label) && /free/.test(label)) { target = row; break }
       }
       if (!target) await new Promise(r => setTimeout(r, 500))
     }
@@ -208,7 +208,7 @@ try {
     return JSON.stringify({ control: true, picked: true, text: control.innerText })
   })()`)
   say(`   ${picked}`)
-  const onFreeModel = /muse[- ]spark[- ]1[.]3/i.test(JSON.parse(picked).text ?? '')
+  const onFreeModel = new RegExp(FREE_ROW.slice(1, FREE_ROW.lastIndexOf('/')), 'i').test(JSON.parse(picked).text ?? '')
   check('the free OpenCode model is the route', onFreeModel, picked)
   /*
    * NOTHING IS SENT ON ANOTHER ROUTE.

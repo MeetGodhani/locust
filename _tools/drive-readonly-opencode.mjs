@@ -15,7 +15,7 @@
 //
 // Spends one small OpenCode run on a free model.
 
-import { pickRouteScript, say, scratchRepository, startDrive, teammateFace } from './drive-lib.mjs'
+import { FREE_ROW, FREE_SEARCH, pickRouteScript, say, scratchRepository, startDrive, teammateFace } from './drive-lib.mjs'
 
 const workspace = await scratchRepository('locust-drive-ro-ws-')
 const drive = await startDrive({
@@ -78,14 +78,14 @@ const WATCH = `(async () => {
 })()`
 
 try {
-  await drive.capture('Wren on OpenCode / a free Muse Spark model', async () => {
+  await drive.capture('Wren on OpenCode / the free model', async () => {
     await drive.ready()
     await drive.evaluate(`(async () => {
       const open = ${teammateFace('Wren')}
       if (open) open.click()
       await new Promise((r) => setTimeout(r, 900))
     })()`)
-    return drive.evaluate(pickRouteScript({ group: '/opencode/i', search: 'muse', row: '/muse/i' }))
+    return drive.evaluate(pickRouteScript({ group: '/opencode/i', search: FREE_SEARCH, row: FREE_ROW }))
   })
 
   await drive.capture('the mode is read-only', () => drive.evaluate(SET_READ_ONLY))

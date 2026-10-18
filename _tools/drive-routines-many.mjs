@@ -15,7 +15,7 @@
 // the third is Cursor's composer-2.5, which is what the house rules say to use
 // where the model does not matter.
 
-import { pickRouteScript, say, scratchRepository, sendAndWaitScript, startDrive, teammateFace, teammateRows } from './drive-lib.mjs'
+import { FREE_ROW, FREE_SEARCH, pickRouteScript, say, scratchRepository, sendAndWaitScript, startDrive, teammateFace, teammateRows } from './drive-lib.mjs'
 
 const workspace = await scratchRepository('locust-drive-routines-ws-')
 
@@ -23,9 +23,9 @@ const workspace = await scratchRepository('locust-drive-routines-ws-')
 // route rides with it, so three routines on one runtime would prove nothing
 // about the list.
 const TEAM = [
-  { name: 'Wren', word: 'ALPHA', group: /opencode/i, search: 'muse', row: /muse/i },
+  { name: 'Wren', word: 'ALPHA', group: /opencode/i, search: FREE_SEARCH, row: FREE_ROW },
   { name: 'Booty', word: 'BRAVO', group: /cursor/i, search: 'composer', row: /composer-2\.5/i },
-  { name: 'Gem', word: 'CHARLIE', group: /opencode/i, search: 'muse', row: /muse/i }
+  { name: 'Gem', word: 'CHARLIE', group: /opencode/i, search: FREE_SEARCH, row: FREE_ROW }
 ]
 
 const drive = await startDrive({

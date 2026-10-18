@@ -4,7 +4,7 @@
 //
 // OpenCode ships models that need no sign-in and cost nothing, which makes
 // it the route a person can use the minute they install Locust. This smoke
-// picks OpenCode / a free Muse Spark model through the UI, runs a read-only
+// picks OpenCode / a free model through the UI, runs a read-only
 // mission, then a write mission that edits a file, and checks that the
 // thread reached a terminal state, the file really changed, the diff view
 // shows the change, and the ledger recorded runtime opencode with a
@@ -17,12 +17,13 @@ import { mkdtemp, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promis
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { portFor } from './ports.mjs'
+import { FREE_SEARCH } from '../_tools/drive-lib.mjs'
 
 const APP_DIR = new URL('../apps/desktop/', import.meta.url).pathname.slice(1)
 const ELECTRON = join(APP_DIR, 'node_modules', 'electron', 'dist', 'electron.exe')
 const PORT = portFor(import.meta.url)
 const NPM_DIR = join(homedir(), 'AppData', 'Roaming', 'npm')
-const MODEL_SEARCH = 'muse spark 1.3'
+const MODEL_SEARCH = FREE_SEARCH
 const TARGET = 'notes.ts'
 
 let failures = 0
@@ -213,8 +214,8 @@ try {
   check('discovery finished', discovered === true)
 
   say('2. OpenCode is offered with free models, and one can be picked')
-  const picked = JSON.parse(await cdp.eval(pickRoute('opencode', MODEL_SEARCH, 'muse spark 1 3')))
-  check('a free Muse Spark model is selectable under OpenCode', picked.picked === true, JSON.stringify(picked).slice(0, 300))
+  const picked = JSON.parse(await cdp.eval(pickRoute('opencode', MODEL_SEARCH, FREE_SEARCH)))
+  check('a free model is selectable under OpenCode', picked.picked === true, JSON.stringify(picked).slice(0, 300))
   say(`       controls: ${JSON.stringify(picked.controls)}`)
   check('the route control reads OpenCode', (picked.controls ?? []).some((text) => /opencode/i.test(text)), JSON.stringify(picked.controls))
 

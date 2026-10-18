@@ -17,13 +17,13 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
-import { comparePick, comparePickScript, compareDoneScript, enterCompareScript, git, recordRoot, say, scratchRepository, sleep, startDrive } from './drive-lib.mjs'
+import { FREE_ROUTE, comparePick, comparePickScript, compareDoneScript, enterCompareScript, git, recordRoot, say, scratchRepository, sleep, startDrive } from './drive-lib.mjs'
 
 const arg = (name) => (process.argv.includes(name) ? process.argv[process.argv.indexOf(name) + 1] : undefined)
 const packaged = arg('--packaged')
 const tag = arg('--tag') ?? 'local'
 // Mimo was rate-limited through 2026-10-06; Fledge Alpha answered every drive asked of it that day.
-const PICKS = (process.env.LOCUST_COMPARE_PICKS ?? 'nemotron-3-ultra-free,muse-spark-1.3-contributor-free').split(',')
+const PICKS = (process.env.LOCUST_COMPARE_PICKS ?? `nemotron-3-ultra-free,${FREE_ROUTE.model.replace(/^opencode\//, '')}`).split(',')
 const OUT = join(recordRoot('compare-changes-2026-09-28'), `compare-changes-${tag}`)
 await mkdir(OUT, { recursive: true })
 

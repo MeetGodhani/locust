@@ -15,7 +15,7 @@ import { execFileSync } from 'node:child_process'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 
-import { FREE_ROUTE, FREE_ROW, recordRoot, say, scratchRepository, sleep, startDrive } from './drive-lib.mjs'
+import { FREE_ROUTE, FREE_ROW, FREE_SEARCH, recordRoot, say, scratchRepository, sleep, startDrive } from './drive-lib.mjs'
 
 const arg = (name) => (process.argv.includes(name) ? process.argv[process.argv.indexOf(name) + 1] : undefined)
 const packaged = arg('--packaged')
@@ -76,7 +76,7 @@ const freeAsk = async () => String(await drive.evaluate(`(async () => {
   let box = null
   for (let i = 0; i < 20 && !box; i += 1) { await new Promise((r) => setTimeout(r, 250)); box = document.querySelector('.lc-picker__input') }
   if (!box) return 'no picker'
-  Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(box, 'muse')
+  Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(box, ${JSON.stringify(FREE_SEARCH)})
   box.dispatchEvent(new Event('input', { bubbles: true }))
   await new Promise((r) => setTimeout(r, 900))
   const row = [...document.querySelectorAll('.lc-picker__row')].find((el) => !el.disabled && ${FREE_ROW}.test(el.querySelector('.lc-picker__label')?.textContent ?? ''))

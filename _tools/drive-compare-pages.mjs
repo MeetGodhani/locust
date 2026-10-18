@@ -16,12 +16,12 @@ import { existsSync, readFileSync } from 'node:fs'
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 
-import { recordRoot, say, scratchRepository, sleep, startDrive, comparePick, comparePickScript } from './drive-lib.mjs'
+import { FREE_ROUTE, recordRoot, say, scratchRepository, sleep, startDrive, comparePick, comparePickScript } from './drive-lib.mjs'
 
 const arg = (name) => (process.argv.includes(name) ? process.argv[process.argv.indexOf(name) + 1] : undefined)
 const packaged = arg('--packaged')
 const tag = arg('--tag') ?? 'local'
-const PICKS = (process.env.LOCUST_COMPARE_PICKS ?? 'nemotron-3-ultra-free,muse-spark-1.3-contributor-free').split(',')
+const PICKS = (process.env.LOCUST_COMPARE_PICKS ?? `nemotron-3-ultra-free,${FREE_ROUTE.model.replace(/^opencode\//, '')}`).split(',')
 const OUT = join(recordRoot('compare-pages-2026-09-28'), `compare-pages-${tag}`)
 await mkdir(OUT, { recursive: true })
 

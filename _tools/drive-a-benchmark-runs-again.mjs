@@ -14,7 +14,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
-import { recordRoot, say, scratchRepository, sleep, startDrive } from './drive-lib.mjs'
+import { FREE_ROUTE, FREE_ROW, recordRoot, say, scratchRepository, sleep, startDrive } from './drive-lib.mjs'
 
 const arg = (name) => (process.argv.includes(name) ? process.argv[process.argv.indexOf(name) + 1] : undefined)
 const packaged = arg('--packaged')
@@ -29,9 +29,11 @@ const ledger = store.createFileMissionLedger({ rootDirectory: join(profilePath, 
 const TEAMMATE = { teammateId: 'tm_atlas0000000000000000', name: 'Atlas', hue: 'blue', role: 'Custom', roleTitle: 'Research', createdAt: '2026-09-05T05:00:00.000Z', route: { runtime: 'codex', model: 'account-default', mode: 'ask' } }
 const ASK = 'Which CRM should a five-person team buy? Answer in one sentence that names it and its price.'
 const CRITERIA = 'Names a price for five seats\nSays which CRM to buy'
+const FREE_LABEL = FREE_ROUTE.model.replace(/^opencode\//, '').replace(/-free$/, '').split(/[-.]+/).map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
+const FREE_NAME = new RegExp(FREE_ROW.slice(1, FREE_ROW.lastIndexOf('/')), 'i')
 const ANSWERS = {
   a: ['opencode/space-bunny-free', 'Space Bunny', 'HubSpot Starter: $20 per seat a month, so $100 for five, and it covers email and deals.'],
-  b: ['opencode/muse-spark-1.3-contributor-free', 'Muse Spark', 'Some CRM would probably be good for a small team.']
+  b: [FREE_ROUTE.model, FREE_LABEL, 'Some CRM would probably be good for a small team.']
 }
 const JUDGED = [
   'Answer A names a product and a price; Answer B names neither.',
@@ -160,7 +162,7 @@ try {
   await drive.capture('a row set as the teammate\'s model', async () => used)
   const teammates = JSON.parse(await readFile(join(profilePath, 'teammates.json'), 'utf8').catch(() => '{}'))
   const atlas = (teammates.teammates ?? []).find((one) => one.teammateId === TEAMMATE.teammateId)
-  check('a row sets its model as the teammate\'s own, in one press', /Atlas's model/.test(used.rows[0]?.join(' ') ?? '') && atlas?.route?.runtime === 'opencode' && /space-bunny|muse-spark/.test(atlas?.route?.model ?? ''), `${first} -> ${JSON.stringify(atlas?.route)}`)
+  check('a row sets its model as the teammate\'s own, in one press', /Atlas's model/.test(used.rows[0]?.join(' ') ?? '') && atlas?.route?.runtime === 'opencode' && (/space-bunny/.test(atlas?.route?.model ?? '') || FREE_NAME.test(atlas?.route?.model ?? '')), `${first} -> ${JSON.stringify(atlas?.route)}`)
 } catch (error) {
   failures += 1
   say(`drive failed: ${error instanceof Error ? error.message : String(error)}`)

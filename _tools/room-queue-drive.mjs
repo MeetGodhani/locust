@@ -16,11 +16,13 @@ import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promis
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 
+import { FREE_ROUTE } from './drive-lib.mjs'
+
 const APP_DIR = new URL('../apps/desktop/', import.meta.url).pathname.slice(1)
 const ELECTRON = join(APP_DIR, 'node_modules', 'electron', 'dist', 'electron.exe')
 const NPM_DIR = join(homedir(), 'AppData', 'Roaming', 'npm')
 const PORT = 9497
-const FREE_MODEL = 'opencode/muse-spark-1.3-contributor-free'
+const FREE_MODEL = FREE_ROUTE.model
 const MEMBERS = process.argv.includes('--members') ? Number(process.argv[process.argv.indexOf('--members') + 1]) : 3
 const KEEP = process.argv.includes('--keep')
 const WAIT_MS = 6 * 60 * 1000

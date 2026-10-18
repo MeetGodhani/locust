@@ -24,6 +24,8 @@ import { homedir, tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { createHash } from 'node:crypto'
 
+import { FREE_ROUTE } from './drive-lib.mjs'
+
 const APP_DIR = new URL('../apps/desktop/', import.meta.url).pathname.slice(1)
 const ELECTRON = join(APP_DIR, 'node_modules', 'electron', 'dist', 'electron.exe')
 const NPM_DIR = join(homedir(), 'AppData', 'Roaming', 'npm')
@@ -33,7 +35,7 @@ const PORT = 9514
 const args = process.argv.slice(2)
 const shotAt = args.indexOf('--shot')
 const SHOT = shotAt === -1 ? undefined : resolve(args[shotAt + 1])
-const FREE_MODEL = 'opencode/muse-spark-1.3-contributor-free'
+const FREE_MODEL = FREE_ROUTE.model
 
 let failures = 0
 function check(label, ok, detail) {

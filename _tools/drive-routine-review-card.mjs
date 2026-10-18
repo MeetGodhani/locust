@@ -13,7 +13,7 @@
 import { mkdir, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
-import { recordRoot, say, scratchRepository, sleep, startDrive } from './drive-lib.mjs'
+import { FREE_ROUTE, recordRoot, say, scratchRepository, sleep, startDrive } from './drive-lib.mjs'
 
 const arg = (name) => (process.argv.includes(name) ? process.argv[process.argv.indexOf(name) + 1] : undefined)
 const packaged = arg('--packaged')
@@ -21,7 +21,7 @@ const tag = arg('--tag') ?? 'local'
 const OUT = join(recordRoot('routine-review-card-2026-09-27'), `routine-review-card-${tag}`)
 await mkdir(OUT, { recursive: true })
 
-const route = { runtime: 'opencode', model: 'opencode/muse-spark-1.3-contributor-free', mode: 'accept-edits' }
+const route = { ...FREE_ROUTE, mode: 'accept-edits' }
 const steps = ['Read README.md and report the project name.', 'Summarise it in one line.']
 const routines = {
   schemaVersion: 1,

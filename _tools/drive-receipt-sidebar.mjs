@@ -12,7 +12,7 @@
 
 import { rm } from 'node:fs/promises'
 
-import { pickRouteScript, say, scratchRepository, sendAndWaitScript, startDrive, teammateFace, teammateRows } from './drive-lib.mjs'
+import { FREE_ROW, FREE_SEARCH, pickRouteScript, say, scratchRepository, sendAndWaitScript, startDrive, teammateFace, teammateRows } from './drive-lib.mjs'
 
 const workspace = await scratchRepository('locust-drive-receipt-ws-')
 const seed = {
@@ -32,7 +32,7 @@ try {
   await drive.capture('one run, so there is something to restore', async () => {
     await drive.ready()
     await drive.evaluate(`(async () => { ${teammateFace('Wren')}?.click(); await new Promise(r => setTimeout(r, 600)) })()`)
-    await drive.evaluate(pickRouteScript({ group: '/opencode/i', search: 'muse', row: '/muse/i' }))
+    await drive.evaluate(pickRouteScript({ group: '/opencode/i', search: FREE_SEARCH, row: FREE_ROW }))
     await drive.evaluate(sendAndWaitScript('Reply with exactly the word KEPT and nothing else.', { waitSeconds: 300 }))
     return 'ran'
   })

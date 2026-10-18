@@ -20,7 +20,7 @@
 // Runs no model: it seeds a finished mission into the ledger and drives the
 // menu, so it costs nothing and cannot be flaky on a runtime.
 
-import { say, scratchRepository, startDrive, teammateFace, teammateRows } from './drive-lib.mjs'
+import { FREE_ROW, FREE_SEARCH, say, scratchRepository, startDrive, teammateFace, teammateRows } from './drive-lib.mjs'
 
 const workspace = await scratchRepository('locust-drive-menu-ws-')
 
@@ -66,7 +66,7 @@ try {
       await new Promise(r => setTimeout(r, 500))
     })()`)
     const { pickRouteScript, sendAndWaitScript } = await import('./drive-lib.mjs')
-    await drive.evaluate(pickRouteScript({ group: '/opencode/i', search: 'muse', row: '/muse/i' }))
+    await drive.evaluate(pickRouteScript({ group: '/opencode/i', search: FREE_SEARCH, row: FREE_ROW }))
     await drive.evaluate(sendAndWaitScript('Reply with exactly the word READY and nothing else.', { waitSeconds: 300 }))
     return drive.evaluate(openMenu)
   })
@@ -120,7 +120,7 @@ try {
       ${teammateFace('Wren')}?.click()
       await new Promise(r => setTimeout(r, 600))
     })()`)
-    await drive.evaluate(pickRouteScript({ group: '/opencode/i', search: 'muse', row: '/muse/i' }))
+    await drive.evaluate(pickRouteScript({ group: '/opencode/i', search: FREE_SEARCH, row: FREE_ROW }))
     // Long enough to still be running when the menu is opened, and sent
     // WITHOUT waiting for it.
     await drive.evaluate(`(async () => {

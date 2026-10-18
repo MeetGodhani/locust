@@ -26,12 +26,13 @@ import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promis
 import { homedir, tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { portFor } from './ports.mjs'
+import { FREE_ROUTE } from '../_tools/drive-lib.mjs'
 
 const APP_DIR = new URL('../apps/desktop/', import.meta.url).pathname.slice(1)
 const ELECTRON = join(APP_DIR, 'node_modules', 'electron', 'dist', 'electron.exe')
 const NPM_DIR = join(homedir(), 'AppData', 'Roaming', 'npm')
 const PORT = portFor(import.meta.url)
-const FREE_MODEL = 'opencode/muse-spark-1.3-contributor-free'
+const FREE_MODEL = FREE_ROUTE.model
 const KEEP = process.argv.includes('--keep')
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 const say = (line) => console.error(line)

@@ -14,7 +14,7 @@
 //
 // Free: one turn on the free OpenCode model.
 
-import { FREE_ROUTE, pickRouteScript, say, scratchRepository, sendAndWaitScript, startDrive } from './drive-lib.mjs'
+import { FREE_ROUTE, FREE_ROW, FREE_SEARCH, pickRouteScript, say, scratchRepository, sendAndWaitScript, startDrive } from './drive-lib.mjs'
 
 const workspace = await scratchRepository('locust-metal-ws-')
 const T0 = '2026-09-20T05:00:00.000Z'
@@ -281,7 +281,7 @@ try {
   })
 
   await drive.capture('it is still the send button', async () => {
-    await drive.evaluate(pickRouteScript({ group: '/opencode/i', search: 'muse', row: '/free/i' }))
+    await drive.evaluate(pickRouteScript({ group: '/opencode/i', search: FREE_SEARCH, row: FREE_ROW }))
     const answer = await drive.evaluate(sendAndWaitScript('Reply with the single word METAL and nothing else.'))
     check('a message still sends', /metal/i.test(String(answer)), String(answer).slice(0, 120))
     return String(answer).slice(0, 140)

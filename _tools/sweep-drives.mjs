@@ -18,6 +18,8 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
+import { FREE_ROUTE } from './drive-lib.mjs'
+
 const arg = (name) => (process.argv.includes(name) ? process.argv[process.argv.indexOf(name) + 1] : undefined)
 const packaged = arg('--packaged')
 const out = arg('--out')
@@ -113,7 +115,7 @@ async function summarise() {
   await writeFile(join(out, 'summary.json'), JSON.stringify(results, null, 2), 'utf8')
 }
 
-const RETRY_FIRST = 'opencode/muse-spark-1.3-contributor-free'
+const RETRY_FIRST = FREE_ROUTE.model
 const PAID_REFUSAL = /refusing to run "[^"]+": it spends a paid account/
 /** A drive that reaches a site outside GitHub only when told to (drive-pet-picks: LOCUST_NETWORK=1). */
 const NETWORK_REFUSAL = /Re-run with LOCUST_NETWORK=1 if you mean it/

@@ -8,7 +8,7 @@
 // Remove takes the tree away and the branch stays; a new message makes the
 // tree again on the same branch.
 
-import { FREE_ROUTE, git, pickRouteScript, say, scratchRepository, sendAndWaitScript, startDrive, teammateFace } from './drive-lib.mjs'
+import { FREE_ROUTE, FREE_ROW, FREE_SEARCH, git, pickRouteScript, say, scratchRepository, sendAndWaitScript, startDrive, teammateFace } from './drive-lib.mjs'
 
 const workspace = await scratchRepository('locust-drive-wt-ws-')
 const drive = await startDrive({
@@ -50,7 +50,7 @@ try {
    * what it meant rather than relying on that refusal to notice.
    */
   await drive.capture('pick the free route', () =>
-    drive.evaluate(pickRouteScript({ group: '/opencode/i', search: 'muse', row: '/free/i' }))
+    drive.evaluate(pickRouteScript({ group: '/opencode/i', search: FREE_SEARCH, row: FREE_ROW }))
   )
   await drive.capture('start a slow run in the own branch', async () => {
     await drive.evaluate(`(async () => { ${teammateFace('Wren')}.click(); await new Promise(r => setTimeout(r, 500)) })()`)

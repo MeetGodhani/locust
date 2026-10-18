@@ -32,7 +32,7 @@ import { execFileSync } from 'node:child_process'
 import { copyFile, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
-import { pickRouteScript, recordRoot, say, scratchRepository, sleep, startDrive, teammateFace } from './drive-lib.mjs'
+import { FREE_ROUTE, FREE_ROW, FREE_SEARCH, pickRouteScript, recordRoot, say, scratchRepository, sleep, startDrive, teammateFace } from './drive-lib.mjs'
 
 const arg = (name) => (process.argv.includes(name) ? process.argv[process.argv.indexOf(name) + 1] : undefined)
 const packaged = arg('--packaged')
@@ -41,10 +41,11 @@ const BASE = arg('--base-url') ?? 'http://127.0.0.1:8089/v1'
 const MODEL = arg('--model') ?? 'qwen2.5-3b-instruct'
 const NAME = arg('--name') ?? 'Our Model'
 const NAME_PATTERN = NAME.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+const FREE_NAME = new RegExp(FREE_ROW.slice(1, FREE_ROW.lastIndexOf('/')), 'i')
 const SHOTS = arg('--shots')
 const only = new Set((arg('--only') ?? 'a,b,c,d,e').split(','))
 const MINUTES = Number(process.env.LOCUST_DRIVE_RUN_MINUTES ?? '15')
-const FREE_MODEL = process.env.LOCUST_FREE_MODEL ?? 'opencode/muse-spark-1.3-contributor-free'
+const FREE_MODEL = process.env.LOCUST_FREE_MODEL ?? FREE_ROUTE.model
 
 // A hosted provider's key (Anthropic's OpenAI-compatible endpoint, 10/07): read once from this process's memory,
 // typed into the Key field as a person would, never printed, and taken out of the environment before Locust starts.
@@ -321,7 +322,7 @@ try {
     })()`)))
     say(`  (e) set up: ${setUp}`)
     const slots = []
-    for (const [index, want] of [{ heading: '^Your models', search: NAME.split(' ')[0], row: NAME_PATTERN }, { heading: '^OpenCode', search: 'muse', row: 'muse.?spark' }].entries()) {
+    for (const [index, want] of [{ heading: '^Your models', search: NAME.split(' ')[0], row: NAME_PATTERN }, { heading: '^OpenCode', search: FREE_SEARCH, row: FREE_ROW.slice(1, FREE_ROW.lastIndexOf('/')) }].entries()) {
       slots.push(String(await drive.evaluate(`(async () => {
         const chip = document.querySelectorAll('.lc-slotgroup')[${String(index)}]?.querySelector('.lc-control--slot')
         if (!chip) return 'no slot chip'
@@ -376,9 +377,9 @@ try {
       })
     })()`))))
     say(`  (e) revealed: ${JSON.stringify(revealed)}`)
-    const veiled = shown.names.join('|') === 'Model A|Model B' && !shown.shell.includes(NAME) && !/Muse|OpenCode|qwen/i.test(shown.shell)
+    const veiled = shown.names.join('|') === 'Model A|Model B' && !shown.shell.includes(NAME) && !/OpenCode|qwen/i.test(shown.shell) && !FREE_NAME.test(shown.shell)
     const done = shown.states.length === 2 && shown.states.every((state) => /done/.test(state))
-    const named = revealed.names.length === 2 && revealed.names.includes(NAME) && revealed.names.some((name) => /Muse Spark/i.test(name))
+    const named = revealed.names.length === 2 && revealed.names.includes(NAME) && revealed.names.some((name) => FREE_NAME.test(name))
     check('e', 'blind while it ran (Model A, Model B); both answered; after Keep the names show', veiled && done && named && /^You kept /.test(revealed.bar), `set up: ${setUp} || ${sent} || after ${String(ranFor)} s: ${JSON.stringify({ states: shown.states, names: shown.names, answers: shown.answers })} || kept: ${JSON.stringify(revealed)}`)
   }
 } catch (error) {

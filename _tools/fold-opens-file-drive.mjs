@@ -18,7 +18,7 @@
 // `waitForSelector` landed in `drive-lib.mjs` alongside this file; a wait here
 // that times out names what it was waiting for and what the screen last said.
 
-import { FREE_ROUTE, pickRouteScript, say, scratchRepository, sendAndWaitScript, startDrive, teammateFace } from './drive-lib.mjs'
+import { FREE_ROUTE, FREE_ROW, FREE_SEARCH, pickRouteScript, say, scratchRepository, sendAndWaitScript, startDrive, teammateFace } from './drive-lib.mjs'
 
 const workspace = await scratchRepository('locust-drive-foldfile-ws-')
 const T0 = '2026-09-20T05:00:00.000Z'
@@ -58,14 +58,14 @@ try {
      * on that refusal to notice.
      */
     /*
-     * Muse Spark BY NAME, not "any free row". The guard's fallback picks the
-     * first free OpenCode model it finds, which on this machine is Jev 1.13
+     * The free route BY NAME, not "any free row". The guard's fallback picks
+     * the first free OpenCode model it finds, which on this machine is Jev 1.13
      * Free -- and Jev answered this drive's first free attempt with
      * "OpenCode stopped: Internal server error". Free is the spending rule;
      * which free model is a reliability question, and this repo's answer is
-     * muse-spark.
+     * drive-lib's FREE_ROUTE.
      */
-    const route = await drive.evaluate(pickRouteScript({ group: '/opencode/i', search: 'muse', row: '/free/i' }))
+    const route = await drive.evaluate(pickRouteScript({ group: '/opencode/i', search: FREE_SEARCH, row: FREE_ROW }))
     check('the turn runs on a free route', /opencode/i.test(String(route)) && /\bfree\b/i.test(String(route)), route)
     return drive.evaluate(
       sendAndWaitScript('Create a file called notes.md containing exactly two lines: a markdown heading "# Notes" and the sentence "The kettle is on." Then reply with the single word DONE.')

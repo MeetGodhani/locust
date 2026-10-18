@@ -14,13 +14,13 @@ import { spawn, execFile } from 'node:child_process'
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { teammateFace } from './drive-lib.mjs'
+import { FREE_ROW, FREE_SEARCH, teammateFace } from './drive-lib.mjs'
 
 const APP_DIR = new URL('../apps/desktop/', import.meta.url).pathname.slice(1)
 const ELECTRON = join(APP_DIR, 'node_modules', 'electron', 'dist', 'electron.exe')
 const NPM_DIR = join(homedir(), 'AppData', 'Roaming', 'npm')
 const PORT = 9291
-const FREE_MODEL = 'muse spark 1.3'
+const FREE_MODEL = FREE_SEARCH
 const KEEP = process.argv.includes('--keep')
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 const say = (line) => console.error(line)
@@ -173,7 +173,7 @@ try {
         const header = node.querySelector('.lc-picker__group')
         if (header) group = header.innerText
         const row = node.querySelector('.lc-picker__row')
-        if (row && !row.disabled && /opencode/i.test(group) && /muse.?spark.?1\\.3/i.test(row.innerText)) { target = row; break }
+        if (row && !row.disabled && /opencode/i.test(group) && ${FREE_ROW}.test(row.innerText)) { target = row; break }
       }
       if (!target) await new Promise(r => setTimeout(r, 500))
     }

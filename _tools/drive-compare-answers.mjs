@@ -16,7 +16,7 @@
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 
-import { openTeammateScript, recordRoot, say, scratchRepository, sleep, startDrive } from './drive-lib.mjs'
+import { FREE_ROW, openTeammateScript, recordRoot, say, scratchRepository, sleep, startDrive } from './drive-lib.mjs'
 
 const arg = (name) => (process.argv.includes(name) ? process.argv[process.argv.indexOf(name) + 1] : undefined)
 const packaged = arg('--packaged')
@@ -24,8 +24,8 @@ const tag = arg('--tag') ?? 'local'
 const MODEL = process.env.LOCUST_FREE_MODEL ?? 'opencode/nemotron-3-ultra-free'
 // Two models, each `search=>row pattern` (a regular expression over the picker's row label).
 // The first run's second free pick (Ling) had its provider down; OpenCode's free tier rate-limits too. Mimo was
-// rate-limited through 2026-10-06 and its column never finished; Fledge Alpha answered every drive asked of it that day, and left OpenCode's catalog 2026-10-08 (now Muse Spark).
-const PICKS = (process.env.LOCUST_COMPARE_PICKS ?? 'free=>nemotron-3-ultra|Nemotron 3 Ultra,free=>muse-spark|Muse Spark').split(',').map((spec) => {
+// rate-limited through 2026-10-06 and its column never finished; Fledge Alpha answered every drive asked of it that day, and left OpenCode's catalog 2026-10-08.
+const PICKS = (process.env.LOCUST_COMPARE_PICKS ?? `free=>nemotron-3-ultra|Nemotron 3 Ultra,free=>${FREE_ROW.slice(1, FREE_ROW.lastIndexOf('/'))}`).split(',').map((spec) => {
   const [search, row] = spec.includes('=>') ? spec.split('=>') : ['free', spec]
   return { search, row }
 })

@@ -19,7 +19,7 @@ import { createHash } from 'node:crypto'
 import { mkdir, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
-import { FREE_ROUTE, pickRouteScript, say, scratchRepository, sendAndWaitScript, startDrive, teammateFace, recordRoot } from './drive-lib.mjs'
+import { FREE_ROUTE, FREE_ROW, FREE_SEARCH, pickRouteScript, say, scratchRepository, sendAndWaitScript, startDrive, teammateFace, recordRoot } from './drive-lib.mjs'
 
 /*
  * Free by default. LOCUST_DRIVE_CLAUDE=1 runs the teammates on Claude Haiku
@@ -115,7 +115,7 @@ const press = (rowPattern, label) => `(async () => {
 try {
   await drive.capture('launch, mode Ask me first, two kept memories', () => drive.ready())
   await drive.capture('pick the free route', () =>
-    drive.evaluate(pickRouteScript({ group: '/opencode/i', search: 'muse', row: '/free/i' }))
+    drive.evaluate(pickRouteScript({ group: '/opencode/i', search: FREE_SEARCH, row: FREE_ROW }))
   )
   await drive.capture('ask Booty to change one memory and forget the other', async () => {
     await drive.evaluate(pick('Booty'))

@@ -5,19 +5,20 @@
 // The agent added is OpenCode's own ACP server (`opencode acp`), as if it were one Locust had never heard of: it is
 // the one ACP agent on this machine with free models, so nothing is spent. Settings > AI agents > Your own agents:
 // type a name and the command, Test (it must answer with its name, version and models), Add. The model picker then
-// lists it in a group of its own; Muse Spark free is picked; the composer must be on Approve each. A message is
+// lists it in a group of its own; the free route is picked; the composer must be on Approve each. A message is
 // answered; a file it is asked to make raises a card in the window, Allow once, and the file is there. Reloaded,
 // the conversation comes back from the record (LEDGER v25).
 
 import { access, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
-import { FREE_ROUTE, openTeammateScript, pickRouteScript, recordRoot, say, scratchRepository, sleep, startDrive } from './drive-lib.mjs'
+import { FREE_ROUTE, FREE_ROW, FREE_SEARCH, openTeammateScript, pickRouteScript, recordRoot, say, scratchRepository, sleep, startDrive } from './drive-lib.mjs'
 
 const arg = (name) => (process.argv.includes(name) ? process.argv[process.argv.indexOf(name) + 1] : undefined)
 const packaged = arg('--packaged')
 const tag = arg('--tag') ?? (packaged === undefined ? 'local' : 'packaged')
 const AGENT = 'OpenCode over ACP'
+const FREE_NAME = new RegExp(FREE_ROW.slice(1, FREE_ROW.lastIndexOf('/')), 'i')
 
 const workspace = await scratchRepository('locust-drive-own-acp-ws-')
 // What it asks about is the agent's own setting, and OpenCode edits without asking unless its permissions say ask --
@@ -111,10 +112,10 @@ try {
     await new Promise((r) => setTimeout(r, 600))
   })()`)
   await drive.evaluate(openTeammateScript('Ori'))
-  const picked = String(await drive.capture('the picker: the agent in a group of its own', () => drive.evaluate(pickRouteScript({ group: `/${AGENT} · your own agent/i`, search: 'muse spark 1.3 free', row: '/Muse Spark 1\\.3 Free/' }))))
+  const picked = String(await drive.capture('the picker: the agent in a group of its own', () => drive.evaluate(pickRouteScript({ group: `/${AGENT} · your own agent/i`, search: FREE_SEARCH, row: FREE_ROW }))))
   await sleep(800)
   const chip = String(await drive.evaluate(`(document.querySelector('form.command-dock')?.innerText ?? '').replace(/\\s+/g, ' ')`))
-  check('picked from its own group, the chat box names the agent and the model, in Approve each', /OpenCode over ACP · OpenCode\/Muse Spark 1\.3 Free/.test(chip) && /Approve/.test(chip), `${picked} || ${chip.slice(0, 300)}`)
+  check('picked from its own group, the chat box names the agent and the model, in Approve each', /OpenCode over ACP · OpenCode\//.test(chip) && FREE_NAME.test(chip) && /Approve/.test(chip), `${picked} || ${chip.slice(0, 300)}`)
 
   // A message.
   await send('Write the word PELICAN in capitals and nothing else. Do not use any tool.')
@@ -150,7 +151,7 @@ try {
   failures += 1
   say(`drive failed: ${error instanceof Error ? error.message : String(error)}`)
 } finally {
-  await drive.finish({ intro: `Build: ${packaged ?? 'out/'}. OpenCode's own ACP server added as an agent of your own ("opencode acp"), on its free Muse Spark model.`, extra: `Checks failed: ${String(failures)}` })
+  await drive.finish({ intro: `Build: ${packaged ?? 'out/'}. OpenCode's own ACP server added as an agent of your own ("opencode acp"), on its free model.`, extra: `Checks failed: ${String(failures)}` })
 }
 say(failures === 0 ? 'ALL CHECKS PASSED' : `${String(failures)} CHECK(S) FAILED`)
 process.exit(failures === 0 ? 0 : 1)
