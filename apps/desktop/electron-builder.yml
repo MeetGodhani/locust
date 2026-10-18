@@ -146,8 +146,37 @@ linux:
   # from what it is given, and the 256 was a downsample already.
   icon: resources/icon-512.png
   category: Development
+  # Built on the public ci.yml's Ubuntu runner (0.789). Three packages, as the
+  # other desktop apps people run on Linux ship: a .deb for Debian and Ubuntu,
+  # an .rpm for Fedora and openSUSE, and an AppImage for everything else,
+  # which is also the one that updates itself.
+  executableName: locust
+  synopsis: Your AI teammates, on the agents and models you choose
+  description: Run AI agents as a team you can watch, on the agents and models you choose.
+  vendor: Automated Workflow
+  # A .deb and an .rpm must name someone; nobody reads this address.
+  maintainer: Locust <noreply@locust.lol>
+  desktop:
+    entry:
+      # The dock and the app grid match a running window to its launcher by this.
+      StartupWMClass: Locust
   target:
-    - AppImage
+    - target: AppImage
+      arch:
+        - x64
+    - target: deb
+      arch:
+        - x64
+    - target: rpm
+      arch:
+        - x64
+  artifactName: Locust-${version}-linux-${arch}.${ext}
+
+# Installed as `locust`, not as the workspace's package name.
+deb:
+  packageName: locust
+rpm:
+  packageName: locust
 
 mac:
   icon: resources/icon-512.png

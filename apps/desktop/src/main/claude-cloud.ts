@@ -7,7 +7,7 @@ import { dirname, isAbsolute, join, resolve as resolvePath } from 'node:path'
 import type { RuntimeDiscovery } from '@teammate/runtime-adapters'
 
 import type { ClaudeCloudReading, ClaudeCloudSession } from '../shared/ipc.js'
-import { openInMacTerminal } from './mac-terminal.js'
+import { openInScriptTerminal, opensAScriptTerminal } from './script-terminal.js'
 import { plainTerminalText } from './pseudo-terminal.js'
 import type { RunInPseudoTerminal } from './pseudo-terminal.js'
 import { sessionExchanges } from './session-import.js'
@@ -271,7 +271,7 @@ export function createClaudeCloud(options: ClaudeCloudOptions) {
     }
     // Under the app's own Node (H7) the launch is the binary plus its script; otherwise the path found.
     const underOwnNode = launch.env !== undefined
-    return platform === 'darwin' || underOwnNode
+    return platform !== 'win32' || underOwnNode
       ? { ok: true, file: launch.executablePath, prefix: launch.prefixArgs, env: launch.env }
       : { ok: true, file: path, prefix: [], env: launch.env }
   }
@@ -280,9 +280,9 @@ export function createClaudeCloud(options: ClaudeCloudOptions) {
   const open = async (folder: string, action: 'start' | 'home', task?: string, sessionId?: string, choice?: CloudChoice): Promise<{ readonly ok: true } | { readonly ok: false; readonly message: string }> => {
     const launch = await launchOf()
     if (!launch.ok) return launch
-    if (platform === 'darwin') {
+    if (opensAScriptTerminal(platform)) {
       const args = action === 'start' ? [...choiceArgs(choice), '--cloud', task ?? ''] : sessionId === undefined ? ['--teleport'] : ['--teleport', sessionId]
-      const opened = await openInMacTerminal(folder, { file: launch.file, args: [...launch.prefix, ...args] }, launch.env)
+      const opened = await openInScriptTerminal(platform, folder, { file: launch.file, args: [...launch.prefix, ...args] }, launch.env)
       return opened.ok ? { ok: true } : { ok: false, message: opened.message }
     }
     const line = windowsCommandLine(launch.file, launch.prefix, action, { ...(sessionId === undefined ? {} : { session: sessionId }), ...(choice === undefined ? {} : { choice }) })
@@ -490,7 +490,7 @@ export function createClaudeCloud(options: ClaudeCloudOptions) {
       if (session?.sessionId === undefined || !isResumableSessionId(session.sessionId)) {
         return { ok: false, message: 'Locust does not know a valid id for this cloud session. Open it on claude.ai.' }
       }
-      if (platform !== 'win32' && platform !== 'darwin') return { ok: false, message: 'Continue in terminal works on Windows and macOS so far. Open it on claude.ai.' }
+      if (platform !== 'win32' && !opensAScriptTerminal(platform)) return { ok: false, message: 'Continue in terminal works on Windows, macOS and Linux. Open it on claude.ai.' }
       const launch = (await options.discover()).find((entry) => entry.id === 'claude')?.executable
       if (launch === undefined) return { ok: false, message: 'Claude Code is not installed here. Settings > AI agents shows how to add it.' }
       const where = await worktreeOf(session.folder, `${readingWorktreeName(session.id)}-here`)

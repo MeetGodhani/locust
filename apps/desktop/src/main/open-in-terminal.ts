@@ -6,7 +6,7 @@ import type { ExecutableLaunch, MissionRuntimeId } from '@teammate/runtime-adapt
 import type { OpenInTerminalResponse } from '../shared/ipc.js'
 import { runtimeDisplayName } from '../shared/runtimes.js'
 import { consoleCommandLine } from './runtime-sign-in.js'
-import { openInMacTerminal } from './mac-terminal.js'
+import { openInScriptTerminal, opensAScriptTerminal } from './script-terminal.js'
 export { macCommandScript } from './mac-terminal.js'
 
 /**
@@ -193,13 +193,13 @@ function started(child: ReturnType<typeof spawn>): Promise<true | Error> {
 
 export async function openInTerminal(request: TerminalRequest, options: OpenInTerminalOptions = {}): Promise<OpenInTerminalResponse> {
   const platform = options.platform ?? process.platform
-  if (platform === 'darwin') {
-    const resumeOnMac = terminalArgsFor(request)
-    if (resumeOnMac === undefined) return { ok: false, message: 'This conversation has no session its runtime can resume in a terminal.' }
-    return openInMacTerminal(request.cwd, terminalProgram(request.launch, resumeOnMac), request.launch.env, options.spawn ?? spawn)
+  if (opensAScriptTerminal(platform)) {
+    const resumeHere = terminalArgsFor(request)
+    if (resumeHere === undefined) return { ok: false, message: 'This conversation has no session its runtime can resume in a terminal.' }
+    return openInScriptTerminal(platform, request.cwd, terminalProgram(request.launch, resumeHere), request.launch.env, options.spawn ?? spawn)
   }
   if (platform !== 'win32') {
-    return { ok: false, message: 'Opening a conversation in a terminal works on Windows and macOS so far.' }
+    return { ok: false, message: 'Opening a conversation in a terminal works on Windows, macOS and Linux.' }
   }
   const resume = terminalArgsFor(request)
   if (resume === undefined) return { ok: false, message: 'This conversation has no session its runtime can resume in a terminal.' }
@@ -260,8 +260,8 @@ export async function openProgramInTerminal(
 ): Promise<OpenInTerminalResponse> {
   const platform = options.platform ?? process.platform
   const run = options.spawn ?? spawn
-  if (platform === 'darwin') return openInMacTerminal(cwd, program, undefined, run)
-  if (platform !== 'win32') return { ok: false, message: 'Opening a terminal works on Windows and macOS so far.' }
+  if (opensAScriptTerminal(platform)) return openInScriptTerminal(platform, cwd, program, undefined, run)
+  if (platform !== 'win32') return { ok: false, message: 'Opening a terminal works on Windows, macOS and Linux.' }
   const wtArgs = windowsTerminalArgs(program, cwd, title)
   if (options.prefer !== 'console' && wtArgs !== undefined) {
     const wt = options.localAppData === undefined ? 'wt.exe' : join(options.localAppData, 'Microsoft', 'WindowsApps', 'wt.exe')

@@ -1,14 +1,18 @@
-// Launch the packaged Mac app, run one free turn, press Stop (CI, 0.496).
+// Launch the packaged app on a Mac or on Linux, run one free turn, press Stop (CI, 0.496; Linux since 0.789).
 //
-//   node _smoke/mac-stop-smoke.mjs <path to Locust.app/Contents/MacOS/Locust>
+//   node _smoke/posix-stop-smoke.mjs <Locust.app/Contents/MacOS/Locust | the installed /opt/Locust/locust>
+//   node _smoke/posix-stop-smoke.mjs --launch-only <Locust-...-linux-x86_64.AppImage>
 //
 // The process-group Stop (0.476) was written for macOS and had never run on a
 // real Mac: the Windows machine builds and drives everything, and a Mac build
-// was only ever made, never started. This runs on GitHub's macOS runner after
-// the dmg is built: a teammate on a free OpenCode model is asked for a long,
-// slow answer; once it is running, Stop is pressed, and afterwards no
-// `opencode` process the run started may be left. Spends nothing (free model;
-// LOCUST_FREE_ONLY refuses any other route). Exit 0 only if every check passes.
+// was only ever made, never started. This runs on GitHub's macOS and Ubuntu
+// runners after the images are built: a teammate on a free OpenCode model is
+// asked for a long, slow answer; once it is running, Stop is pressed, and
+// afterwards no `opencode` process the run started may be left. Spends nothing
+// (free model; LOCUST_FREE_ONLY refuses any other route). `--launch-only` stops
+// after the window opens: the AppImage is checked for starting on a stock
+// Ubuntu, where its sandbox is the risk, not its Stop. Exit 0 only if every
+// check passes.
 //
 // Self-contained on purpose: the drive library assumes Windows (its paths,
 // `electron.exe`, npm's folder), and this has to run where that is untrue.
@@ -18,12 +22,19 @@ import { mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 
+const launchOnly = process.argv.includes('--launch-only')
+const given = process.argv.slice(2).find((arg) => !arg.startsWith('--'))
 // Absolute: the app is started from its profile folder, not from here.
-const app = process.argv[2] === undefined ? undefined : resolve(process.argv[2])
+const app = given === undefined ? undefined : resolve(given)
 if (app === undefined) {
-  console.log('usage: node _smoke/mac-stop-smoke.mjs <Locust.app/Contents/MacOS/Locust>')
+  console.log('usage: node _smoke/posix-stop-smoke.mjs [--launch-only] <Locust.app/Contents/MacOS/Locust | /opt/Locust/locust | Locust.AppImage>')
   process.exit(2)
 }
+const SYSTEM = process.platform === 'darwin' ? 'macOS' : 'Linux'
+/** Thrown once the window has opened under `--launch-only`: everything after it is skipped, nothing failed. */
+class LaunchOnly extends Error {}
+// Every process with its command line: BSD's spelling on a Mac, POSIX's on Linux, where procps reads `-axo` as a mistake.
+const PS_EVERY = process.platform === 'darwin' ? ['-axo', 'pid=,command='] : ['-eo', 'pid=,args=']
 const MODEL = process.env.LOCUST_FREE_MODEL ?? 'opencode/nemotron-3-ultra-free'
 const PORT = 9333
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -41,7 +52,7 @@ const git = (args, cwd) => execFileSync('git', args, { cwd, encoding: 'utf8' })
  */
 const opencodes = () => {
   try {
-    return execFileSync('ps', ['-axo', 'pid=,command='], { encoding: 'utf8' })
+    return execFileSync('ps', PS_EVERY, { encoding: 'utf8' })
       .split('\n')
       .map((line) => line.trim())
       .filter((line) => line.includes('opencode') && !/\bdebug config\b/.test(line))
@@ -52,14 +63,14 @@ const opencodes = () => {
   }
 }
 
-const workspace = await mkdtemp(join(tmpdir(), 'locust-mac-smoke-ws-'))
+const workspace = await mkdtemp(join(tmpdir(), 'locust-smoke-ws-'))
 git(['init', '-q', '-b', 'main'], workspace)
 git(['config', 'user.email', 'smoke@locust.test'], workspace)
 git(['config', 'user.name', 'Locust smoke'], workspace)
 await writeFile(join(workspace, 'README.md'), '# smoke\n', 'utf8')
 git(['add', '.'], workspace)
 git(['commit', '-q', '-m', 'first'], workspace)
-const profile = await mkdtemp(join(tmpdir(), 'locust-mac-smoke-profile-'))
+const profile = await mkdtemp(join(tmpdir(), 'locust-smoke-profile-'))
 await writeFile(join(profile, 'teammates.json'), JSON.stringify({
   schemaVersion: 1,
   teammates: [{ teammateId: 'tm_ash', name: 'Ash', hue: 'clay', role: 'Custom', roleTitle: 'Helper', createdAt: '2026-09-30T00:00:00.000Z', route: { runtime: 'opencode', model: MODEL, mode: 'accept-edits' } }],
@@ -107,8 +118,9 @@ try {
       page = list.find((target) => target.type === 'page' && target.webSocketDebuggerUrl && !target.url.includes('#splash'))
     } catch { /* not listening yet */ }
   }
-  check('the packaged app starts on macOS and opens its window', page !== undefined)
+  check(`the packaged app starts on ${SYSTEM} and opens its window`, page !== undefined)
   if (page === undefined) throw new Error('no window')
+  if (launchOnly) throw new LaunchOnly()
   socket = new WebSocket(page.webSocketDebuggerUrl)
   socket.addEventListener('message', (event) => {
     const message = JSON.parse(String(event.data))
@@ -198,7 +210,7 @@ try {
         socket.addEventListener('message', listener)
         socket.send(JSON.stringify({ id, method: 'Page.captureScreenshot', params: { format: 'png' } }))
       })
-      if (typeof shot === 'string') await writeFile('mac-smoke.png', Buffer.from(shot, 'base64'))
+      if (typeof shot === 'string') await writeFile(`${SYSTEM === 'macOS' ? 'mac' : 'linux'}-smoke.png`, Buffer.from(shot, 'base64'))
     }
     // Let the runtime get going: the Stop that matters ends a process tree already doing work.
     // Waited for, not assumed: on a runner just started, OpenCode can take a while to appear.
@@ -216,7 +228,7 @@ try {
     during = [...new Set([...seenBefore, ...fresh, ...opencodes().filter((pid) => !before.has(pid))])]
     aliveAtStop = opencodes().filter((pid) => during.includes(pid))
     console.log(`  turn ${String(attempt)}: opencode processes during the run: ${String(during.length)}, still running when Stop is pressed: ${String(aliveAtStop.length)} (${String(Math.round((Date.now() - waitedFrom) / 1000))} s after the turn started)`)
-    if (during.length === 0) console.log(`  every process now: ${execFileSync('ps', ['-axo', 'pid,command'], { encoding: 'utf8' }).split('\n').filter((line) => /opencode|Locust/i.test(line)).join(' | ').slice(0, 1200)}`)
+    if (during.length === 0) console.log(`  every process now: ${execFileSync('ps', PS_EVERY, { encoding: 'utf8' }).split('\n').filter((line) => /opencode|Locust/i.test(line)).join(' | ').slice(0, 1200)}`)
     if (aliveAtStop.length > 0 || attempt === 3) break
     // Over on its own: wait for the window to say so, then send the next.
     await evaluate(`(async () => {
@@ -244,12 +256,15 @@ try {
     aliveAtStop.length === 0 ? `the run had ended on its own before Stop -- nothing to prove: ${JSON.stringify({ during })}` : JSON.stringify({ during, aliveAtStop, left })
   )
 } catch (error) {
-  failures += 1
-  console.log(`smoke failed: ${error instanceof Error ? error.message : String(error)}`)
+  if (!(error instanceof LaunchOnly)) {
+    failures += 1
+    console.log(`smoke failed: ${error instanceof Error ? error.message : String(error)}`)
+  }
 } finally {
   try { socket?.close() } catch { /* closed */ }
   child.kill()
   await sleep(1_000)
 }
-console.log(failures === 0 ? 'MAC STOP SMOKE PASSED' : `${String(failures)} CHECK(S) FAILED`)
+const passed = `${SYSTEM === 'macOS' ? 'MAC' : 'LINUX'} ${launchOnly ? 'LAUNCH' : 'STOP'} SMOKE PASSED`
+console.log(failures === 0 ? passed : `${String(failures)} CHECK(S) FAILED`)
 process.exit(failures === 0 ? 0 : 1)

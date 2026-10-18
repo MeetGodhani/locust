@@ -19,7 +19,7 @@
 //      marker), nothing staged or set aside may be left, and Locust must be
 //      running again from /Applications.
 //
-// Exit 0 only if every check passes. Self-contained, like mac-stop-smoke.mjs.
+// Exit 0 only if every check passes. Self-contained, like posix-stop-smoke.mjs.
 
 import { execFileSync, spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'

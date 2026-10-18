@@ -33,9 +33,12 @@ HEAD_OF_RUN=$(gh run view "$RUN" -R "$PUB" --json headSha -q .headSha)
 [ "$HEAD_OF_RUN" = "$SHA" ] || { echo "MAC: run $RUN built $HEAD_OF_RUN, not $V's commit $SHA"; exit 1; }
 echo "MAC: run $RUN on $SHA"
 # Not `gh run watch --exit-status`: on 10/16 it gave up on a run that then succeeded. Poll the run itself.
-until [ "$(gh run view "$RUN" -R "$PUB" --json status -q .status 2>/dev/null)" = completed ]; do sleep 60; done
-[ "$(gh run view "$RUN" -R "$PUB" --json conclusion -q .conclusion)" = success ] || { echo "MAC: run $RUN did not succeed"; exit 1; }
-JOB=$(gh run view "$RUN" -R "$PUB" --json jobs -q '.jobs[] | select(.name|test("macos")) | .databaseId')
+# The macOS job's own result, not the run's (0.789): the run also builds Linux, and a Linux check that fails says
+# nothing about the Mac images. Done when that job is, or when the run ended without ever starting it.
+MACJOB='[.jobs[] | select(.name|test("macos"))][0]'
+until gh run view "$RUN" -R "$PUB" --json status,jobs -q "(.status == \"completed\") or (($MACJOB.status // \"\") == \"completed\")" 2>/dev/null | grep -qx true; do sleep 60; done
+[ "$(gh run view "$RUN" -R "$PUB" --json jobs -q "$MACJOB.conclusion // \"never ran\"")" = success ] || { echo "MAC: the macOS job of run $RUN did not succeed"; exit 1; }
+JOB=$(gh run view "$RUN" -R "$PUB" --json jobs -q "$MACJOB.databaseId")
 LOG="$TEMP/mac-$V.log"
 gh run view "$RUN" -R "$PUB" --log --job "$JOB" > "$LOG" 2>&1
 if ! grep -q "MAC STOP SMOKE PASSED" "$LOG" || ! grep -q "MAC UPDATE SMOKE PASSED" "$LOG"; then echo "MAC: a macOS check did not pass (see $LOG)"; exit 1; fi

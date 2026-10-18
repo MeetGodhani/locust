@@ -9,7 +9,7 @@
 // its own: the app's PATH comes from the login shell (mac-path.ts), npm is the
 // one Locust carries, run by the app's binary as Node, and OpenCode's install
 // script needs a `node` that only Locust's shim provides. The Mac launch check
-// (mac-stop-smoke.mjs) never walks it: it installs OpenCode with the runner's
+// (posix-stop-smoke.mjs) never walks it: it installs OpenCode with the runner's
 // own npm first.
 //
 // This starts the packaged app the way Finder does (from "/", with the bare
@@ -21,7 +21,7 @@
 // met the way a person would meet it: the card's "Switch to ..." and Send.
 // Free models only (LOCUST_FREE_ONLY); nothing is spent.
 //
-// Self-contained, like mac-stop-smoke.mjs: the drive library assumes Windows.
+// Self-contained, like posix-stop-smoke.mjs: the drive library assumes Windows.
 
 import { execFileSync, spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'

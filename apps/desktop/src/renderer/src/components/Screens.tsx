@@ -1243,7 +1243,10 @@ function UpdateControl({
         : phase === 'current'
           ? 'Up to date.'
           : phase === 'available'
-            ? `Version ${update?.availableVersion ?? ''} is available. Downloading it now.`
+            // A Linux .deb or .rpm is the package manager's to replace (0.789): the new package is handed over.
+            ? update?.downloadUrl !== undefined
+              ? `Version ${update.availableVersion ?? ''} is out. Download it, then open the file to install it.`
+              : `Version ${update?.availableVersion ?? ''} is available. Downloading it now.`
             : phase === 'downloading'
               ? `Downloading ${update?.availableVersion ?? ''}${update?.percent === undefined ? '' : ` · ${String(update.percent)}%`}`
               : phase === 'ready'
@@ -1274,6 +1277,20 @@ function UpdateControl({
         >
           Check now
         </button>
+        {phase === 'available' && update?.downloadUrl !== undefined && (
+          <button
+            type="button"
+            className="lc-button"
+            onClick={() => {
+              setRefusal(undefined)
+              void window.desktop?.openLink(update.downloadUrl!).then((response) => {
+                if (!response.ok) setRefusal(response.message)
+              })
+            }}
+          >
+            Download
+          </button>
+        )}
         {phase === 'ready' && (
           <button
             type="button"

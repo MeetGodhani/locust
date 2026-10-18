@@ -93,7 +93,9 @@ import { appendFile, copyFile, lstat, mkdir, readdir, readFile, rm, stat, writeF
 import { randomInt } from 'node:crypto'
 import { basename, dirname, isAbsolute, join, resolve as resolvePath } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { macPath } from './mac-path.js'
+import { shellPath } from './shell-path.js'
+import { linuxInstallOf, linuxPackageUrl } from './linux-install.js'
+import { DOWNLOADS, SITE } from '../shared/locust-home.js'
 import { homedir, release } from 'node:os'
 import { execFile } from 'node:child_process'
 import { createVoicePreviews, speakHelloCommand } from './voice-preview.js'
@@ -616,8 +618,8 @@ const bundledNpmFound = findBundledNpm({
  * told to install there, and the locator is told to look there -- from one
  * value, so the two cannot disagree.
  */
-// macOS: the PATH a terminal has, before anything looks for a CLI (mac-path.ts).
-if (process.platform === 'darwin') process.env.PATH = macPath('darwin', process.env.PATH, { shell: process.env.SHELL })
+// macOS and Linux: the PATH a terminal has, before anything looks for a CLI (shell-path.ts).
+if (process.platform === 'darwin' || process.platform === 'linux') process.env.PATH = shellPath(process.platform, process.env.PATH, { shell: process.env.SHELL })
 const bundledNpmPrefixPath = bundledNpmPrefix(app.getPath('userData'))
 const bundledNpm = bundledNpmFound === undefined ? undefined : { ...bundledNpmFound, prefix: bundledNpmPrefixPath }
 const executableLocator = process.env.LOCUST_HIDE_RUNTIMES === '1'
@@ -1300,7 +1302,8 @@ const createSplashWindow = (): BrowserWindow => {
      * nothing to it.
      */
     transparent: true,
-    icon: app.isPackaged
+    // Linux reads a PNG, and from inside the archive (0.789); only Windows needs the .ico beside it.
+    icon: app.isPackaged && process.platform === 'win32'
       ? join(process.resourcesPath, 'icon.ico')
       : join(__dirname, '../../resources/icon-512.png'),
     webPreferences: {
@@ -1361,7 +1364,8 @@ const createWindow = (
     // nothing, assuming Windows would take the executable's icon -- it does
     // for shortcuts, not for a running window (2026-09-06: "it's literally
     // showing the electron emblem"). Development keeps the PNG.
-    icon: app.isPackaged
+    // Linux reads a PNG, and from inside the archive (0.789); only Windows needs the .ico beside it.
+    icon: app.isPackaged && process.platform === 'win32'
       ? join(process.resourcesPath, 'icon.ico')
       : join(__dirname, '../../resources/icon-512.png'),
     webPreferences: {
@@ -2800,6 +2804,7 @@ if (!ownsSingleInstanceLock) {
       process.argv,
       process.env,
       !app.isPackaged || existsSync(join(dirname(process.execPath), 'Uninstall Locust.exe')) || (process.platform === 'darwin' && macSelfUpdateTarget(process.execPath) !== undefined)
+        || (process.platform === 'linux' && linuxInstallOf(process.env, process.resourcesPath) !== undefined)
     )
     // And says so, rather than showing a switch that will not do what it says.
     const toldHere = <T extends object>(state: T): T => (agentsMayUpdate ? state : { ...state, heldHere: true })
@@ -7922,7 +7927,9 @@ if (!ownsSingleInstanceLock) {
         return TESTER_LANE
       }
     })()
-    const installedCopy = existsSync(join(dirname(process.execPath), 'Uninstall Locust.exe'))
+    // On Linux (0.789): an AppImage, or a .deb or .rpm the package manager installed (linux-install.ts).
+    const linuxInstall = process.platform === 'linux' && app.isPackaged ? linuxInstallOf(process.env, process.resourcesPath) : undefined
+    const installedCopy = existsSync(join(dirname(process.execPath), 'Uninstall Locust.exe')) || linuxInstall !== undefined
     // locust:// links open the installed copy (0.770, locust-links.ts `claimLinks`); a test's copy never claims them.
     try {
       claimLinks({ platform: process.platform, packaged: app.isPackaged, installed: installedCopy, argv: process.argv, host: app })
@@ -7953,6 +7960,10 @@ if (!ownsSingleInstanceLock) {
           }),
       everyBuild: lane.everyBuild,
       currentVersion: app.getVersion(),
+      // A .deb or .rpm is the package manager's to replace: the new package is handed over instead (0.789).
+      ...(linuxInstall === 'deb' || linuxInstall === 'rpm'
+        ? { packageUrl: (files: readonly { readonly url?: unknown }[] | undefined) => linuxPackageUrl(linuxInstall, files, DOWNLOADS) ?? SITE }
+        : {}),
       // Not on macOS until the build is signed: its updater refuses an unsigned app.
       /*
        * AND ONLY THE INSTALLED COPY (0.507). Every copy of Locust shares one
@@ -9061,9 +9072,12 @@ if (!ownsSingleInstanceLock) {
       // macOS draws a menu-bar icon from a small PNG and cannot read an .ico
       // at all: handed one, the icon is empty and a closed Locust has no
       // way back but the Dock (the first macOS build, 2026-09-29).
+      // Linux's tray takes the same small PNG, at the size its panel draws it (0.789).
       process.platform === 'darwin'
         ? nativeImage.createFromPath(app.isPackaged ? join(process.resourcesPath, 'icon-32.png') : join(__dirname, '../../resources/icon-32.png')).resize({ width: 18, height: 18 })
-        : nativeImage.createFromPath(app.isPackaged ? join(process.resourcesPath, 'icon.ico') : join(__dirname, '../../resources/icon-512.png'))
+        : process.platform === 'linux'
+          ? nativeImage.createFromPath(app.isPackaged ? join(process.resourcesPath, 'icon-32.png') : join(__dirname, '../../resources/icon-32.png'))
+          : nativeImage.createFromPath(app.isPackaged ? join(process.resourcesPath, 'icon.ico') : join(__dirname, '../../resources/icon-512.png'))
     /**
      * One tray, for --background and for a window that closed into it.
      * Open Locust, the next routine due, Quit.

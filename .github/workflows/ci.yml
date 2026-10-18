@@ -1,7 +1,7 @@
 # Locust's public CI: typecheck and test on every push and pull request, and
-# unsigned Windows and macOS builds when started by hand. The Windows build's
-# artifact is what SignPath Foundation signs once the project is accepted.
-# No secrets are used.
+# unsigned Windows, macOS and Linux builds when started by hand. The Windows
+# build's artifact is what SignPath Foundation signs once the project is
+# accepted. No secrets are used.
 
 name: ci
 
@@ -10,6 +10,12 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+    inputs:
+      only:
+        description: Package one system only (a release packages all three)
+        type: choice
+        options: [all, linux]
+        default: all
 
 permissions:
   contents: read
@@ -34,8 +40,11 @@ jobs:
     if: github.event_name == 'workflow_dispatch'
     needs: test
     strategy:
+      # Each system's images are attached by their own job's result (mac-attach-dl.sh, linux-attach-dl.sh), so a
+      # Linux check that fails must not cancel the Mac build, nor the other way round.
+      fail-fast: false
       matrix:
-        os: [windows-latest, macos-14]
+        os: ${{ fromJSON(inputs.only == 'linux' && '["ubuntu-24.04"]' || '["windows-latest", "macos-14", "ubuntu-24.04"]') }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     steps:
@@ -51,6 +60,10 @@ jobs:
           node _tools/vendor-npm.mjs
           node _tools/vendor-recall.mjs
       - run: pnpm build
+      # The .rpm is made by rpmbuild, which Ubuntu does not carry.
+      - name: Packaging tools for the .rpm
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y rpm
       - name: Package
         working-directory: apps/desktop
         run: pnpm exec electron-builder --config electron-builder.yml --publish never
@@ -60,6 +73,10 @@ jobs:
           path: |
             apps/desktop/release/*.exe
             apps/desktop/release/*.dmg
+            apps/desktop/release/*.AppImage
+            apps/desktop/release/*.deb
+            apps/desktop/release/*.rpm
+            apps/desktop/release/latest-linux.yml
           if-no-files-found: error
           retention-days: 7
       # The Mac images are launched on a real Mac before they reach a release
@@ -106,7 +123,44 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           which opencode && opencode --version
-          node _smoke/mac-stop-smoke.mjs "apps/desktop/release/mac-arm64/Locust.app/Contents/MacOS/Locust"
+          node _smoke/posix-stop-smoke.mjs "apps/desktop/release/mac-arm64/Locust.app/Contents/MacOS/Locust"
       - name: Update itself on macOS
         if: runner.os == 'macOS'
         run: node _smoke/mac-update-smoke.mjs apps/desktop/release/mac-arm64/Locust.app "$(ls apps/desktop/release/*-mac-arm64.dmg | head -1)"
+      # Linux (0.789): each package is checked the way a person meets it. The .deb is installed with apt, its
+      # launcher is checked against the desktop-entry spec, and the installed app runs a turn on a free OpenCode
+      # model and is stopped, with Chromium's sandbox on as the package sets it up. The AppImage is started on
+      # this stock Ubuntu with nothing installed for it, and must open its window. xvfb is the screen.
+      - name: Linux test tools
+        if: runner.os == 'Linux'
+        run: sudo apt-get install -y xvfb libfuse2t64 desktop-file-utils
+      - name: Install the .deb as a person would
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get install -y "./$(ls apps/desktop/release/*.deb | head -1)"
+          desktop-file-validate /usr/share/applications/locust.desktop
+          grep -E '^(Name|Exec|Icon|MimeType|StartupWMClass|Categories)=' /usr/share/applications/locust.desktop
+          ls -l /opt/Locust/chrome-sandbox
+          rpm -qpi "$(ls apps/desktop/release/*.rpm | head -1)" | grep -E '^(Name|Version|Architecture|Summary)'
+      - name: Install OpenCode for the Linux launch check
+        if: runner.os == 'Linux'
+        run: npm install -g --allow-scripts=opencode-ai opencode-ai
+      - name: Launch, run and Stop on Linux
+        if: runner.os == 'Linux'
+        run: |
+          which opencode && opencode --version
+          xvfb-run -a node _smoke/posix-stop-smoke.mjs /opt/Locust/locust
+      - name: The AppImage starts on a stock Ubuntu
+        if: runner.os == 'Linux'
+        run: |
+          image="$(ls apps/desktop/release/*.AppImage | head -1)"
+          chmod +x "$image"
+          xvfb-run -a node _smoke/posix-stop-smoke.mjs --launch-only "$image"
+      - name: Keep the Linux frames
+        if: runner.os == 'Linux' && always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-frames
+          path: linux-*.png
+          if-no-files-found: ignore
+          retention-days: 7

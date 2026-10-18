@@ -3,7 +3,7 @@ import { StringDecoder } from 'node:string_decoder'
 import { killSpawnedTree, spawnShape, type ExecutableLaunch, type RuntimeDiscovery } from '@teammate/runtime-adapters'
 import type { RemoteControlState } from '../shared/claude-remote-control.js'
 import { consoleCommandLine } from './runtime-sign-in.js'
-import { openInMacTerminal } from './mac-terminal.js'
+import { openInScriptTerminal, opensAScriptTerminal } from './script-terminal.js'
 import { plainTerminalText } from './pseudo-terminal.js'
 
 // Colin: "Build the Settings switch and its process handling with unit tests only
@@ -16,8 +16,8 @@ const LIMIT = 64 * 1024
 /** A setup terminal, not an unmanaged Remote Control server. The person
  * signs in / trusts the folder here, then deliberately enables the switch again. */
 export async function openRemoteControlSetup(launch: ExecutableLaunch, cwd: string, platform: NodeJS.Platform): Promise<void> {
-  if (platform === 'darwin') {
-    const result = await openInMacTerminal(cwd, { file: launch.executablePath, args: launch.prefixArgs }, launch.env)
+  if (opensAScriptTerminal(platform)) {
+    const result = await openInScriptTerminal(platform, cwd, { file: launch.executablePath, args: launch.prefixArgs }, launch.env)
     if (!result.ok) throw new Error(result.message)
     return
   }

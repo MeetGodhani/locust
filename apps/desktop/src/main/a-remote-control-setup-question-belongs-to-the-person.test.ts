@@ -2,14 +2,15 @@
 // Code's trust prompt; it needs Colin's claude.ai sign-in, so the live check is his."
 import { EventEmitter } from 'node:events'
 import { beforeEach, expect, it, vi } from 'vitest'
-const fake = vi.hoisted(() => ({ spawn: vi.fn(), mac: vi.fn() }))
+const fake = vi.hoisted(() => ({ spawn: vi.fn(), mac: vi.fn(), linux: vi.fn() }))
 vi.mock('node:child_process', () => ({ spawn: fake.spawn }))
 vi.mock('./mac-terminal.js', () => ({ openInMacTerminal: fake.mac }))
+vi.mock('./linux-terminal.js', () => ({ openInLinuxTerminal: fake.linux }))
 import { openRemoteControlSetup } from './claude-remote-control.js'
 const launch = { commandName: 'claude', discoveredPath: 'C:\\fake\\claude.cmd', executablePath: 'C:\\fake folder\\node.exe', prefixArgs: ['C:\\fake folder\\claude.js'], kind: 'node-shim' as const, env: { ELECTRON_RUN_AS_NODE: '1' } }
 let child: EventEmitter & { unref: ReturnType<typeof vi.fn> }
 beforeEach(() => {
-  fake.spawn.mockReset(); fake.mac.mockReset()
+  fake.spawn.mockReset(); fake.mac.mockReset(); fake.linux.mockReset()
   child = Object.assign(new EventEmitter(), { unref: vi.fn() })
   fake.spawn.mockReturnValue(child)
 })
@@ -33,7 +34,14 @@ it('macOS terminal failures are shown verbatim.', async () => {
   fake.mac.mockResolvedValue({ ok: false, message: 'exact mac error' })
   await expect(openRemoteControlSetup(launch, '/project', 'darwin')).rejects.toThrow('exact mac error')
 })
+it('Linux opens the same setup command in the terminal its desktop has (0.789).', async () => {
+  fake.linux.mockResolvedValue({ ok: true, where: 'Konsole' })
+  await openRemoteControlSetup(launch, '/project', 'linux')
+  expect(fake.linux).toHaveBeenCalledExactlyOnceWith('/project', { file: launch.executablePath, args: launch.prefixArgs }, launch.env)
+  expect(fake.mac).not.toHaveBeenCalled()
+})
 it('An unsupported setup terminal gives manual guidance without starting a process.', async () => {
-  await expect(openRemoteControlSetup(launch, '/project', 'linux')).rejects.toThrow('Open Claude Code in a terminal in this folder')
+  await expect(openRemoteControlSetup(launch, '/project', 'freebsd')).rejects.toThrow('Open Claude Code in a terminal in this folder')
   expect(fake.spawn).not.toHaveBeenCalled()
+  expect(fake.linux).not.toHaveBeenCalled()
 })

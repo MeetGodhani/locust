@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { loginShellPath, macPath, mergedPath } from './mac-path.js'
+import { loginShellPath, mergedPath, shellPath } from './shell-path.js'
 
 /**
  * A MAC APP SEES THE TERMINAL'S PATH (the first macOS build, 2026-09-29).
@@ -9,7 +9,7 @@ import { loginShellPath, macPath, mergedPath } from './mac-path.js'
  */
 describe('the PATH Locust runs with', () => {
   it('on macOS puts the login shell\'s PATH first, then what it was given, then the usual install folders', () => {
-    const path = macPath('darwin', '/usr/bin:/bin:/usr/sbin:/sbin', { shell: '/bin/zsh', home: '/Users/ian', ask: () => '/opt/homebrew/bin:/Users/ian/.npm-global/bin:/usr/bin' })
+    const path = shellPath('darwin', '/usr/bin:/bin:/usr/sbin:/sbin', { shell: '/bin/zsh', home: '/Users/ian', ask: () => '/opt/homebrew/bin:/Users/ian/.npm-global/bin:/usr/bin' })
     const parts = path!.split(':')
     expect(parts.slice(0, 3)).toEqual(['/opt/homebrew/bin', '/Users/ian/.npm-global/bin', '/usr/bin'])
     expect(parts).toContain('/Users/ian/.local/bin')
@@ -18,14 +18,13 @@ describe('the PATH Locust runs with', () => {
   })
 
   it('still finds the usual folders when the shell cannot be asked', () => {
-    const path = macPath('darwin', '/usr/bin:/bin', { home: '/Users/ian', ask: () => undefined })
+    const path = shellPath('darwin', '/usr/bin:/bin', { home: '/Users/ian', ask: () => undefined })
     expect(path).toContain('/opt/homebrew/bin')
     expect(path!.startsWith('/usr/bin:/bin:')).toBe(true)
   })
 
-  it('is left alone on Windows and Linux', () => {
-    expect(macPath('win32', 'C:\\Windows', { ask: () => '/nope' })).toBe('C:\\Windows')
-    expect(macPath('linux', '/usr/bin', { ask: () => '/nope' })).toBe('/usr/bin')
+  it('is left alone on Windows', () => {
+    expect(shellPath('win32', 'C:\\Windows', { ask: () => '/nope' })).toBe('C:\\Windows')
   })
 
   it("reads only what is between the markers, whatever a shell profile prints", () => {

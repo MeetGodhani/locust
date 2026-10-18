@@ -47,7 +47,8 @@ export interface UpdaterLike {
    */
   autoInstallOnAppQuit: boolean
   checkForUpdates(): Promise<{
-    readonly updateInfo: { readonly version: string }
+    /** `files` is the feed's list of packages; a .deb or .rpm copy is handed its own (linux-install.ts). */
+    readonly updateInfo: { readonly version: string; readonly files?: readonly { readonly url?: unknown }[] }
     /** electron-updater's own answer: false for the same version, or an older one. */
     readonly isUpdateAvailable?: boolean
     /**
@@ -68,6 +69,11 @@ export interface UpdateServiceOptions {
   readonly supported: boolean
   /** Ask the feed, never download or install: a copy run by the update smoke (0.507). */
   readonly checkOnly?: boolean
+  /**
+   * A copy the system's package manager owns (a Linux .deb or .rpm, 0.789): Locust never downloads or installs
+   * its update, and says a newer version is out with the package to open, from the feed's own list of files.
+   */
+  readonly packageUrl?: (files: readonly { readonly url?: unknown }[] | undefined) => string
   /** Missions running right now; an install waits for them. */
   readonly liveMissionCount: () => number
   /** Begin the app's own shutdown; the updater installs on the quit that follows. */
@@ -168,7 +174,7 @@ export function createUpdateService(options: UpdateServiceOptions): UpdateServic
 
   // A copy that only asks (the update smoke's `--update-check-only`) checks
   // the feed like the installed one, and never downloads or installs.
-  const mayInstall = options.supported && options.checkOnly !== true
+  const mayInstall = options.supported && options.checkOnly !== true && options.packageUrl === undefined
   if (!mayInstall) {
     // Nothing downloaded, and nothing installed at quit: a copy that is not
     // the installed one must never run the installer (0.507, index.ts).
@@ -340,12 +346,14 @@ export function createUpdateService(options: UpdateServiceOptions): UpdateServic
          */
         const onDisk = downloadedVersion !== undefined && downloadedVersion === version
         if (!onDisk) downloadedVersion = undefined
+        const downloadUrl = options.packageUrl?.(result?.updateInfo.files)
         return {
           ok: true,
           data: publish({
             phase: onDisk ? 'ready' : 'available',
             currentVersion: options.currentVersion,
-            availableVersion: version
+            availableVersion: version,
+            ...(downloadUrl === undefined ? {} : { downloadUrl })
           })
         }
       } catch {

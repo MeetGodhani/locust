@@ -15,3 +15,6 @@
 
 /** Installers, the update feed, the Mac's release list and the runtime verdicts. */
 export const DOWNLOADS = 'https://dl.locust.lol/'
+
+/** The site, whose Download button offers every system's build. */
+export const SITE = 'https://locust.lol/'

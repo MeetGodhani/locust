@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process'
 import { homedir } from 'node:os'
-import { openInMacTerminal } from './mac-terminal.js'
+import { openInScriptTerminal, opensAScriptTerminal } from './script-terminal.js'
 
 import type { RuntimeDiscovery } from '@teammate/runtime-adapters'
 
@@ -65,20 +65,20 @@ export async function openSignIn(runtime: string, options: RuntimeSignInOptions,
     return { ok: false, what: 'This runtime has no sign-in step.', next: 'Nothing to do here.' }
   }
   const platform = options.platform ?? process.platform
-  if (platform !== 'win32' && platform !== 'darwin') {
-    // Built and measured on Windows, and macOS's own Terminal (below). A
-    // terminal on Linux is a different program on every machine.
-    return { ok: false, what: 'Signing in from here works on Windows and macOS so far.', next: 'Run the command shown in a terminal.' }
+  if (platform !== 'win32' && !opensAScriptTerminal(platform)) {
+    // Built and measured on Windows, macOS's own Terminal and, since 0.789, the
+    // terminal a Linux desktop has (linux-terminal.ts).
+    return { ok: false, what: 'Signing in from here works on Windows, macOS and Linux.', next: 'Run the command shown in a terminal.' }
   }
   const found = (await options.discover()).find((entry) => entry.id === runtime)
   const path = found?.executable?.discoveredPath
   if (path === undefined) {
     return { ok: false, what: 'Locust could not find this runtime on the machine.', next: 'Install it first, then sign in.' }
   }
-  if (platform === 'darwin' && found?.executable !== undefined) {
-    // macOS: Terminal runs the sign-in (mac-terminal.ts), in the home folder.
+  if (opensAScriptTerminal(platform) && found?.executable !== undefined) {
+    // macOS and Linux: a terminal runs the sign-in (script-terminal.ts), in the home folder.
     const launch = found.executable
-    const opened = await openInMacTerminal(homedir(), { file: launch.executablePath, args: [...launch.prefixArgs, ...args] }, launch.env)
+    const opened = await openInScriptTerminal(platform, homedir(), { file: launch.executablePath, args: [...launch.prefixArgs, ...args] }, launch.env)
     options.closed()
     return opened.ok ? { ok: true } : { ok: false, what: 'Terminal could not be opened for the sign-in.', next: 'Run the command shown in a terminal.' }
   }

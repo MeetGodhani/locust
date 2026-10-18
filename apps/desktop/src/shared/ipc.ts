@@ -343,6 +343,11 @@ export interface AppUpdateState {
   /** Every build as it is published, or only the one a day testers get (main/update-lane.ts). */
   readonly everyBuild?: boolean
   readonly availableVersion?: string
+  /**
+   * Where to get `availableVersion` by hand: set for a copy the system's package manager owns, a Linux .deb or
+   * .rpm, which Locust never replaces itself (0.789, main/linux-install.ts).
+   */
+  readonly downloadUrl?: string
   readonly percent?: number
   /** Set only when the phase is `failed`; never the provider's own text. */
   readonly message?: string
@@ -819,7 +824,8 @@ export interface TerminalCatchUpResponse {
 }
 
 export type OpenInTerminalResponse =
-  | { readonly ok: true; readonly where: 'Windows Terminal' | 'a console window' | 'Terminal' }
+  /** Where it opened, as the person calls it: Windows Terminal, a console window, Terminal, or a Linux terminal's name. */
+  | { readonly ok: true; readonly where: string }
   | { readonly ok: false; readonly message: string }
 export const WORKSPACE_SETTINGS_READ_CHANNEL = 'workspace-settings:read'
 export const WORKSPACE_SETTINGS_WRITE_CHANNEL = 'workspace-settings:write'
