@@ -11,6 +11,12 @@ Settings shows this file as What's new. An entry may group its changes under
 about when they arrive on it carries `<!-- big -->` on the line under its
 heading: the home screen then shows it once, as a splash.
 
+## 0.792.0 - 2026-10-18
+
+### Improved
+
+- **A company's policy reads in plain words.** Settings > General > Managed by your organization names the AI agents the way Locust does, the highest mode the way the mode menu does, and the spend limit in dollars a month, instead of repeating the policy file's code. Where the policy turns other apps off, Settings no longer offers Add to the Claude app, and says what the policy set once, beside the switch.
+
 ## 0.791.0 - 2026-10-18
 
 ### New
