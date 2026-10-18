@@ -38,7 +38,9 @@ until gh run view "$RUN" -R "$PUB" --json status,jobs -q "(.status == \"complete
 [ "$(gh run view "$RUN" -R "$PUB" --json jobs -q "$LINUXJOB.conclusion // \"never ran\"")" = success ] || { echo "LINUX: the Linux job of run $RUN did not succeed"; exit 1; }
 JOB=$(gh run view "$RUN" -R "$PUB" --json jobs -q "$LINUXJOB.databaseId")
 LOG="$TEMP/linux-$V.log"
-gh run view "$RUN" -R "$PUB" --log --job "$JOB" > "$LOG" 2>&1
+# The job's own log (0.789): `gh run view --log` answers only once the WHOLE run is done, and the run also
+# builds the other systems, so it read "still in progress" here and failed a job that had passed.
+gh api --allow-escape-sequences "repos/$PUB/actions/jobs/$JOB/logs" > "$LOG" 2>&1
 if ! grep -q "LINUX STOP SMOKE PASSED" "$LOG" || ! grep -q "LINUX LAUNCH SMOKE PASSED" "$LOG"; then echo "LINUX: a Linux check did not pass (see $LOG)"; exit 1; fi
 echo "LINUX: $(grep -c '\[PASS\]' "$LOG") checks PASS on Linux, $(grep -c '\[FAIL\]' "$LOG") FAIL"
 # C:, not D: -- D: damages files at rest (memory d-drive-ntfs-corruption); these are deleted as soon as they are up.

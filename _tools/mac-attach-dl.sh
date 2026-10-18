@@ -40,7 +40,9 @@ until gh run view "$RUN" -R "$PUB" --json status,jobs -q "(.status == \"complete
 [ "$(gh run view "$RUN" -R "$PUB" --json jobs -q "$MACJOB.conclusion // \"never ran\"")" = success ] || { echo "MAC: the macOS job of run $RUN did not succeed"; exit 1; }
 JOB=$(gh run view "$RUN" -R "$PUB" --json jobs -q "$MACJOB.databaseId")
 LOG="$TEMP/mac-$V.log"
-gh run view "$RUN" -R "$PUB" --log --job "$JOB" > "$LOG" 2>&1
+# The job's own log (0.789): `gh run view --log` answers only once the WHOLE run is done, and the run also
+# builds the other systems, so it read "still in progress" here and failed a job that had passed.
+gh api --allow-escape-sequences "repos/$PUB/actions/jobs/$JOB/logs" > "$LOG" 2>&1
 if ! grep -q "MAC STOP SMOKE PASSED" "$LOG" || ! grep -q "MAC UPDATE SMOKE PASSED" "$LOG"; then echo "MAC: a macOS check did not pass (see $LOG)"; exit 1; fi
 echo "MAC: $(grep -c '\[PASS\]' "$LOG") checks PASS on macOS, $(grep -c '\[FAIL\]' "$LOG") FAIL"
 # C:, not D: -- D: damages files at rest (memory d-drive-ntfs-corruption); these are deleted as soon as they are up.
