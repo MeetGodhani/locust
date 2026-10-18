@@ -11,6 +11,12 @@ Settings shows this file as What's new. An entry may group its changes under
 about when they arrive on it carries `<!-- big -->` on the line under its
 heading: the home screen then shows it once, as a splash.
 
+## 0.788.0 - 2026-10-18
+
+### Fixed
+
+- **An OpenCode follow-up keeps its answer when the connection drops.** Since 0.786 Locust could keep the answer of a turn whose OpenCode connection closed early only in a new conversation, and a follow-up in an ongoing one ended asking you to send it again. Locust now matches the answer to the message you sent, so a follow-up keeps its answer too. While OpenCode is still working, Locust now waits for it for up to five minutes instead of giving up after ten seconds. Found and fixed by Mit Godhani.
+
 ## 0.787.0 - 2026-10-18
 
 ### Fixed
