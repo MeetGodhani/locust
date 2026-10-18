@@ -29,6 +29,8 @@ grep -E "arrived|DIFFERENTIAL" "$TEMP/diff.log"
 cd "$R" || exit 1
 git -c credential.helper= -c "$G" push -q stopbanning HEAD:main || { echo "push FAILED"; exit 1; }
 echo "pushed $(git log --oneline -1) to StopBanning/locust"
+# The build's tag, at the commit it was made from; github-release.mjs below puts it on GitHub (0.790).
+git tag "$NEW" HEAD 2>/dev/null || echo "tag $NEW was already made"
 mkdir -p "$CACHE" && rm -f "$CACHE"/Locust-*-setup.exe && cp "$R/apps/desktop/release/Locust-$NEW-setup.exe" "$CACHE/" && echo "cached Locust-$NEW-setup.exe for the next release check"
 echo "ALL PUBLISHED"
 echo "Mac images: see $TEMP/mac-$NEW.out"
@@ -38,3 +40,7 @@ tail -1 "$TEMP/mac-$NEW.out"
 echo "Linux packages: see $TEMP/linux-$NEW.out"
 bash "$(dirname "$0")/linux-attach-dl.sh" "$NEW" > "$TEMP/linux-$NEW.out" 2>&1 < /dev/null
 tail -1 "$TEMP/linux-$NEW.out"
+# The Releases page on StopBanning/locust: the same six files and their sums, once dl.locust.lol has them all (0.790).
+echo "GitHub release: see $TEMP/github-$NEW.out"
+node "$R/_tools/github-release.mjs" "$NEW" > "$TEMP/github-$NEW.out" 2>&1 < /dev/null
+tail -1 "$TEMP/github-$NEW.out"

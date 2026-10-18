@@ -7,7 +7,9 @@ on runtimes and models you choose, with a durable record of everything they did.
 (Not the Python load-testing tool of the same name, which is unrelated.)
 
 **Download the latest build** at [locust.lol](https://locust.lol), for Windows,
-Mac and Linux. The Windows and Mac builds are not signed by a publisher yet
+Mac and Linux, or from [Releases](https://github.com/StopBanning/locust/releases),
+which has every build's notes and the same files with their SHA-256 sums. The
+Windows and Mac builds are not signed by a publisher yet
 ([why, and the signing policy](docs/CODE-SIGNING.md)), so each asks once:
 
 - **Windows** warns that the installer comes from an unknown publisher: choose
