@@ -10,8 +10,10 @@ R=/c/work/locust
 cd "$R" || exit 1
 if curl -sfI "https://dl.locust.lol/Locust-$V-linux.json" > /dev/null; then echo "LINUX: $V already has its Linux packages"; exit 0; fi
 git fetch -q stopbanning
-# SHA: the release commit, which a later commit on main may follow (the version is read from that commit).
-SHA=${SHA:-$(git rev-parse HEAD)}
+# SHA: the release commit, which a later commit on main may follow (the version is read from that commit): its tag,
+# made by publish-dl.sh at its push, so work committed while the Mac and Linux builds run is never taken for the
+# release (0.791's Linux packages were refused so); HEAD only before there is a tag.
+SHA=${SHA:-$(git rev-list -n 1 "refs/tags/$V" 2>/dev/null || git rev-parse HEAD)}
 git show "$SHA:apps/desktop/package.json" | grep -q "\"version\": \"$V\"" || { echo "LINUX: $SHA is not $V"; exit 1; }
 dispatched() {
   gh run list -R "$PUB" -w ci.yml -L 10 --json databaseId,headSha,event -q "[.[] | select(.headSha==\"$SHA\" and .event==\"workflow_dispatch\")][0].databaseId // empty"

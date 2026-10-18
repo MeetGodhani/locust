@@ -11,8 +11,10 @@ R=/c/work/locust
 cd "$R" || exit 1
 if curl -sfI "https://dl.locust.lol/Locust-$V-mac.json" > /dev/null; then echo "MAC: $V already has its Mac images"; exit 0; fi
 git fetch -q stopbanning
-# SHA: the release commit, which a later commit on main may follow (the version is read from that commit).
-SHA=${SHA:-$(git rev-parse HEAD)}
+# SHA: the release commit, which a later commit on main may follow (the version is read from that commit): its tag,
+# made by publish-dl.sh at its push, so work committed while the Mac and Linux builds run is never taken for the
+# release (0.791's Linux packages were refused so); HEAD only before there is a tag.
+SHA=${SHA:-$(git rev-list -n 1 "refs/tags/$V" 2>/dev/null || git rev-parse HEAD)}
 git show "$SHA:apps/desktop/package.json" | grep -q "\"version\": \"$V\"" || { echo "MAC: $SHA is not $V"; exit 1; }
 if [ -z "$RUN" ]; then
   [ "$(git rev-parse stopbanning/main)" = "$SHA" ] || { echo "MAC: stopbanning/main is not $V's commit $SHA"; exit 1; }
