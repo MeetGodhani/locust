@@ -11,6 +11,12 @@ Settings shows this file as What's new. An entry may group its changes under
 about when they arrive on it carries `<!-- big -->` on the line under its
 heading: the home screen then shows it once, as a splash.
 
+## 0.787.0 - 2026-10-18
+
+### Fixed
+
+- **A file a teammate writes outside your folder opens.** When you asked a teammate to save a file somewhere else and it handed the file over by its full path, the conversation said "Not shown as a file", and the step that wrote it would not open it either. Both now open the file, show it in its folder and save a copy, just as they do for a file in the conversation's folder. Locust still opens a file outside your folders only when the teammate itself wrote it, read it or handed it over.
+
 ## 0.786.0 - 2026-10-18
 
 ### Fixed
