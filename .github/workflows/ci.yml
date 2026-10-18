@@ -133,8 +133,8 @@ jobs:
       # Linux (0.789): each package is checked the way a person meets it. The .deb is installed with apt, its
       # launcher is checked against the desktop-entry spec, and the installed app runs a turn on a free OpenCode
       # model and is stopped, with Chromium's sandbox on as the package sets it up. The AppImage is started on
-      # this stock Ubuntu with nothing installed for it, and must open its window. xvfb is the screen, at a laptop's
-      # size: its default 640x480 is too small for the layout to draw the teammates' faces.
+      # this stock Ubuntu with nothing installed for it, and must open its window. xvfb is the screen, at a desktop's
+      # 1920x1080: its default 640x480, or a laptop's 1440x900, opens the window in the narrow layout.
       - name: Linux test tools
         if: runner.os == 'Linux'
         run: sudo apt-get install -y xvfb libfuse2t64 desktop-file-utils
@@ -153,13 +153,13 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           which opencode && opencode --version
-          xvfb-run -a -s '-screen 0 1440x900x24' node _smoke/posix-stop-smoke.mjs /opt/Locust/locust
+          xvfb-run -a -s '-screen 0 1920x1080x24' node _smoke/posix-stop-smoke.mjs /opt/Locust/locust
       - name: The AppImage starts on a stock Ubuntu
         if: runner.os == 'Linux'
         run: |
           image="$(ls apps/desktop/release/*.AppImage | head -1)"
           chmod +x "$image"
-          xvfb-run -a -s '-screen 0 1440x900x24' node _smoke/posix-stop-smoke.mjs --launch-only "$image"
+          xvfb-run -a -s '-screen 0 1920x1080x24' node _smoke/posix-stop-smoke.mjs --launch-only "$image"
       - name: Keep the Linux frames
         if: runner.os == 'Linux' && always()
         uses: actions/upload-artifact@v4

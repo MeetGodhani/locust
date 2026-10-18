@@ -151,7 +151,9 @@ try {
 
   const opened = await evaluate(`(async () => {
     for (let i = 0; i < 60; i += 1) {
+      // The face in the full sidebar, or, in a window under 1200px wide, the same teammate in the narrow layout's rail.
       const face = [...document.querySelectorAll('.lc-faces__one')].find((one) => (one.getAttribute('aria-label') ?? '').startsWith('Ash — '))
+        ?? [...document.querySelectorAll('.lc-railslot .lc-row--button')].find((one) => (one.getAttribute('aria-label') ?? '').startsWith('Ash'))
       if (face) { face.click(); await new Promise((r) => setTimeout(r, 800)); return 'opened' }
       await new Promise((r) => setTimeout(r, 500))
     }
