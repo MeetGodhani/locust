@@ -556,3 +556,220 @@ describe("the shared OpenCode session check", () => {
     }, { signal: stopping.signal });
   });
 });
+
+const promptMessage = (id = "msg_current_prompt", sessionID = SESSION) => ({
+  type: "message.updated", properties: { sessionID, info: { id, sessionID, role: "user" } },
+});
+const answerTo = (parentID = "msg_current_prompt", id = "msg_current_answer") => {
+  const message = finishedMessage(id);
+  return { ...message, info: { ...message.info, parentID } };
+};
+
+describe("an OpenCode follow-up recovered by its prompt ID", () => {
+  it("recovers a resumed turn by parentID even when its assistant event was lost", async () => {
+    const server = fakeClosedServer({ events: [promptMessage()], messages: [answerTo()] });
+    await inspect(server, async (run) => {
+      const completion = await completionWithin(run);
+      expect(completion).toMatchObject({ exitCode: 0, cancelled: false, stderr: "" });
+      const normalizer = createOpenCodeEventNormalizer({ runId: "run_followup", missionId: "mission_followup", cliVersion: "1.18.27" });
+      const events = [];
+      for await (const record of run.records) events.push(...normalizer.accept(record));
+      events.push(...normalizer.finish(completion));
+      expect(events.at(-1)?.type).toBe("run.completed");
+      expect(events.some((event) => event.type === "message.delta" && (event.payload as { text?: string }).text === "Recovered final answer")).toBe(true);
+      expect(server.calls.some((call) => call.path === "/session")).toBe(false);
+      expect(server.calls.filter((call) => call.path.endsWith("/prompt_async"))).toHaveLength(1);
+      expect(server.calls.every((call) => call.authenticated)).toBe(true);
+      expect(server.kill).toHaveBeenCalledOnce();
+    }, { resumeSessionId: SESSION });
+  });
+
+  it("selects the current answer instead of an observed historical answer", async () => {
+    const historical = answerTo("msg_previous_prompt", "msg_previous_answer");
+    const current = answerTo();
+    const server = fakeClosedServer({
+      events: [promptMessage(), { ...assistant, properties: { sessionID: SESSION, info: historical.info } }],
+      messages: [historical, current],
+    });
+    await inspect(server, async (run) => {
+      expect((await completionWithin(run)).exitCode).toBe(0);
+      const records = run.records.drainAvailable().map((record) => JSON.parse(record.raw) as { part: { messageID: string } });
+      expect(records.map((record) => record.part.messageID)).toEqual([current.info.id, current.info.id]);
+    }, { resumeSessionId: SESSION });
+  });
+
+  it.each(["msg_previous_prompt", "", undefined])("rejects a resumed answer with parentID %s", async (parentID) => {
+    const message = answerTo();
+    const server = fakeClosedServer({
+      events: [promptMessage(), { ...assistant, properties: { sessionID: SESSION, info: message.info } }],
+      messages: [{ ...message, info: { ...message.info, parentID } }],
+    });
+    await inspect(server, async (run) => {
+      expect((await completionWithin(run)).exitCode).toBe(1);
+      expect(run.records.drainAvailable()).toEqual([]);
+    }, { resumeSessionId: SESSION });
+  });
+
+  it("requires the current prompt receipt before recovering a resumed answer", async () => {
+    const message = answerTo();
+    const server = fakeClosedServer({ events: [{ ...assistant, properties: { sessionID: SESSION, info: message.info } }], messages: [message] });
+    await inspect(server, async (run) => { expect((await completionWithin(run)).exitCode).toBe(1); }, { resumeSessionId: SESSION });
+  });
+
+  it("ignores a prompt receipt belonging to another session", async () => {
+    const server = fakeClosedServer({ events: [promptMessage("msg_current_prompt", "ses_other")], messages: [answerTo()] });
+    await inspect(server, async (run) => { expect((await completionWithin(run)).exitCode).toBe(1); }, { resumeSessionId: SESSION });
+  });
+
+  it("rejects a prompt whose message session conflicts with its event session", async () => {
+    const prompt = promptMessage("msg_current_prompt", "ses_other");
+    const server = fakeClosedServer({ events: [{ ...prompt, properties: { ...prompt.properties, sessionID: SESSION } }], messages: [answerTo()] });
+    await inspect(server, async (run) => { expect((await completionWithin(run)).exitCode).toBe(1); }, { resumeSessionId: SESSION });
+  });
+
+  it("keeps the first prompt receipt when later user events arrive", async () => {
+    const server = fakeClosedServer({ events: [promptMessage(), promptMessage("msg_other_prompt")], messages: [answerTo("msg_other_prompt")] });
+    await inspect(server, async (run) => { expect((await completionWithin(run)).exitCode).toBe(1); }, { resumeSessionId: SESSION });
+  });
+
+  it("does not fall back to an observed first-turn answer with a mismatched parentID", async () => {
+    const message = answerTo("msg_previous_prompt", "msg_answer");
+    const server = fakeClosedServer({ events: [promptMessage(), assistant], messages: [message] });
+    await inspect(server, async (run) => { expect((await completionWithin(run)).exitCode).toBe(1); });
+  });
+
+  it("still requires a completed answer and a terminal stop part after matching parentID", async () => {
+    const message = answerTo();
+    const server = fakeClosedServer({ events: [promptMessage()], messages: [{ ...message, parts: message.parts.slice(0, 1) }] });
+    await inspect(server, async (run) => { expect((await completionWithin(run)).exitCode).toBe(1); }, { resumeSessionId: SESSION });
+  });
+
+  it("does not duplicate a resumed answer that already streamed its final text", async () => {
+    const message = answerTo();
+    const server = fakeClosedServer({
+      events: [promptMessage(), { ...assistant, properties: { sessionID: SESSION, info: message.info } },
+        { type: "message.part.updated", properties: { sessionID: SESSION, part: message.parts[0] } }],
+      messages: [message],
+    });
+    await inspect(server, async (run) => {
+      expect((await completionWithin(run)).exitCode).toBe(0);
+      const records = run.records.drainAvailable().map((record) => JSON.parse(record.raw) as { type: string });
+      expect(records.filter((record) => record.type === "text")).toHaveLength(1);
+    }, { resumeSessionId: SESSION });
+  });
+});
+
+describe("an OpenCode recovery that is still working after ten seconds", () => {
+  it.each(["busy", "working", "retry"])("keeps polling %s beyond ten seconds and then recovers", async (type) => {
+    vi.useFakeTimers();
+    let active = true;
+    const server = fakeClosedServer({ events: [promptMessage()], statusResponse: () => Response.json(active ? { [SESSION]: { type } } : {}), messages: [answerTo()] });
+    try {
+      await inspect(server, async (run) => {
+        const completed = vi.fn();
+        void run.completion.then(completed);
+        await vi.advanceTimersByTimeAsync(10_001);
+        expect(completed).not.toHaveBeenCalled();
+        expect(server.kill).not.toHaveBeenCalled();
+        expect(server.calls.filter((call) => call.path === "/session/status").length).toBeGreaterThan(2);
+        active = false;
+        await vi.advanceTimersByTimeAsync(250);
+        expect(await run.completion).toMatchObject({ exitCode: 0, stderr: "" });
+        expect(server.calls.filter((call) => call.path.endsWith("/prompt_async"))).toHaveLength(1);
+      }, { resumeSessionId: SESSION });
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("stops a perpetually busy recovery at the five-minute overall boundary", async () => {
+    vi.useFakeTimers();
+    const server = fakeClosedServer({ status: { [SESSION]: { type: "busy" } } });
+    try {
+      await inspect(server, async (run) => {
+        const completed = vi.fn();
+        void run.completion.then(completed);
+        await vi.advanceTimersByTimeAsync(299_999);
+        expect(completed).not.toHaveBeenCalled();
+        await vi.advanceTimersByTimeAsync(1);
+        expect(completed).toHaveBeenCalledOnce();
+        expect(await run.completion).toMatchObject({ exitCode: 1, cancelled: false });
+        expect((await run.completion).stderr).toContain("recovery deadline");
+        expect(server.kill).toHaveBeenCalledOnce();
+        const calls = server.calls.length;
+        await vi.advanceTimersByTimeAsync(5_000);
+        expect(server.calls).toHaveLength(calls);
+      });
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("bounds an unresponsive poll at ten seconds even after earlier busy responses", async () => {
+    vi.useFakeTimers();
+    let reads = 0;
+    let aborted = false;
+    const server = fakeClosedServer({ statusResponse: (init) => {
+      if (++reads === 1) return Response.json({ [SESSION]: { type: "busy" } });
+      return new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => { aborted = true; reject(new DOMException("Aborted", "AbortError")); }, { once: true });
+      });
+    } });
+    try {
+      await inspect(server, async (run) => {
+        const completed = vi.fn();
+        void run.completion.then(completed);
+        await vi.advanceTimersByTimeAsync(10_249);
+        expect(completed).not.toHaveBeenCalled();
+        await vi.advanceTimersByTimeAsync(1);
+        expect(completed).toHaveBeenCalledOnce();
+        expect((await run.completion).exitCode).toBe(1);
+        expect(aborted).toBe(true);
+        expect(reads).toBe(2);
+        expect(server.kill).toHaveBeenCalledOnce();
+      });
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("fails a hard status error after extended busy polling", async () => {
+    vi.useFakeTimers();
+    let failed = false;
+    const server = fakeClosedServer({ statusResponse: () => failed ? new Response(null, { status: 503 }) : Response.json({ [SESSION]: { type: "busy" } }) });
+    try {
+      await inspect(server, async (run) => {
+        await vi.advanceTimersByTimeAsync(10_001);
+        expect(server.kill).not.toHaveBeenCalled();
+        failed = true;
+        await vi.advanceTimersByTimeAsync(250);
+        expect(await run.completion).toMatchObject({ exitCode: 1, cancelled: false });
+        expect(server.calls.some((call) => call.path.endsWith("/message"))).toBe(false);
+      });
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("settles a timed-out check even if the fetch implementation ignores abort", async () => {
+    vi.useFakeTimers();
+    const server = fakeClosedServer({ statusResponse: () => new Promise<Response>(() => undefined) });
+    try {
+      await inspect(server, async (run) => {
+        const completed = vi.fn();
+        void run.completion.then(completed);
+        await vi.advanceTimersByTimeAsync(10_000);
+        expect(completed).toHaveBeenCalledOnce();
+        expect((await run.completion).exitCode).toBe(1);
+        expect(server.kill).toHaveBeenCalledOnce();
+      });
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

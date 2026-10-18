@@ -177,6 +177,38 @@ continue; report exact validation results, and say what was not run.
 
 ## Handoff log
 
+### 2026-10-18 — OpenCode multi-turn recovery
+
+- Scope: `feat/opencode-multiturn-recovery`, based on upstream `main` at
+  `367b3f50a204a037d223ff5feb0fdb4b178b594f` (desktop 0.787.0).
+- Reuses `checkBegun` for EOF recovery. The first new user message streamed
+  after sending the prompt supplies its ID; a recovered assistant answer must
+  name that ID as its `parentID`. This permits resumed turns and replies whose
+  assistant event was lost, while rejecting old answers and other sessions.
+  A fresh session without that receipt retains the observed-reply fallback.
+- Completion still requires the same session, an assistant without an error,
+  a finite completed timestamp, and matching terminal stop evidence. Recovered
+  messages and parts use the existing handler and output deduplication.
+- Busy, working and retry statuses keep polling beyond ten seconds, within
+  a fixed five-minute recovery ceiling from EOF. Shared status/message checks,
+  including their bodies, have separate ten-second abort deadlines. Finish,
+  cancellation and server exit clear the timers and abort outstanding requests.
+- Adds 19 cases to the existing fake-server suite (55 total), ten mutation
+  controls, and updated anchors for two existing controls. An incomplete
+  mutation baseline now fails instead of being reported green.
+- Validation: all 20 OpenCode controls caught their named regressions with
+  949 tests collected per run, then source was restored. Full Git Bash gate
+  exited 0: adapters 944 passed / 5 existing skips, mission-store 168 passed,
+  desktop 10,988 passed; both desktop type configs, package builds and app
+  bundles passed. The extended fake-server test file also passes strict
+  TypeScript checking. Native locale, existing `CI=1` timeout setting, and
+  scratch outside Git; no timeout-only retry was needed. Earlier setup runs
+  were interrupted for dependency-cache and scratch-location issues; they
+  are not counted as successful gates. No new tests are skipped.
+- No prompt or command replay, version, changelog, dependency, permission,
+  provider route, installer, push or publication changes. No live model turn
+  or packaged UI drive. Next: review the focused feature branch.
+
 ### 2026-10-18 — OpenCode premature stream close (MeetGodhani)
 
 - Scope: `fix/opencode-stream-hang`, based on upstream `3c05f54`, including
