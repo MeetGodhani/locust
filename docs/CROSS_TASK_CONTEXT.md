@@ -177,6 +177,43 @@ continue; report exact validation results, and say what was not run.
 
 ## Handoff log
 
+### 2026-10-18 — OpenCode premature stream close (MeetGodhani)
+
+- Scope: `fix/opencode-stream-hang`, based on upstream `3c05f54`, including
+  0.784.0 and 0.785.0. Adapter, existing watchdog test, mutation controls and this handoff
+  only; no version, dependency, lockfile or changelog change.
+- Outcome: EOF before `session.idle` calls the existing `checkBegun` status
+  and message check, including an in-flight watchdog query. Busy/retry states
+  poll every 250 ms within a 10-second recovery budget. Confirmed terminal
+  output from a fresh session uses the existing part handler; uncertain
+  completion, unreadable responses, process exit or deadline expiry fails
+  cleanly. Resumed history alone cannot establish this turn's completion.
+- Teardown flushes paced text and aborts pending requests. A late session
+  response cannot send a prompt after failure; cancellation has its own
+  deadline even when the server never answers abort. No prompt or command
+  is replayed, and no event-stream reconnect or permission change is added.
+- Tests: 33 added cases alongside the existing three watchdog tests, using
+  their shared fake server; all 36 pass. Ten new mutation controls each fail
+  their named assertion with all 930 adapter tests collected, then restore
+  source. This includes the original hang, stale output, cancellation and
+  overlapping request/timer regressions. The other mutation controls were
+  not individually rerun.
+- Verification: full `_tools/gate.sh` passed (exit 0) on the 0.785 base
+  with the test environment below: adapters 925 passed / 5 skipped,
+  mission-store 168 passed, desktop 10,967 passed. Package and desktop bundle
+  builds and both desktop TypeScript configs passed. The adapter count
+  includes 36 compiled copies of source tests from the normal package build.
+  Strict checking of the extended test file, mutation-script syntax and
+  `git diff --check` passed.
+- Test environment: the first native en-IN desktop run had four date-format
+  assertion failures and three timeouts. The four locale failures reproduce
+  with the upstream adapter restored. All seven files pass (251 tests) with
+  a process-local en-US Date/Intl test preload and the existing `CI=1`
+  timeout configuration; this does not change OS settings or product source.
+- Limits: controlled fake-server and captured-part tests, not a live provider
+  turn, packaged UI, process-tree termination drive, macOS test or release.
+  Next: review the focused patch for Issue #2 and run ordinary upstream CI.
+
 ### 2026-10-17 — MCP follow-up startup claim (MeetGodhani)
 
 - Scope: `fix/mcp-async-handling`, based on `b510ad94` (0.783.0).
