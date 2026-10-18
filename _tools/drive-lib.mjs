@@ -49,7 +49,10 @@ const ELECTRON = join(APP_DIR, 'node_modules', 'electron', 'dist', 'electron.exe
 const NPM_DIR = join(homedir(), 'AppData', 'Roaming', 'npm')
 // LOCUST_FREE_MODEL picks another of OpenCode's free models when this one is
 // down (Muse Spark was, 9/22-9/24); `opencode models | grep free` lists them.
-export const FREE_ROUTE = { runtime: 'opencode', model: process.env.LOCUST_FREE_MODEL ?? 'opencode/muse-spark-1.3-contributor-free', mode: 'accept-edits' }
+// Muse Spark left OpenCode's free list by 2026-10-18, and every drive on this
+// route stopped before sending; DeepSeek V4.1 Flash wrote and handed over a
+// file cleanly that day (drive-a-file-written-elsewhere).
+export const FREE_ROUTE = { runtime: 'opencode', model: process.env.LOCUST_FREE_MODEL ?? 'opencode/deepseek-v4.1-flash-free', mode: 'accept-edits' }
 /**
  * That model's row in the picker, as pickRouteScript takes it: the words of
  * its id in order, which is how the picker draws its name
