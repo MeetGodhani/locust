@@ -162,7 +162,7 @@ jobs:
           # What decides the AppImage's sandbox here (its launcher adds --no-sandbox only when this fails).
           unshare -Ur true && echo 'user namespaces: available' || echo 'user namespaces: refused'
           sysctl kernel.apparmor_restrict_unprivileged_userns 2>/dev/null || true
-          xvfb-run -a -s '-screen 0 1920x1080x24' node _smoke/posix-stop-smoke.mjs --launch-only "$image"
+          LOCUST_SMOKE_PORT=9334 xvfb-run -a -s '-screen 0 1920x1080x24' node _smoke/posix-stop-smoke.mjs --launch-only "$image"
       - name: Keep the Linux frames
         if: runner.os == 'Linux' && always()
         uses: actions/upload-artifact@v4

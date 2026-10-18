@@ -36,7 +36,9 @@ class LaunchOnly extends Error {}
 // Every process with its command line: BSD's spelling on a Mac, POSIX's on Linux, where procps reads `-axo` as a mistake.
 const PS_EVERY = process.platform === 'darwin' ? ['-axo', 'pid=,command='] : ['-eo', 'pid=,args=']
 const MODEL = process.env.LOCUST_FREE_MODEL ?? 'opencode/nemotron-3-ultra-free'
-const PORT = 9333
+// Its own port per check (0.789): a copy from the check before can still be closing on 9333, and a second copy
+// started then gets no debugging port at all -- on Linux the AppImage, right after the .deb.
+const PORT = Number(process.env.LOCUST_SMOKE_PORT ?? 9333)
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 let failures = 0
 const check = (what, ok, detail) => {
@@ -276,6 +278,9 @@ try {
 } finally {
   try { socket?.close() } catch { /* closed */ }
   child.kill()
+  // Gone before this exits, so the next check starts on a quiet machine: asked to close, then made to.
+  for (let i = 0; i < 30 && child.exitCode === null && child.signalCode === null; i += 1) await sleep(500)
+  if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL')
   await sleep(1_000)
 }
 const passed = `${SYSTEM === 'macOS' ? 'MAC' : 'LINUX'} ${launchOnly ? 'LAUNCH' : 'STOP'} SMOKE PASSED`
