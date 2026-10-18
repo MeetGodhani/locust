@@ -36,6 +36,76 @@ const ANTIGRAVITY_EVENTS = join(ROOT, 'src', 'antigravity-events.ts')
 const MUTATIONS = [
   {
     file: OPENCODE_SERVE,
+    name: 'opencode-multiturn: the streamed prompt receipt is discarded',
+    from: 'promptId = id;',
+    to: 'void id;',
+    expect: 'recovers a resumed turn by parentID even when its assistant event was lost'
+  },
+  {
+    file: OPENCODE_SERVE,
+    name: 'opencode-multiturn: any parent answers the current prompt',
+    from: 'info.parentID === promptId',
+    to: 'true',
+    expect: 'rejects a resumed answer with parentID msg_previous_prompt'
+  },
+  {
+    file: OPENCODE_SERVE,
+    name: 'opencode-multiturn: a known prompt falls back to an unrelated observed answer',
+    from: 'promptId !== undefined ? info.parentID === promptId',
+    to: 'false ? info.parentID === promptId',
+    expect: 'does not fall back to an observed first-turn answer with a mismatched parentID'
+  },
+  {
+    file: OPENCODE_SERVE,
+    name: 'opencode-multiturn: a recovered unobserved answer loses its role',
+    from: '      accept({ type: "message.updated", properties: { sessionID: sessionId, info: completed.info } });\n',
+    to: '',
+    expect: 'recovers a resumed turn by parentID even when its assistant event was lost'
+  },
+  {
+    file: OPENCODE_SERVE,
+    name: 'opencode-multiturn: a busy session still stops after ten seconds',
+    from: '      }, options.streamCloseTimeoutMs ?? 300_000);',
+    to: '      }, options.streamCloseTimeoutMs ?? 10_000);',
+    expect: 'keeps polling busy beyond ten seconds and then recovers'
+  },
+  {
+    file: OPENCODE_SERVE,
+    name: 'opencode-multiturn: working status is mistaken for idle',
+    from: 'busy = kind === "busy" || kind === "working" || kind === "retry";',
+    to: 'busy = kind === "busy" || kind === "retry";',
+    expect: 'keeps polling working beyond ten seconds and then recovers'
+  },
+  {
+    file: OPENCODE_SERVE,
+    name: 'opencode-multiturn: busy polling escapes its overall boundary',
+    from: '      }, options.streamCloseTimeoutMs ?? 300_000);',
+    to: '      }, options.streamCloseTimeoutMs ?? 600_000);',
+    expect: 'stops a perpetually busy recovery at the five-minute overall boundary'
+  },
+  {
+    file: OPENCODE_SERVE,
+    name: 'opencode-multiturn: an unresponsive poll waits on the overall busy deadline',
+    from: '    }, options.streamCloseRequestTimeoutMs ?? 10_000);',
+    to: '    }, options.streamCloseRequestTimeoutMs ?? 300_000);',
+    expect: 'bounds an unresponsive poll at ten seconds even after earlier busy responses'
+  },
+  {
+    file: OPENCODE_SERVE,
+    name: 'opencode-multiturn: later user events replace the active prompt',
+    from: 'promptId === undefined && role === "user"',
+    to: 'role === "user"',
+    expect: 'keeps the first prompt receipt when later user events arrive'
+  },
+  {
+    file: OPENCODE_SERVE,
+    name: 'opencode-multiturn: a foreign message supplies the prompt receipt',
+    from: ' && props.info.sessionID === sessionId',
+    to: '',
+    expect: 'rejects a prompt whose message session conflicts with its event session'
+  },
+  {
+    file: OPENCODE_SERVE,
     name: 'opencode-eof: an overlapping poll leaves its expired timer armed',
     from: "    if (beginCheck !== undefined) clearTimeout(beginCheck);\n    beginCheck = undefined;\n    if (checking) return;",
     to: "    if (checking) return;\n    if (beginCheck !== undefined) clearTimeout(beginCheck);\n    beginCheck = undefined;",
@@ -79,14 +149,14 @@ const MUTATIONS = [
   {
     file: OPENCODE_SERVE,
     name: 'opencode-eof: resumed history counts as proof of completion',
-    from: 'options.resumeSessionId === undefined ? messages.find',
-    to: 'true ? messages.find',
+    from: 'options.resumeSessionId === undefined && id !== undefined',
+    to: 'true && id !== undefined',
     expect: 'does not infer a resumed turn\'s completion from historical messages'
   },
   {
     file: OPENCODE_SERVE,
     name: 'opencode-eof: the recovery deadline is ignored',
-    from: '      }, options.streamCloseTimeoutMs ?? 10_000);',
+    from: '      }, options.streamCloseTimeoutMs ?? 300_000);',
     to: '      }, 60_000);',
     expect: 'bounds and aborts a status request that never answers'
   },
@@ -687,8 +757,8 @@ let problems = 0
 
 try {
   const baseline = runSuite()
-  if (baseline.failed.length > 0) {
-    console.error(`baseline is not green: ${baseline.failed.join(', ')}`)
+  if (baseline.unparseable || baseline.total <= 0 || baseline.failed.length > 0) {
+    console.error(`baseline is not green or did not fully load: ${baseline.failed.join(', ') || 'inspect test collection errors (build the packages first)'}`)
     process.exit(1)
   }
   console.error(`baseline green (${baseline.total} tests)\n`)
