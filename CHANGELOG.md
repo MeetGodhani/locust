@@ -11,6 +11,17 @@ Settings shows this file as What's new. An entry may group its changes under
 about when they arrive on it carries `<!-- big -->` on the line under its
 heading: the home screen then shows it once, as a splash.
 
+## 0.790.0 - 2026-10-18
+
+### New
+
+- **Locust asks before a conversation starts in a folder like .claude.** The folder button in the message box turns amber in your home folder, in a folder where AI agents keep their own settings (.claude, .codex, .cursor, .gemini, .copilot, .config) and in Windows' own folder, and says why when you point at it. The first new conversation there waits in the box while a card above it asks: Choose another folder, or Start here, which sends your message. Locust asks once for each folder, and choosing it in the folder picker after its warning counts as your answer.
+- **Every build is on GitHub too.** The Releases page at github.com/StopBanning/locust has each build's notes, and the newest carries the same installers as locust.lol with the SHA-256 sum of each.
+
+### Improved
+
+- **The AppImage is tested updating itself.** Before each release it downloads an update on a stock Ubuntu, replaces itself on disk and starts again as the new version.
+
 ## 0.789.0 - 2026-10-18
 <!-- big -->
 
