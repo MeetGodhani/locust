@@ -82,7 +82,8 @@ export function LocustMcpSettings({ heading, api = typeof window === 'undefined'
       * THE CLAUDE APP, IN ONE PRESS (0.740). Colin: "asking me to do the pythagorean theorem for a basic feature
       * isnt it". Shown only where the Claude app is installed; Add also turns the switch above on.
       */}
-    {claudeApp !== undefined && claudeApp.kind !== 'no-app' && <div className="lc-settingline lc-claudeapp">
+    {/* On a managed computer with other apps off, nothing here can be added; Remove stays for an entry made before (0.792). */}
+    {claudeApp !== undefined && claudeApp.kind !== 'no-app' && (!managed || claudeApp.kind === 'added') && <div className="lc-settingline lc-claudeapp">
       <div className="lc-settingline__text">
         <h3 className="lc-settings__heading">The Claude app</h3>
         <p className="lc-settings__lede">{
@@ -131,6 +132,7 @@ export function LocustMcpSettings({ heading, api = typeof window === 'undefined'
       <p>Locust changes another app’s settings only when you press Add to the Claude app; it keeps a copy of the file first, and Remove takes its entry out again. Turning this off stops new requests, not turns already running.</p>
       </div>
     </details>}
-    {(failure || state?.message) && <p className="lc-settings__note" role="status">{failure || state?.message}</p>}
+    {/* Managed, the host's word is the policy's, already said beside the switch: not said twice, nor before any press. */}
+    {(failure || (!managed && state?.message)) && <p className="lc-settings__note" role="status">{failure || state?.message}</p>}
   </>
 }
