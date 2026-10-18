@@ -553,7 +553,7 @@
 
   /* --- Elevation: popovers and overlays only. Cards use borders. ------- */
   --lc-shadow-menu: 0 24px 60px rgba(0, 0, 0, 0.6);
-  /* A small menu from a button, a popover over the thread, the inspector sliding over a narrow window (0.790:
+  /* A small menu from a button, a popover over the thread, the inspector sliding over a narrow window (0.789:
      named, so the light theme can lift them less). */
   --lc-shadow-dropdown: 0 8px 24px rgba(0, 0, 0, 0.35);
   --lc-shadow-popover: 0 12px 32px rgba(0, 0, 0, 0.45);
@@ -733,7 +733,7 @@
 }
 
 /*
- * THE LIGHT THEME (0.790). Settings > Appearance > Theme, or Match computer on a
+ * THE LIGHT THEME (0.789). Settings > Appearance > Theme, or Match computer on a
  * light desktop; main/appearance.ts writes `data-theme` on the root.
  *
  * The same building, lit: warm paper where the dark theme has warm ink, and

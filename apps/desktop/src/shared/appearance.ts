@@ -1,5 +1,5 @@
 /**
- * The person's theme (0.790, main/appearance.ts): Dark, Light, or Match the computer.
+ * The person's theme (0.789, main/appearance.ts): Dark, Light, or Match the computer.
  */
 export type ThemeChoice = 'dark' | 'light' | 'system'
 

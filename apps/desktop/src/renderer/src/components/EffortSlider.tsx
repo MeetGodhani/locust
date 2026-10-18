@@ -116,7 +116,7 @@ export function nearestStop(x: number, count: number): number {
   return Math.min(count - 1, Math.max(0, Math.round((x - INSET) / spacing)))
 }
 
-/** The thumb's liquid, read from the tokens once per theme (0.790): the palette has one definition. */
+/** The thumb's liquid, read from the tokens once per theme (0.789): the palette has one definition. */
 let thumb: { readonly theme: string; readonly fill: string; readonly shadow: string } | undefined
 function thumbSurface(theme: string): { readonly fill: string; readonly shadow: string } {
   if (thumb?.theme === theme) return thumb

@@ -1,4 +1,4 @@
-// The light theme, looked at screen by screen (0.790).
+// The light theme, looked at screen by screen (0.789).
 //
 //   node _tools/drive-light-mode.mjs [--packaged <Locust.exe>]
 //
@@ -112,6 +112,6 @@ try {
 } catch (error) {
   say(`drive failed: ${error instanceof Error ? error.message : String(error)}`)
 } finally {
-  await drive.finish({ intro: 'The light theme, screen by screen, then dark again to compare (0.790).' })
+  await drive.finish({ intro: 'The light theme, screen by screen, then dark again to compare (0.789).' })
 }
 say('done')

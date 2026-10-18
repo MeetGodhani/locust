@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { ThemeSetting, themeLede } from './components/ThemeSetting.js'
 
 /**
- * THE THEME CONTROL SAYS WHAT IT CHOSE (0.790): Dark, Light or Match
+ * THE THEME CONTROL SAYS WHAT IT CHOSE (0.789): Dark, Light or Match
  * computer, the one in force marked, and a line that says what it means --
  * for Match computer, what the computer's theme is right now. Before the
  * saved choice has been read, the control says Dark, the default, rather

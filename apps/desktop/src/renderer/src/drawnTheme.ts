@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 
 /**
- * The theme the window is drawn in now (0.790): what `data-theme` on the root says, kept current.
+ * The theme the window is drawn in now (0.789): what `data-theme` on the root says, kept current.
  *
  * For the few pieces that paint themselves rather than take the stylesheet's tokens -- the send button's metal,
  * the beam around a card, the thinking orb. Each was pinned to dark, because Locust was dark whatever the computer

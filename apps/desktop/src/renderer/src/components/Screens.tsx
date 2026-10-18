@@ -2866,7 +2866,7 @@ export function SettingsScreen({
         </section>
         )}
 
-        {/* The theme heads Appearance: it is the one choice here that changes every screen (0.790). */}
+        {/* The theme heads Appearance: it is the one choice here that changes every screen (0.789). */}
         {shownPage === 'appearance' && (
         <section className="lc-settings__section lc-settings__section--line">
           <ThemeSetting />

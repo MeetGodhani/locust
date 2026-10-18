@@ -91,7 +91,7 @@ export function Orb({
    */
   readonly preset?: 20 | 64
 }): ReactElement {
-  // The page's theme, not the computer's (0.790, drawnTheme.ts).
+  // The page's theme, not the computer's (0.789, drawnTheme.ts).
   const theme = useDrawnTheme()
   const dense = preset === undefined ? DENSE.has(state) : preset === 64
   if (dense) return <PaintedDown state={state} box={box} label={label} />

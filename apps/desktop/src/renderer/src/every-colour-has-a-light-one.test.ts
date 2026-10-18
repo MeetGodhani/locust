@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
 /**
- * EVERY COLOUR HAS A LIGHT ONE (0.790). A colour token added to the dark
+ * EVERY COLOUR HAS A LIGHT ONE (0.789). A colour token added to the dark
  * theme and not to the light one is drawn in light in its dark value -- ivory
  * text on paper, a hairline of white on white -- and nothing would say so
  * until someone opened that screen in light. So each colour in `:root` is

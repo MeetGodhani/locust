@@ -40,7 +40,7 @@ export function Beam({
   /** The cover rotates a painted gradient, avoiding animated CSS properties. */
   readonly compositor?: boolean
 }): ReactElement {
-  // The page's theme, not the computer's (0.790, drawnTheme.ts).
+  // The page's theme, not the computer's (0.789, drawnTheme.ts).
   const theme = useDrawnTheme()
   if (compositor) {
     return (

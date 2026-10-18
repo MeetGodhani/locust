@@ -4,7 +4,7 @@ import { themeFromArguments } from '../shared/appearance.js'
 import { readTheme, resolvedTheme, windowGround } from './appearance.js'
 
 /**
- * A THEME IS THE PERSON'S CHOICE (0.790). Locust forced the window dark; now
+ * A THEME IS THE PERSON'S CHOICE (0.789). Locust forced the window dark; now
  * Settings > Appearance offers Dark, Light and Match computer. Dark stays the
  * default, so nobody's Locust changes under them, and the window's first
  * frame is drawn in the chosen ground so a light Locust never flashes dark.

@@ -4,7 +4,7 @@ import { dirname } from 'node:path'
 import type { ThemeChoice } from '../shared/appearance.js'
 
 /**
- * LIGHT, DARK, OR THE COMPUTER'S (0.790).
+ * LIGHT, DARK, OR THE COMPUTER'S (0.789).
  *
  * Locust was drawn dark and forced the window dark (`nativeTheme.themeSource`), so a person who works in a light
  * room, or whose whole desktop is light, had one bright thing they could not change. Now the choice is theirs, in

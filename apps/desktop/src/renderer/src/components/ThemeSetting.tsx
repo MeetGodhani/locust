@@ -4,7 +4,7 @@ import type { ReactElement } from 'react'
 import type { AppearanceState, ThemeChoice } from '../../../shared/appearance.js'
 
 /**
- * Dark, Light, or Match the computer (0.790, main/appearance.ts). Dark is the default, so nobody's Locust changes
+ * Dark, Light, or Match the computer (0.789, main/appearance.ts). Dark is the default, so nobody's Locust changes
  * under them; the window repaints at once, and every other window with it.
  */
 const CHOICES: readonly (readonly [ThemeChoice, string])[] = [

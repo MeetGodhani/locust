@@ -74,7 +74,7 @@ const SATELLITES: readonly Satellite[] = [
 
 /**
  * The liquid's surface and shadow, read from the tokens: the palette has one definition. Read once per theme
- * (0.790): kept from the first read, a dark fill stayed on after the window turned light.
+ * (0.789): kept from the first read, a dark fill stayed on after the window turned light.
  */
 let surface: { readonly theme: string; readonly fill: string; readonly shadow: string } | undefined
 function liquidSurface(theme: string): { readonly fill: string; readonly shadow: string } {

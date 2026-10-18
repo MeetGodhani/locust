@@ -31,7 +31,7 @@ const isSplash = window.location.hash === '#splash'
  */
 if (isSplash) document.documentElement.classList.add('is-splash')
 
-// The theme (0.790, main/appearance.ts): the one this window was started in, at once, then whatever it becomes.
+// The theme (0.789, main/appearance.ts): the one this window was started in, at once, then whatever it becomes.
 // The loading window stays the dark boot screen it was drawn as.
 if (!isSplash) {
   document.documentElement.dataset.theme = window.desktop?.initialTheme ?? 'dark'

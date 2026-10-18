@@ -3694,7 +3694,7 @@ export interface DesktopApi {
   setLoginItem(openAtLogin: boolean): Promise<LoginItemState>
   readKeepRunning(): Promise<KeepRunningState>
   setKeepRunning(keepRunning: boolean): Promise<KeepRunningState>
-  /** The theme this window was started in, read from its own command line: no flash on the way in (0.790). */
+  /** The theme this window was started in, read from its own command line: no flash on the way in (0.789). */
   readonly initialTheme: 'dark' | 'light'
   readAppearance(): Promise<AppearanceState>
   /** Dark, Light, or Match the computer; answers with what the windows are now drawn in. */

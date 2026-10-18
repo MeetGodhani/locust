@@ -108,7 +108,7 @@ export function MetalSend({
   readonly motion?: MetalMotion
   readonly bend?: boolean
 } & React.ButtonHTMLAttributes<HTMLButtonElement>): ReactElement {
-  // The page's theme, not the computer's (0.790, drawnTheme.ts).
+  // The page's theme, not the computer's (0.789, drawnTheme.ts).
   const theme = useDrawnTheme()
   /*
    * HOVER AND FOCUS ARE TRACKED APART, and they used to be one flag.

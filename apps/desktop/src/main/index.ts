@@ -1172,7 +1172,7 @@ let backgroundForShutdown: BackgroundRuns | undefined
  * take the roster down with it.
  */
 const windowFile = (): string => join(app.getPath('userData'), 'window.json')
-// The person's theme (0.790, appearance.ts), read once the app is ready and before the window is made.
+// The person's theme (0.789, appearance.ts), read once the app is ready and before the window is made.
 const appearanceFile = (): string => join(app.getPath('userData'), 'appearance.json')
 let themeChoice: ThemeChoice = 'dark'
 const appearanceNow = (): AppearanceState => ({ theme: themeChoice, resolved: resolvedTheme(themeChoice, nativeTheme.shouldUseDarkColors) })
@@ -1699,7 +1699,7 @@ if (!ownsSingleInstanceLock) {
       electron: process.versions.electron ?? 'unknown',
       packaged: app.isPackaged
     }))
-    // Dark unless the person chose Light or Match the computer (0.790); native menus and dialogs follow it too.
+    // Dark unless the person chose Light or Match the computer (0.789); native menus and dialogs follow it too.
     themeChoice = readTheme(appearanceFile())
     nativeTheme.themeSource = themeChoice
     nativeTheme.on('updated', broadcastAppearance)
