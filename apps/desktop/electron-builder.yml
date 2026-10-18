@@ -156,10 +156,9 @@ linux:
   vendor: Automated Workflow
   # A .deb and an .rpm must name someone; nobody reads this address.
   maintainer: Locust <noreply@locust.lol>
-  desktop:
-    entry:
-      # The dock and the app grid match a running window to its launcher by this.
-      StartupWMClass: Locust
+  # The dock and the app grid match a running window to its launcher by the window's app id, which Electron takes
+  # from package.json's desktopName: the launcher is named for it, and its StartupWMClass follows.
+  syncDesktopName: true
   target:
     - target: AppImage
       arch:
