@@ -1,6 +1,6 @@
 // An arena round on the five paid models, as round 4 ran it (drive-arena-round-4.mjs), for any prompt.
 //
-//   node _tools/drive-arena-round.mjs --round portrait|worst|trails|voxel --set trio|pair|fable|claude|muse-sol|astra --packaged <exe> --prompt <file> [--effort high|max] [--kit <dir> --lock <LOCKED.md>]
+//   node _tools/drive-arena-round.mjs --round portrait|worst|trails|voxel|roadster --set trio|pair|fable|claude|muse-sol|astra|argon|roadster-1|roadster-2 --packaged <exe> --prompt <file> [--effort high|max] [--kit <dir> --lock <LOCKED.md>]
 //   LOCUST_SPEND=1 node _tools/drive-arena-round.mjs ... --send          one run, no re-rolls
 //
 // Colin approved these rounds on 2026-10-09 (in the site session, Beta/Promo: "yes sounds good"), which gave the
@@ -15,8 +15,14 @@
 // at Max -- claude = Opus 5.5, Sonnet 5.5 (it held Fable 5.1 too in that round, which was wrong: a correction sent
 // three hours before the run said High and no Fable, and was missed); muse-sol = Muse Wonder 1.0 (Muse Code) + GPT-6.1-Sol; astra =
 // GPT-6-Astra beside the free route, the filler a Blind compare needs, whose work is NOT counted. Run with --effort max.
-// argon = Gemini 4 Argon through Cursor (on Colin's Cursor plan, "nah its just plan usage"), at High, the most it
-// offers there, beside the same filler. A Cursor run rewrites Cursor's default model: save it before, put it back after.
+// argon = Gemini 4 Argon at High, beside the same filler: through Antigravity since 2026-10-16 (Colin's Google AI Pro
+// plan; "you actually used our cursor usage on argon"), never Cursor.
+//
+// roadster (2026-10-18, the lineup and prompt from Beta/Promo, run on Colin's go): six models at High in two Blind
+// compares of three, each with one Claude, one Codex and one other, so no plan carries two columns at once --
+// roadster-1 = Opus 5.5, GPT-6.1-Sol, Gemini 4 Argon (Antigravity); roadster-2 = Sonnet 5.5, GPT-6-Astra, Grok 4.7
+// (Cursor Agent, the only route Locust has to Grok; Fast off). A Cursor run rewrites Cursor's default model: the
+// drive holds it and puts it back after (cursor-default-hold.mjs).
 //
 // trails (the bot tournament): the folder every column starts from is a fresh copy of the kit's files, no git,
 // each checked against LOCKED.md first; the other rounds start from an empty folder.
@@ -34,7 +40,7 @@ const packaged = arg('--packaged')
 const SEND = process.argv.includes('--send')
 const SET = arg('--set')
 const ROUND = arg('--round')
-const SETS = ['trio', 'pair', 'fable', 'claude', 'muse-sol', 'astra', 'argon']
+const SETS = ['trio', 'pair', 'fable', 'claude', 'muse-sol', 'astra', 'argon', 'roadster-1', 'roadster-2']
 if (!SETS.includes(SET ?? '')) throw new Error(`--set ${SETS.join(', ')}`)
 /** The effort every column is set to: High, as the earlier rounds ran, or Max. */
 const EFFORT = arg('--effort') ?? 'high'
@@ -46,50 +52,37 @@ const OPENS = {
   portrait: 'Make a self-portrait in a single self-contained file, index.html.',
   worst: 'Make the most annoying volume control you can, in a single self-contained file, index.html.',
   trails: 'Write a bot for Trails, a light-cycle game.',
-  voxel: 'Build a voxel art scene of a space station, in a single file, index.html'
+  voxel: 'Build a voxel art scene of a space station, in a single file, index.html',
+  roadster: 'Build an interactive 3D scene of the new Tesla Roadster, the one with rocket thrusters, in a single file, index.html'
 }
-if (!Object.hasOwn(OPENS, ROUND ?? '')) throw new Error('--round portrait, worst, trails or voxel')
+if (!Object.hasOwn(OPENS, ROUND ?? '')) throw new Error('--round portrait, worst, trails, voxel or roadster')
 const promptPath = requiredPathArgument('--prompt')
-const OUT = join(recordRoot(`arena-${ROUND}-${ROUND === 'voxel' ? '2026-10-13' : '2026-10-10'}`), `${SEND ? 'run' : 'look'}-${SET}`)
+const DAY = { voxel: '2026-10-13', roadster: '2026-10-18' }[ROUND] ?? '2026-10-10'
+const OUT = join(recordRoot(`arena-${ROUND}-${DAY}`), `${SEND ? 'run' : 'look'}-${SET}`)
 await mkdir(OUT, { recursive: true })
 const PROMPT = (await readFile(promptPath, 'utf8')).replace(/\r\n/g, '\n').trim()
 if (!PROMPT.startsWith(OPENS[ROUND]) || !PROMPT.endsWith('You decide everything else.')) throw new Error(`could not read the ${ROUND} prompt`)
 /** What each column must be, read off its own chip before anything is sent. */
-const WANT = SET === 'trio'
-  ? [
-      { search: 'opus', row: /^Opus 5\.5$/i, runtime: /^Claude Code/i },
-      { search: 'sonnet', row: /^Sonnet 5\.5$/i, runtime: /^Claude Code/i },
-      { search: 'sol', row: /^GPT-6\.1-Sol$/i, runtime: /^Codex/i }
-    ]
-  : SET === 'pair'
-    ? [
-        { search: 'fable', row: /^Fable 5\.1$/i, runtime: /^Claude Code/i },
-        { search: 'astra', row: /^GPT-6-Astra$/i, runtime: /^Codex/i }
-      ]
-    : SET === 'fable'
-      ? [
-          { search: 'fable', row: /^Fable 5\.1$/i, runtime: /^Claude Code/i },
-          { search: FREE_SEARCH, row: FREE_NAME, runtime: /^OpenCode/i }
-        ]
-      : SET === 'claude'
-        ? [
-            { search: 'opus', row: /^Opus 5\.5$/i, runtime: /^Claude Code/i },
-            { search: 'sonnet', row: /^Sonnet 5\.5$/i, runtime: /^Claude Code/i }
-          ]
-        : SET === 'muse-sol'
-          ? [
-              { search: 'muse wonder', row: /^(Muse )?Wonder 1\.0$/i, runtime: /^Muse/i },
-              { search: 'sol', row: /^GPT-6\.1-Sol$/i, runtime: /^Codex/i }
-            ]
-          : SET === 'astra'
-            ? [
-                { search: 'astra', row: /^GPT-6-Astra$/i, runtime: /^Codex/i },
-                { search: FREE_SEARCH, row: FREE_NAME, runtime: /^OpenCode/i }
-              ]
-            : [
-                { search: 'argon', row: /^Gemini 4 Argon$/i, runtime: /^Cursor/i },
-                { search: FREE_SEARCH, row: FREE_NAME, runtime: /^OpenCode/i }
-              ]
+const OPUS = { search: 'opus', row: /^Opus 5\.5$/i, runtime: /^Claude Code/i }
+const SONNET = { search: 'sonnet', row: /^Sonnet 5\.5$/i, runtime: /^Claude Code/i }
+const FABLE = { search: 'fable', row: /^Fable 5\.1$/i, runtime: /^Claude Code/i }
+const SOL = { search: 'sol', row: /^GPT-6\.1-Sol$/i, runtime: /^Codex/i }
+const ASTRA = { search: 'astra', row: /^GPT-6-Astra$/i, runtime: /^Codex/i }
+const WONDER = { search: 'muse wonder', row: /^(Muse )?Wonder 1\.0$/i, runtime: /^Muse/i }
+const ARGON = { search: 'argon', row: /^Gemini 4 Argon$/i, runtime: /^Antigravity/i }
+const GROK = { search: 'grok', row: /^Grok 4\.7$/i, runtime: /^Cursor/i }
+const FREE = { search: FREE_SEARCH, row: FREE_NAME, runtime: /^OpenCode/i }
+const WANT = {
+  trio: [OPUS, SONNET, SOL],
+  pair: [FABLE, ASTRA],
+  fable: [FABLE, FREE],
+  claude: [OPUS, SONNET],
+  'muse-sol': [WONDER, SOL],
+  astra: [ASTRA, FREE],
+  argon: [ARGON, FREE],
+  'roadster-1': [OPUS, SOL, ARGON],
+  'roadster-2': [SONNET, ASTRA, GROK]
+}[SET]
 
 // Fable never shares a compare with another Claude model (Colin, 2026-10-13: "swore that we agreed to not run fable
 // with the other agent"). The voxel round's claude set did, from a relayed lineup; no set may again.
@@ -256,9 +249,10 @@ try {
     const doneAt = {}
     const denied = []
     let shotRunning = false
-    // Two hours at most at High, six at Max: a column is never stopped halfway (Colin, 2026-10-13: "certainly dont
-    // stop halfway through"); the voxel round's Claude columns at Max were still testing at 90 min.
-    for (let second = 0; second < (EFFORT === 'max' ? 6 * 3600 : 7200); second += 2) {
+    // Six hours at most, at High as at Max: a column is never stopped halfway (Colin, 2026-10-13: "certainly dont
+    // stop halfway through"); the voxel round's Claude columns at Max were still testing at 90 min, and a two-hour
+    // wait at High was the one way left to cut a column off.
+    for (let second = 0; second < 6 * 3600; second += 2) {
       await sleep(2000)
       const view = JSON.parse(String(await drive.evaluate(`JSON.stringify({
         states: [...document.querySelectorAll('.lc-compare__state')].map((el) => el.textContent.trim()),
