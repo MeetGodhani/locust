@@ -11,6 +11,14 @@ Settings shows this file as What's new. An entry may group its changes under
 about when they arrive on it carries `<!-- big -->` on the line under its
 heading: the home screen then shows it once, as a splash.
 
+## 0.789.0 - 2026-10-18
+<!-- big -->
+
+### New
+
+- **Locust runs on Linux.** Download it at locust.lol as a .deb for Ubuntu and Debian, an .rpm for Fedora and openSUSE, or an AppImage for any other Linux. Each is installed and run on Ubuntu before it is published: it opens, a teammate answers on a free model, and Stop ends everything the turn started. The AppImage updates itself. A .deb or .rpm belongs to your package manager, so it tells you when a new version is out and hands you the new package to open. Signing in to an AI agent and Open in terminal use the terminal your desktop has.
+- **Light mode.** Settings > Appearance > Theme: Dark, Light, or Match computer, which follows your computer and changes when it does. Dark stays the default, so nothing changes unless you choose it.
+
 ## 0.788.0 - 2026-10-18
 
 ### Fixed
