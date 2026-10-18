@@ -3,8 +3,10 @@
 //
 //   node _tools/publish-downloads.mjs <version>                every build: installer, block map, then beta.yml
 //   node _tools/publish-downloads.mjs <version> --mac <dir>    the Mac disk images for <version>, from the CI run
+//   node _tools/publish-downloads.mjs <version> --linux <dir>  the Linux packages and their feed, from the CI run
 //   node _tools/publish-downloads.mjs <version> --promote      the tester lane: latest.yml, Locust-Setup.exe, the
-//                                                              Mac release list, and release.json + CHANGELOG.md
+//                                                              Mac release list, latest-linux.yml, and
+//                                                              release.json + CHANGELOG.md
 //                                                              for locust.lol, once a day
 //
 // WHY (0.783). GitHub suspended the account that held Locust's releases on 2026-10-16 and every installed copy's
@@ -26,8 +28,9 @@ const version = process.argv[2]
 const flag = (name) => (process.argv.includes(name) ? process.argv[process.argv.indexOf(name) + 1] ?? '' : undefined)
 const promote = process.argv.includes('--promote')
 const macDir = flag('--mac')
-if (version === undefined || !/^\d+\.\d+\.\d+$/.test(version) || macDir === '') {
-  console.error('usage: node _tools/publish-downloads.mjs <version> [--mac <dir> | --promote]')
+const linuxDir = flag('--linux')
+if (version === undefined || !/^\d+\.\d+\.\d+$/.test(version) || macDir === '' || linuxDir === '') {
+  console.error('usage: node _tools/publish-downloads.mjs <version> [--mac <dir> | --linux <dir> | --promote]')
   process.exit(2)
 }
 
@@ -36,7 +39,7 @@ const fail = (line) => {
   console.error(`\nNOT PUBLISHED: ${line}\nThe feed files were not changed, so no installed Locust sees anything new.`)
   process.exit(1)
 }
-const TYPES = { '.exe': 'application/vnd.microsoft.portable-executable', '.dmg': 'application/x-apple-diskimage', '.yml': 'text/yaml; charset=utf-8', '.json': 'application/json', '.blockmap': 'application/octet-stream', '.md': 'text/plain; charset=utf-8' }
+const TYPES = { '.exe': 'application/vnd.microsoft.portable-executable', '.dmg': 'application/x-apple-diskimage', '.yml': 'text/yaml; charset=utf-8', '.json': 'application/json', '.blockmap': 'application/octet-stream', '.md': 'text/plain; charset=utf-8', '.AppImage': 'application/vnd.appimage', '.deb': 'application/vnd.debian.binary-package', '.rpm': 'application/x-rpm' }
 const typeOf = (name) => TYPES[Object.keys(TYPES).find((ending) => name.endsWith(ending)) ?? '.blockmap']
 
 // No shell: wrangler is run by node from npx's own script, with fixed arguments.
@@ -85,6 +88,31 @@ if (macDir !== undefined) {
   writeFileSync(sidecar, `${JSON.stringify({ tag_name: version, draft: false, prerelease: false, assets }, null, 2)}\n`)
   await upload(`Locust-${version}-mac.json`, sidecar)
   say(`${version}: the Mac images are up. Macs see them when ${version} is promoted.`)
+} else if (linuxDir !== undefined) {
+  // The three Linux packages (0.789), a small file naming them for the site, then their feed: the AppImage's copies
+  // read it to update themselves, a .deb's or .rpm's to say a new version is out. `beta-linux.yml` is every build's
+  // lane at once; --promote makes it the tester lane's as `latest-linux.yml`.
+  const expected = [`Locust-${version}-linux-x86_64.AppImage`, `Locust-${version}-linux-amd64.deb`, `Locust-${version}-linux-x86_64.rpm`]
+  const missing = expected.filter((name) => !existsSync(join(linuxDir, name)))
+  if (missing.length > 0) fail(`${linuxDir} is missing ${missing.join(', ')}; it holds ${readdirSync(linuxDir).join(', ') || 'nothing'}`)
+  const feedFile = join(linuxDir, 'latest-linux.yml')
+  if (!existsSync(feedFile)) fail(`${linuxDir} has no latest-linux.yml`)
+  const feed = readFileSync(feedFile, 'utf8')
+  if (!feed.includes(`version: ${version}`)) fail(`latest-linux.yml is not for ${version}:\n${feed}`)
+  const sha512 = createHash('sha512').update(readFileSync(join(linuxDir, expected[0]))).digest('base64')
+  if (!feed.includes(`sha512: ${sha512}`)) fail("latest-linux.yml's sha512 is not the AppImage on disk")
+  const assets = []
+  for (const name of expected) {
+    const file = join(linuxDir, name)
+    await upload(name, file)
+    assets.push({ name, browser_download_url: `${DOWNLOADS}${name}`, size: statSync(file).size, digest: `sha256:${createHash('sha256').update(readFileSync(file)).digest('hex')}` })
+  }
+  const sidecar = join(scratch(), `Locust-${version}-linux.json`)
+  writeFileSync(sidecar, `${JSON.stringify({ tag_name: version, draft: false, prerelease: false, assets }, null, 2)}\n`)
+  await upload(`Locust-${version}-linux.json`, sidecar)
+  await upload(`Locust-${version}-linux.yml`, feedFile)
+  await upload('beta-linux.yml', feedFile, { fresh: true })
+  say(`${version}: the Linux packages are up. Linux copies on every build see them now, testers once ${version} is promoted.`)
 } else if (!promote) {
   const installer = `Locust-${version}-setup.exe`
   for (const name of [installer, `${installer}.blockmap`, 'latest.yml']) {
@@ -112,6 +140,9 @@ if (macDir !== undefined) {
   await upload('Locust-Setup.exe', local, { fresh: true })
   // The Mac release list, newest first, in the shape GitHub's releases API answered in (src/main/mac-release.ts).
   const mac = await fetchText(`Locust-${version}-mac.json`)
+  // The Linux packages and their feed, when the CI run has put them up (0.789).
+  const linux = await fetchText(`Locust-${version}-linux.json`)
+  const linuxFeed = await fetchText(`Locust-${version}-linux.yml`)
   // What locust.lol's Download button reads: the tester lane's release in the shape of GitHub's /releases/latest,
   // which the site read until the suspension -- the version, and the size and SHA-256 of Locust-Setup.exe.
   const setup = readFileSync(local)
@@ -122,6 +153,7 @@ if (macDir !== undefined) {
     assets: [
       { name: 'Locust-Setup.exe', browser_download_url: `${DOWNLOADS}Locust-Setup.exe`, size: setup.length, digest: `sha256:${createHash('sha256').update(setup).digest('hex')}` },
       ...(mac === undefined ? [] : JSON.parse(mac).assets),
+      ...(linux === undefined ? [] : JSON.parse(linux).assets),
     ],
   }
   writeFileSync(join(dir, 'release.json'), `${JSON.stringify(release, null, 2)}
@@ -133,6 +165,12 @@ if (macDir !== undefined) {
     const list = [JSON.parse(mac), ...before.filter((entry) => entry.tag_name !== version)].slice(0, 10)
     writeFileSync(join(dir, 'mac-releases.json'), `${JSON.stringify(list, null, 2)}\n`)
     await upload('mac-releases.json', join(dir, 'mac-releases.json'), { fresh: true })
+  }
+  if (linuxFeed === undefined || !linuxFeed.includes(`version: ${version}`)) {
+    say(`  no Linux packages for ${version} yet: the Linux feed is left as it is`)
+  } else {
+    writeFileSync(join(dir, 'latest-linux.yml'), linuxFeed)
+    await upload('latest-linux.yml', join(dir, 'latest-linux.yml'), { fresh: true })
   }
   await upload('latest.yml', join(dir, 'latest.yml'), { fresh: true })
   await upload('release.json', join(dir, 'release.json'), { fresh: true })

@@ -6,9 +6,8 @@ A local-first desktop app that runs AI coding agents as a team you can watch,
 on runtimes and models you choose, with a durable record of everything they did.
 (Not the Python load-testing tool of the same name, which is unrelated.)
 
-**Download the latest build** at [locust.lol](https://locust.lol) or from the
-[releases page](https://github.com/locust-lol/locust-releases/releases/latest)
-(Windows and Mac). Neither build is signed by a publisher yet
+**Download the latest build** at [locust.lol](https://locust.lol), for Windows,
+Mac and Linux. The Windows and Mac builds are not signed by a publisher yet
 ([why, and the signing policy](docs/CODE-SIGNING.md)), so each asks once:
 
 - **Windows** warns that the installer comes from an unknown publisher: choose
@@ -16,6 +15,13 @@ on runtimes and models you choose, with a durable record of everything they did.
 - **Mac** refuses the first open, since Apple has not checked the app. Close
   that message, open **System Settings › Privacy & Security**, and press
   **Open Anyway** beside Locust.
+- **Linux** comes three ways. The **.deb** (Ubuntu, Debian, Mint) and the
+  **.rpm** (Fedora, openSUSE) install like any package: open the file, or run
+  `sudo apt install ./Locust-*.deb` or `sudo dnf install ./Locust-*.rpm`. The
+  **AppImage** runs on any other Linux and updates itself: allow it to run as
+  a program (`chmod +x Locust-*.AppImage`), and on Ubuntu 22.04 or later
+  install FUSE first (`sudo apt install libfuse2t64`, or `libfuse2` before
+  24.04).
 
 Locust is developed in this repository, and each release is cut from `main`.
 Issues are welcome here; code changes are by invitation (see CONTRIBUTING.md).
@@ -181,10 +187,12 @@ copy of the folder, side by side; keep the one you like. Blind hides the names
 until you choose. ([Three models building the same game,
 blind](https://locust.lol/arena/).)
 
-**Updates.** Locust updates itself from GitHub Releases, on Windows with a
-differential download, and every release carries Windows and Mac builds
-(Apple silicon and Intel). Settings says which build you are on. Neither build
-is signed yet; see the policy below.
+**Updates.** Locust updates itself from its own downloads at dl.locust.lol, on
+Windows with a differential download, and every release carries Windows, Mac
+(Apple silicon and Intel) and Linux builds. The Linux AppImage replaces itself;
+a .deb or .rpm, which belongs to your package manager, says when a new version
+is out and hands you the new package. Settings says which build you are on.
+The Windows and Mac builds are not signed yet; see the policy below.
 
 What is still open, in the order the authors would take it, is in
 `CHANGELOG.md`'s most recent entries and the issues here. The roadmap documents

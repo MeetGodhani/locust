@@ -34,3 +34,7 @@ echo "ALL PUBLISHED"
 echo "Mac images: see $TEMP/mac-$NEW.out"
 bash "$(dirname "$0")/mac-attach-dl.sh" "$NEW" > "$TEMP/mac-$NEW.out" 2>&1 < /dev/null
 tail -1 "$TEMP/mac-$NEW.out"
+# The Linux packages, from the same CI run the Mac images came from (0.789).
+echo "Linux packages: see $TEMP/linux-$NEW.out"
+bash "$(dirname "$0")/linux-attach-dl.sh" "$NEW" > "$TEMP/linux-$NEW.out" 2>&1 < /dev/null
+tail -1 "$TEMP/linux-$NEW.out"
