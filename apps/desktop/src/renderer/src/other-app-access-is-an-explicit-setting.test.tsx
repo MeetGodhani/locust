@@ -12,7 +12,10 @@ vi.mock('react', async original => ({ ...await original<typeof import('react')>(
     if (at >= hooks.values.length) hooks.values[at] = initial
     return [hooks.values[at], (value: unknown) => { hooks.values[at] = value }]
   },
-  useEffect: (effect: () => (() => void) | undefined) => { if (!hooks.mounted) { hooks.mounted = true; const cleanup = effect(); if (cleanup) hooks.cleanups.push(cleanup) } }
+  useEffect: (effect: () => (() => void) | undefined) => { if (!hooks.mounted) { hooks.mounted = true; const cleanup = effect(); if (cleanup) hooks.cleanups.push(cleanup) } },
+  // The surface is called as a function here, outside a render, so a context reads its default: no organization
+  // policy (managed-controls-say-who-set-them.test.tsx covers a managed machine).
+  useContext: () => undefined
 }))
 beforeEach(() => { hooks.values = []; hooks.index = 0; hooks.mounted = false })
 afterEach(() => { for (const cleanup of hooks.cleanups.splice(0)) cleanup(); vi.clearAllMocks() })
