@@ -136,7 +136,8 @@ try {
     } catch { /* not listening yet */ }
   }
   check(`the packaged app starts on ${SYSTEM} and opens its window`, page !== undefined)
-  if (page === undefined) throw new Error('no window')
+  // What the app said, when it opened nothing: a running process with no window has no exit code to report.
+  if (page === undefined) throw new Error(`no window; the app said: ${output.join('').slice(-1500) || 'nothing'}`)
   if (launchOnly) throw new LaunchOnly()
   socket = new WebSocket(page.webSocketDebuggerUrl)
   socket.addEventListener('message', (event) => {
