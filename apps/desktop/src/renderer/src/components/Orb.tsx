@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { MODE_DRAWS, ThinkingOrb, resolvePreset } from 'thinking-orbs'
 import { DRAWING_BEAT } from '../frameBeat.js'
+import { useDrawnTheme } from '../drawnTheme.js'
 
 import type { OrbState } from 'thinking-orbs'
 import type { ReactElement } from 'react'
@@ -90,13 +91,15 @@ export function Orb({
    */
   readonly preset?: 20 | 64
 }): ReactElement {
+  // The page's theme, not the computer's (0.790, drawnTheme.ts).
+  const theme = useDrawnTheme()
   const dense = preset === undefined ? DENSE.has(state) : preset === 64
   if (dense) return <PaintedDown state={state} box={box} label={label} />
   return (
     <ThinkingOrb
       state={state}
       size={20}
-      theme="dark"
+      theme={theme}
       // An outline shape keeps its own 20px drawing at its own 20px size,
       // centred in the same box. Painting it into 26 would stretch a design
       // tuned for 20 and undo the point of keeping it.

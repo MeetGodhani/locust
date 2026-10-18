@@ -3,6 +3,7 @@ import type { ReactElement } from 'react'
 import { Liquid } from 'liquid-gooey'
 
 import { PlusGlyph } from './ChatGlyphs.js'
+import { useDrawnTheme } from '../drawnTheme.js'
 
 /**
  * THE GOOEY +, libraries.dev's plus menu.
@@ -71,13 +72,17 @@ const SATELLITES: readonly Satellite[] = [
   }
 ]
 
-/** The liquid's surface and shadow, read once from the tokens: the palette has one definition. */
-let surface: { readonly fill: string; readonly shadow: string } | undefined
-function liquidSurface(): { readonly fill: string; readonly shadow: string } {
-  if (surface !== undefined) return surface
+/**
+ * The liquid's surface and shadow, read from the tokens: the palette has one definition. Read once per theme
+ * (0.790): kept from the first read, a dark fill stayed on after the window turned light.
+ */
+let surface: { readonly theme: string; readonly fill: string; readonly shadow: string } | undefined
+function liquidSurface(theme: string): { readonly fill: string; readonly shadow: string } {
+  if (surface?.theme === theme) return surface
   if (typeof document === 'undefined') return { fill: 'currentColor', shadow: 'none' }
   const style = getComputedStyle(document.documentElement)
   surface = {
+    theme,
     fill: style.getPropertyValue('--lc-plusmenu-fill').trim() || 'currentColor',
     shadow: style.getPropertyValue('--lc-plusmenu-shadow').trim() || 'none'
   }
@@ -100,6 +105,8 @@ export function PlusMenu({
   readonly onAttach: () => void
   readonly onChooseFolder: () => void
 }): ReactElement {
+  // Re-read when the window changes theme (drawnTheme.ts).
+  const theme = useDrawnTheme()
   const [open, setOpen] = useState(false)
   const [anticipating, setAnticipating] = useState(false)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -142,7 +149,7 @@ export function PlusMenu({
   const phase = open
     ? { duration: OPEN.duration, ease: EASE_BOUNCY, stagger: OPEN.stagger }
     : { duration: CLOSE.duration, ease: EASE_SNAPPY, stagger: CLOSE.stagger }
-  const { fill, shadow } = liquidSurface()
+  const { fill, shadow } = liquidSurface(theme)
 
   return (
     <span className="lc-plusmenu__seat" ref={seat}>

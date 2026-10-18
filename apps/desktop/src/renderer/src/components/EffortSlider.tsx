@@ -3,6 +3,7 @@ import type { PointerEvent as ReactPointerEvent, ReactElement } from 'react'
 import { Liquid } from 'liquid-gooey'
 
 import { effortDescription, effortName } from '../effortLevels.js'
+import { useDrawnTheme } from '../drawnTheme.js'
 
 /**
  * THE EFFORT CONTROL: CLAUDE CODE'S, ON LIBRARIES.DEV'S GOOEY SLIDER.
@@ -115,10 +116,10 @@ export function nearestStop(x: number, count: number): number {
   return Math.min(count - 1, Math.max(0, Math.round((x - INSET) / spacing)))
 }
 
-/** The thumb's liquid, read once from the tokens: the palette has one definition. */
-let thumb: { readonly fill: string; readonly shadow: string } | undefined
-function thumbSurface(): { readonly fill: string; readonly shadow: string } {
-  if (thumb !== undefined) return thumb
+/** The thumb's liquid, read from the tokens once per theme (0.790): the palette has one definition. */
+let thumb: { readonly theme: string; readonly fill: string; readonly shadow: string } | undefined
+function thumbSurface(theme: string): { readonly fill: string; readonly shadow: string } {
+  if (thumb?.theme === theme) return thumb
   if (typeof document === 'undefined') return { fill: 'currentColor', shadow: 'none' }
   const style = getComputedStyle(document.documentElement)
   // Both of the thumb's shadows, now that the liquid is the thumb: its own
@@ -126,6 +127,7 @@ function thumbSurface(): { readonly fill: string; readonly shadow: string } {
   // used to carry. The library reads a box-shadow list.
   const shadows = ['--lc-effort-thumb-shadow', '--lc-effort-thumb-lift'].map((name) => style.getPropertyValue(name).trim()).filter((value) => value.length > 0)
   thumb = {
+    theme,
     fill: style.getPropertyValue('--lc-effort-thumb').trim() || 'currentColor',
     shadow: shadows.length === 0 ? 'none' : shadows.join(', ')
   }
@@ -150,6 +152,8 @@ export function EffortSlider({
   readonly onPick: (base: string) => void
   readonly onFast: (next: boolean) => void
 }): ReactElement {
+  // Re-read when the window changes theme (drawnTheme.ts).
+  const theme = useDrawnTheme()
   const count = bases.length
   const control = useRef<HTMLInputElement>(null)
   /** Where the thumb is while a pointer holds it; undefined when it rests on its stop. */
@@ -158,7 +162,7 @@ export function EffortSlider({
   const shown = held === undefined ? index : nearestStop(held, count)
   const level = bases[shown] ?? bases[0] ?? ''
   const meaning = effortDescription(level)
-  const { fill, shadow } = thumbSurface()
+  const { fill, shadow } = thumbSurface(theme)
 
   const hold = (event: ReactPointerEvent<HTMLSpanElement>): void => {
     const place = heldAt(event.clientX, event.currentTarget.getBoundingClientRect().left)

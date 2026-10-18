@@ -1,6 +1,8 @@
 import type { ReactElement, ReactNode } from 'react'
 import { BorderBeam } from 'border-beam'
 
+import { useDrawnTheme } from '../drawnTheme.js'
+
 /**
  * A BEAM: libraries.dev's border beam, in Locust's one setting -- mono.
  *
@@ -38,6 +40,8 @@ export function Beam({
   /** The cover rotates a painted gradient, avoiding animated CSS properties. */
   readonly compositor?: boolean
 }): ReactElement {
+  // The page's theme, not the computer's (0.790, drawnTheme.ts).
+  const theme = useDrawnTheme()
   if (compositor) {
     return (
       <div data-beam="cover" data-active={active && !reducedMotion() ? '' : undefined} className={className}>
@@ -50,7 +54,7 @@ export function Beam({
     <BorderBeam
       size={size}
       colorVariant="mono"
-      theme="dark"
+      theme={theme}
       staticColors
       active={active && !reducedMotion()}
       {...(strength === undefined ? {} : { strength })}

@@ -1082,9 +1082,9 @@ export function LiveRegisterLine({
           {orb !== undefined && (
             <span className="lc-livestep__orb" data-orb={orb}>
               {/*
-                * `theme="dark"` pinned, not `auto`: `auto` falls back to the
-                * OS setting and Locust is dark regardless, so a light desktop
-                * would get dark ink on a dark panel.
+                * The orb follows the page's theme, never `auto` (Orb.tsx,
+                * drawnTheme.ts): `auto` is the computer's, and Locust is drawn
+                * in the theme the person chose.
                 *
                 * `aria-hidden`, because the word it sits next to already says
                 * this in text — and the library's own label would sometimes

@@ -3,6 +3,7 @@ import type { ReactElement, ReactNode, RefObject } from 'react'
 import { BEND, MetalFx, setBendConfig, useMetalBend } from 'metal-fx'
 
 import { METAL_STRENGTHS, metalBendConfig } from '../metal.js'
+import { useDrawnTheme } from '../drawnTheme.js'
 import type { MetalMotion, MetalPreset, MetalStrength } from '../../../shared/ipc.js'
 
 /**
@@ -107,6 +108,8 @@ export function MetalSend({
   readonly motion?: MetalMotion
   readonly bend?: boolean
 } & React.ButtonHTMLAttributes<HTMLButtonElement>): ReactElement {
+  // The page's theme, not the computer's (0.790, drawnTheme.ts).
+  const theme = useDrawnTheme()
   /*
    * HOVER AND FOCUS ARE TRACKED APART, and they used to be one flag.
    *
@@ -291,9 +294,9 @@ export function MetalSend({
         {...(reflectionTargets === undefined ? {} : { reflectionTargets })}
         preset={preset}
         strength={METAL_STRENGTHS[strength]}
-        // Pinned, not `auto`: `auto` falls back to the OS setting and Locust
-        // is dark regardless, so a light desktop would get dark metal.
-        theme="dark"
+        // The page's theme, never `auto`: `auto` follows the computer, and Locust is drawn in the theme the person
+        // chose, which need not be the computer's.
+        theme={theme}
         /*
          * THE HALO IS THE HOVER, and the ring is the button.
          *

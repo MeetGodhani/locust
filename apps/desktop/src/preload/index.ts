@@ -1,4 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
+import { APPEARANCE_CHANGED_CHANNEL, APPEARANCE_GET_CHANNEL, APPEARANCE_SET_CHANNEL, themeFromArguments } from '../shared/appearance.js'
+import type { AppearanceState, ThemeChoice } from '../shared/appearance.js'
 import { ACP_AGENTS_LIST_CHANNEL, ACP_AGENTS_REMOVE_CHANNEL, ACP_AGENTS_SAVE_CHANNEL, ACP_AGENTS_TEST_CHANNEL } from '../shared/acp-agents.js'
 import { PHONE_FORGET_CHANNEL, PHONE_SET_ENABLED_CHANNEL, PHONE_SETTINGS_CHANNEL } from '../shared/phone.js'
 import { LOCUST_MCP_CLAUDE_APP, LOCUST_MCP_CLAUDE_APP_RESTART, LOCUST_MCP_CLAUDE_APP_SET, LOCUST_MCP_GET, LOCUST_MCP_SET, LOCUST_MCP_SET_OWN_MODE } from '../shared/locust-mcp.js'
@@ -558,6 +560,18 @@ const desktopApi: DesktopApi = {
   setLoginItem: (openAtLogin: boolean) => ipcRenderer.invoke(LOGIN_ITEM_SET_CHANNEL, openAtLogin === true) as Promise<LoginItemState>,
   readKeepRunning: () => ipcRenderer.invoke(KEEP_RUNNING_GET_CHANNEL) as Promise<KeepRunningState>,
   setKeepRunning: (keepRunning: boolean) => ipcRenderer.invoke(KEEP_RUNNING_SET_CHANNEL, keepRunning === true) as Promise<KeepRunningState>,
+  initialTheme: themeFromArguments(process.argv),
+  readAppearance: () => ipcRenderer.invoke(APPEARANCE_GET_CHANNEL) as Promise<AppearanceState>,
+  setTheme: (theme: ThemeChoice) => ipcRenderer.invoke(APPEARANCE_SET_CHANNEL, theme) as Promise<AppearanceState>,
+  onAppearance: (listener: (state: AppearanceState) => void) => {
+    const handler = (_event: unknown, state: AppearanceState): void => {
+      listener(state)
+    }
+    ipcRenderer.on(APPEARANCE_CHANGED_CHANNEL, handler)
+    return () => {
+      ipcRenderer.removeListener(APPEARANCE_CHANGED_CHANNEL, handler)
+    }
+  },
   onUpdateState: (listener: (state: AppUpdateState) => void) => {
     const handler = (_event: unknown, state: AppUpdateState): void => {
       listener(state)

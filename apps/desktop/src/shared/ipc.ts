@@ -1,3 +1,4 @@
+import type { AppearanceState, ThemeChoice } from './appearance.js'
 import type { ReverseChange } from './reverse-diff.js'
 import type { AwaySummaryCounts } from './away.js'
 import type { RemoteControlState } from './claude-remote-control.js'
@@ -3693,6 +3694,13 @@ export interface DesktopApi {
   setLoginItem(openAtLogin: boolean): Promise<LoginItemState>
   readKeepRunning(): Promise<KeepRunningState>
   setKeepRunning(keepRunning: boolean): Promise<KeepRunningState>
+  /** The theme this window was started in, read from its own command line: no flash on the way in (0.790). */
+  readonly initialTheme: 'dark' | 'light'
+  readAppearance(): Promise<AppearanceState>
+  /** Dark, Light, or Match the computer; answers with what the windows are now drawn in. */
+  setTheme(theme: ThemeChoice): Promise<AppearanceState>
+  /** The theme changed: by the person, in another window, or by the computer under Match the computer. */
+  onAppearance(listener: (state: AppearanceState) => void): () => void
   onUpdateState(listener: (state: AppUpdateState) => void): () => void
   pruneMissions(request: MissionPruneRequest): Promise<MissionPruneResponse>
   /** A folder for a backup to go in, or a backup to restore; undefined when the picker was cancelled. */

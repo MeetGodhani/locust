@@ -56,7 +56,9 @@ export const BACKED_UP_FILES = [
   'scout.json',
   // The runs whose answer belongs to a panel (0.771): a commit message, a walkthrough. The ledger carries them, and
   // without this list each would come back as a conversation.
-  'panel-runs.json'
+  'panel-runs.json',
+  // Dark, Light or Match computer (0.790): a restored Locust looks the way its person chose.
+  'appearance.json'
 ] as const
 
 /**

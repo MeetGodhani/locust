@@ -74,6 +74,7 @@ import { WHAT_LOCUST_CAN_STOP_LEDE } from '../../../shared/what-locust-can-stop.
 import { NETWORK_DOC_LINK } from '../../../shared/outbound-links.js'
 import { keepCurrentNote, offersUpdate, updateLine } from '../agentUpdates.js'
 import { Icon } from './Icon.js'
+import { ThemeSetting } from './ThemeSetting.js'
 import { costGlanceCell, costTotal, missionCost, monthSpendLine, sumCosts } from '../cost.js'
 import { conversationsOf } from '../missionsList.js'
 import { shortAgo } from '../railFlyout.js'
@@ -2862,6 +2863,13 @@ export function SettingsScreen({
             </button>
           </div>
           </div>
+        </section>
+        )}
+
+        {/* The theme heads Appearance: it is the one choice here that changes every screen (0.790). */}
+        {shownPage === 'appearance' && (
+        <section className="lc-settings__section lc-settings__section--line">
+          <ThemeSetting />
         </section>
         )}
 

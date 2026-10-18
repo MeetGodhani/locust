@@ -228,12 +228,14 @@ textarea {
   height: 24px;
   width: auto;
   opacity: 0.95;
+  filter: var(--lc-logo-filter);
 }
 
 .lc-brand__wordmark {
   height: 13px;
   width: auto;
   opacity: 0.9;
+  filter: var(--lc-logo-filter);
 }
 
 .lc-iconbutton {
@@ -1577,7 +1579,7 @@ textarea {
      learned to catch an undefined var (2026-09-05). This is the token every
      other hoverable row uses. */
   border-color: var(--lc-hover-border);
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--lc-chip-bg);
 }
 
 .lc-decision__option:disabled {
@@ -7353,7 +7355,7 @@ textarea {
   border: 1px solid var(--lc-border-hairline);
   border-radius: var(--lc-radius-control);
   background: var(--lc-bg-raised);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  box-shadow: var(--lc-shadow-dropdown);
 }
 .lc-changes__menuitem {
   padding: 6px 10px;
@@ -7698,7 +7700,7 @@ textarea {
   border: 1px solid var(--lc-border-hairline);
   border-radius: var(--lc-radius-control);
   background: var(--lc-bg-raised);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  box-shadow: var(--lc-shadow-dropdown);
 }
 .lc-statusmenu__item {
   padding: 3px 4px;
@@ -9117,7 +9119,7 @@ textarea {
     right: 0;
     bottom: 0;
     z-index: 40;
-    box-shadow: -18px 0 40px rgba(0, 0, 0, 0.45);
+    box-shadow: var(--lc-shadow-drawer);
   }
 
 /*
@@ -9163,7 +9165,7 @@ textarea {
     right: 0;
     bottom: 0;
     z-index: 40;
-    box-shadow: -18px 0 40px rgba(0, 0, 0, 0.45);
+    box-shadow: var(--lc-shadow-drawer);
   }
 
 .lc-shell.is-compact .lc-thread__column,
@@ -10218,7 +10220,7 @@ textarea {
   width: 24px;
   height: 24px;
   border-radius: 50%;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+  box-shadow: inset 0 0 0 1px var(--lc-border-button);
 }
 
 .lc-pettile {
@@ -14470,16 +14472,16 @@ textarea.lc-compare__judgecriteria {
 }
 
 .lc-peer__toggle:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--lc-hover-surface);
   color: var(--lc-text-secondary);
 }
 
 .lc-peer.is-open .lc-peer__toggle {
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--lc-chip-bg);
 }
 
 .lc-peer.is-open .lc-peer__toggle:hover {
-  background: rgba(255, 255, 255, 0.07);
+  background: var(--lc-chip-bg-hover);
 }
 
 /*
@@ -14799,7 +14801,7 @@ textarea.lc-compare__judgecriteria {
 }
 
 .lc-rostercard__edit:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--lc-hover-surface);
 }
 
 .lc-workroom__actions {
@@ -14824,7 +14826,7 @@ textarea.lc-compare__judgecriteria {
   border: 1px solid var(--lc-border-strong);
   border-radius: 8px;
   background: var(--lc-bg-raised-2);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  box-shadow: var(--lc-shadow-popover);
   outline: none;
 }
 
@@ -16740,7 +16742,7 @@ textarea.lc-compare__judgecriteria {
 
 .lc-peer__bubble.is-link:hover,
 .lc-peer__bubble.is-link:focus-visible {
-  border-color: rgba(255, 255, 255, 0.18);
+  border-color: var(--lc-hover-border);
   background: var(--lc-hover-surface-strong);
 }
 
@@ -19470,7 +19472,7 @@ textarea.lc-compare__judgecriteria {
   border: 1px solid var(--lc-border-strong);
   border-radius: 8px;
   background: var(--lc-bg-raised-2);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  box-shadow: var(--lc-shadow-popover);
   z-index: 1;
 }
 
@@ -20664,6 +20666,7 @@ textarea.lc-compare__judgecriteria {
   height: 14px;
   width: auto;
   flex: none;
+  filter: var(--lc-logo-filter);
 }
 
 /* The send: a 40px dark disc, the metal ring around it (`.mx-circle`). Its

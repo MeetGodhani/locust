@@ -359,6 +359,8 @@
    * Simple Icons records for it) and the three stops of Gemini's sparkle
    * (Google's own file, 0.384). Every other runtime's mark is drawn in the
    * colour of the words beside it. */
+  /* The Locust mark and wordmark are white drawings, shown as images; the light theme turns them to ink. */
+  --lc-logo-filter: none;
   --lc-mark-claude: #d97757;
   --lc-mark-gemini-violet: #9168c0;
   --lc-mark-gemini-blue: #5684d1;
@@ -551,6 +553,11 @@
 
   /* --- Elevation: popovers and overlays only. Cards use borders. ------- */
   --lc-shadow-menu: 0 24px 60px rgba(0, 0, 0, 0.6);
+  /* A small menu from a button, a popover over the thread, the inspector sliding over a narrow window (0.790:
+     named, so the light theme can lift them less). */
+  --lc-shadow-dropdown: 0 8px 24px rgba(0, 0, 0, 0.35);
+  --lc-shadow-popover: 0 12px 32px rgba(0, 0, 0, 0.45);
+  --lc-shadow-drawer: -18px 0 40px rgba(0, 0, 0, 0.45);
   --lc-shadow-palette: 0 40px 100px rgba(0, 0, 0, 0.65);
   --lc-shadow-window: 0 32px 80px rgba(0, 0, 0, 0.55);
 
@@ -723,6 +730,159 @@
    * with the suggestion.
    */
   --lc-focus-edge-box: rgba(255, 255, 255, 0.4);
+}
+
+/*
+ * THE LIGHT THEME (0.790). Settings > Appearance > Theme, or Match computer on a
+ * light desktop; main/appearance.ts writes `data-theme` on the root.
+ *
+ * The same building, lit: warm paper where the dark theme has warm ink, and
+ * the accent, which is monochrome, turned the other way -- ink on paper
+ * instead of ivory on black. The surfaces keep their order (the ground lowest,
+ * a card highest); in light a raised thing is whiter and its shadow softer,
+ * because a black shadow on paper reads as dirt, not depth.
+ *
+ * Text holds the dark theme's rule: `--lc-text-muted` is the AA floor for
+ * anything readable (#5f6563 on the window's #faf9f6, about 6:1), and
+ * `--lc-text-faint` is for marks and icons only. Status colours are the same
+ * hues darkened until a word in them still reads on paper.
+ *
+ * Unchanged on purpose: the teammates' own hues and faces (they are who a
+ * teammate is, in either light), the runtimes' brand marks, and the boot
+ * screen, which is a lit screen in a dark bezel whatever the room. Pearl, the
+ * ghost's white, alone takes a grey, or it would vanish into the page.
+ */
+:root[data-theme='light'] {
+  --lc-bg-app: #f3f2ee;
+  --lc-bg-window: #faf9f6;
+  --lc-bg-chrome: #efeeea;
+  --lc-bg-sidebar: #f1f0ec;
+  --lc-bg-raised: #ffffff;
+  --lc-bg-raised-2: #fcfbf9;
+  --lc-bg-selected: #e7e6e1;
+  --lc-bg-bubble-user: #ebeae5;
+  --lc-bg-bubble-peer: #f2f1ed;
+
+  --lc-bg-field: #ffffff;
+  --lc-bg-control: #f2f1ed;
+
+  --lc-border-hairline: rgba(28, 30, 29, 0.08);
+  --lc-border-control: rgba(28, 30, 29, 0.12);
+  --lc-border-button: rgba(28, 30, 29, 0.15);
+  --lc-border-hover: rgba(28, 30, 29, 0.24);
+  --lc-border-card: rgba(28, 30, 29, 0.09);
+  --lc-border-strong: rgba(28, 30, 29, 0.14);
+  --lc-overlay-scrim: rgba(28, 30, 29, 0.28);
+
+  --lc-scroll-thumb: rgba(28, 30, 29, 0.18);
+  --lc-scroll-thumb-hover: rgba(28, 30, 29, 0.32);
+
+  --lc-text-primary: #1c1e1d;
+  --lc-text-name: #161817;
+  --lc-text-control-fg: #4f5553;
+  --lc-text-secondary: #3a3e3d;
+  --lc-text-muted: #5f6563;
+  --lc-text-faint: #8c9290;
+
+  --lc-lime: #1c1e1d;
+  --lc-lime-text: #1c1e1d;
+  --lc-lime-tint: rgba(28, 30, 29, 0.06);
+  --lc-lime-tint-strong: rgba(28, 30, 29, 0.11);
+  --lc-lime-border: rgba(28, 30, 29, 0.22);
+  --lc-lime-border-strong: rgba(28, 30, 29, 0.4);
+
+  --lc-green: #2e8540;
+  --lc-green-text: #1f6b32;
+  --lc-green-tint: rgba(46, 133, 64, 0.1);
+  --lc-green-border: rgba(46, 133, 64, 0.3);
+
+  --lc-blue: #2b6fd6;
+  --lc-blue-text: #1f58b0;
+  --lc-blue-tint: rgba(43, 111, 214, 0.1);
+  --lc-blue-border: rgba(43, 111, 214, 0.3);
+
+  --lc-amber: #b8790a;
+  --lc-amber-text: #8a5a00;
+  --lc-amber-tint: rgba(184, 121, 10, 0.12);
+  --lc-amber-border: rgba(184, 121, 10, 0.34);
+  --lc-find-hit: rgba(233, 185, 73, 0.4);
+  --lc-find-now: #e9b949;
+  --lc-find-now-text: #15171a;
+
+  --lc-red: #c9443a;
+  --lc-red-text: #a5342b;
+  --lc-red-tint: rgba(201, 68, 58, 0.1);
+  --lc-red-border: rgba(201, 68, 58, 0.3);
+
+  --lc-violet: #7b55c8;
+  --lc-violet-text: #5f3fa8;
+  --lc-violet-tint: rgba(123, 85, 200, 0.1);
+  --lc-violet-border: rgba(123, 85, 200, 0.3);
+
+  --lc-neutral: #a3a8a6;
+
+  --lc-heat-0: rgba(28, 30, 29, 0.05);
+  --lc-heat-1: rgba(28, 30, 29, 0.18);
+  --lc-heat-2: rgba(28, 30, 29, 0.34);
+  --lc-heat-3: rgba(28, 30, 29, 0.58);
+  --lc-heat-4: rgba(28, 30, 29, 0.86);
+
+  --lc-diff-add-bg: #e7f4e9;
+  --lc-diff-add-mark: #2e8540;
+  --lc-diff-add-word: #c5e5cb;
+  --lc-diff-del-bg: #fbeceb;
+  --lc-diff-del-mark: #c9443a;
+  --lc-diff-del-word: #f2c9c4;
+  --lc-diff-hunk-bg: #eef0ef;
+  --lc-diff-surface: #f7f7f4;
+  --lc-diff-gutter: #6b716f;
+  --lc-diff-code: #222524;
+
+  --lc-bg-pending: #ffffff;
+  --lc-bg-terminal: #f6f5f2;
+  --lc-shadow-pending: 0 8px 24px rgba(28, 30, 29, 0.12);
+  --lc-shadow-terminal: inset 0 1px 0 rgba(28, 30, 29, 0.06);
+
+  --lc-logo-filter: invert(0.89);
+  --lc-hue-pearl: #dedde6;
+  --lc-clay-text: #b4493d;
+
+  --lc-shadow-menu: 0 18px 48px rgba(28, 30, 29, 0.16), 0 0 0 1px rgba(28, 30, 29, 0.06);
+  --lc-shadow-palette: 0 30px 80px rgba(28, 30, 29, 0.2), 0 0 0 1px rgba(28, 30, 29, 0.06);
+  --lc-shadow-window: 0 24px 64px rgba(28, 30, 29, 0.18);
+  --lc-shadow-dropdown: 0 8px 24px rgba(28, 30, 29, 0.12), 0 0 0 1px rgba(28, 30, 29, 0.05);
+  --lc-shadow-popover: 0 12px 32px rgba(28, 30, 29, 0.14), 0 0 0 1px rgba(28, 30, 29, 0.05);
+  --lc-shadow-drawer: -18px 0 40px rgba(28, 30, 29, 0.14);
+
+  --lc-hover-surface: rgba(28, 30, 29, 0.05);
+  --lc-stop-glow: rgba(28, 30, 29, 0.02);
+  --lc-chat-bg: rgba(255, 255, 255, 0.8);
+  --lc-chip-bg: rgba(28, 30, 29, 0.04);
+  --lc-chip-bg-hover: rgba(28, 30, 29, 0.07);
+  --lc-chip-ring: rgba(28, 30, 29, 0.04);
+  --lc-chip-highlight: rgba(255, 255, 255, 0.6);
+  --lc-chip-text: #3e4342;
+  --lc-chip-chevron: #7a807e;
+  --lc-circle-bg: #f0efeb;
+  --lc-circle-border: rgba(28, 30, 29, 0.14);
+  --lc-circle-fg: #1c1e1d;
+  --lc-plusmenu-fill: #ffffff;
+  --lc-contextring-track: rgba(28, 30, 29, 0.16);
+  --lc-contextring-fill: rgba(28, 30, 29, 0.62);
+  --lc-effort-track: rgba(28, 30, 29, 0.1);
+  --lc-effort-fill: rgba(28, 30, 29, 0.34);
+  --lc-effort-dot: rgba(28, 30, 29, 0.22);
+  --lc-effort-dot-passed: rgba(28, 30, 29, 0.22);
+  --lc-effort-thumb: #ffffff;
+  --lc-effort-thumb-lift: 0 0 11px 0 rgba(28, 30, 29, 0.1);
+  --lc-effort-thumb-shadow: 0 1px 3px 0 rgba(28, 30, 29, 0.3), 0 0 0 1px rgba(28, 30, 29, 0.1);
+  --lc-plusmenu-shadow: 0 0 0 1px rgba(28, 30, 29, 0.08), 0 2px 6px 0 rgba(28, 30, 29, 0.06), 0 8px 32px 0 rgba(28, 30, 29, 0.12);
+  --lc-hover-surface-strong: rgba(28, 30, 29, 0.07);
+  --lc-hover-border: rgba(28, 30, 29, 0.22);
+  --lc-focus-glow: rgba(28, 30, 29, 0.05);
+  --lc-focus-edge: rgba(28, 30, 29, 0.24);
+  --lc-focus-edge-box: rgba(28, 30, 29, 0.4);
+  color-scheme: light;
 }
 
 /*

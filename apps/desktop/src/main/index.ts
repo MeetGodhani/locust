@@ -96,6 +96,9 @@ import { pathToFileURL } from 'node:url'
 import { shellPath } from './shell-path.js'
 import { linuxInstallOf, linuxPackageUrl } from './linux-install.js'
 import { DOWNLOADS, SITE } from '../shared/locust-home.js'
+import { readTheme, resolvedTheme, THEME_CHOICES, windowGround, writeTheme } from './appearance.js'
+import { APPEARANCE_CHANGED_CHANNEL, APPEARANCE_GET_CHANNEL, APPEARANCE_SET_CHANNEL, THEME_ARGUMENT } from '../shared/appearance.js'
+import type { AppearanceState, ThemeChoice } from '../shared/appearance.js'
 import { homedir, release } from 'node:os'
 import { execFile } from 'node:child_process'
 import { createVoicePreviews, speakHelloCommand } from './voice-preview.js'
@@ -1169,6 +1172,19 @@ let backgroundForShutdown: BackgroundRuns | undefined
  * take the roster down with it.
  */
 const windowFile = (): string => join(app.getPath('userData'), 'window.json')
+// The person's theme (0.790, appearance.ts), read once the app is ready and before the window is made.
+const appearanceFile = (): string => join(app.getPath('userData'), 'appearance.json')
+let themeChoice: ThemeChoice = 'dark'
+const appearanceNow = (): AppearanceState => ({ theme: themeChoice, resolved: resolvedTheme(themeChoice, nativeTheme.shouldUseDarkColors) })
+/** Every window is told, and repainted in the new ground, so none shows the old theme behind its page. */
+const broadcastAppearance = (): void => {
+  const state = appearanceNow()
+  for (const target of BrowserWindow.getAllWindows()) {
+    if (target.isDestroyed()) continue
+    target.setBackgroundColor(windowGround(state.resolved))
+    target.webContents.send(APPEARANCE_CHANGED_CHANNEL, state)
+  }
+}
 
 const readWindowFile = (): SavedWindow | undefined => {
   try {
@@ -1349,7 +1365,7 @@ const createWindow = (
     frame: false,
     titleBarStyle: 'hidden',
     titleBarOverlay: false,
-    backgroundColor: '#090a0c',
+    backgroundColor: windowGround(appearanceNow().resolved),
     // The Locust mark, rasterised by `_tools/render-icon.cjs`. Resolved from
     // the build output, which sits two levels below the app directory both in
     // dev and in the unpackaged build; a packaged build will carry its own
@@ -1370,6 +1386,8 @@ const createWindow = (
       : join(__dirname, '../../resources/icon-512.png'),
     webPreferences: {
       preload: join(__dirname, '../preload/index.cjs'),
+      // The theme it starts in, so its first frame is already drawn in it (appearance.ts).
+      additionalArguments: [`${THEME_ARGUMENT}${appearanceNow().resolved}`],
       sandbox: true,
       contextIsolation: true,
       nodeIntegration: false
@@ -1681,7 +1699,10 @@ if (!ownsSingleInstanceLock) {
       electron: process.versions.electron ?? 'unknown',
       packaged: app.isPackaged
     }))
-    nativeTheme.themeSource = 'dark'
+    // Dark unless the person chose Light or Match the computer (0.790); native menus and dialogs follow it too.
+    themeChoice = readTheme(appearanceFile())
+    nativeTheme.themeSource = themeChoice
+    nativeTheme.on('updated', broadcastAppearance)
     // Windows shows a notification only for an app it can name. Development
     // runs get an id of their own: a dev electron.exe once left a Start-menu
     // shortcut carrying the installed app's id, and Windows drew Electron's
@@ -8028,6 +8049,19 @@ if (!ownsSingleInstanceLock) {
     ipcMain.handle(LOGIN_ITEM_SET_CHANNEL, (event, openAtLogin: unknown) => {
       if (!fromOwnWindow(event) || typeof openAtLogin !== 'boolean') return loginItems.read()
       return loginItems.set(openAtLogin)
+    })
+    ipcMain.handle(APPEARANCE_GET_CHANNEL, () => appearanceNow())
+    ipcMain.handle(APPEARANCE_SET_CHANNEL, (event, theme: unknown) => {
+      if (!fromOwnWindow(event) || !THEME_CHOICES.includes(theme as ThemeChoice)) return appearanceNow()
+      themeChoice = theme as ThemeChoice
+      try {
+        writeTheme(appearanceFile(), themeChoice)
+      } catch {
+        // Kept for this run; the next start reads Dark again.
+      }
+      nativeTheme.themeSource = themeChoice
+      broadcastAppearance()
+      return appearanceNow()
     })
     ipcMain.handle(KEEP_RUNNING_GET_CHANNEL, (event) => {
       if (!fromOwnWindow(event)) return { keepRunning: false }
