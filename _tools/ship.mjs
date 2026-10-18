@@ -24,6 +24,8 @@ import { readFileSync, existsSync, statSync, copyFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 
+import { retryDecision } from './gate-support.mjs'
+
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const DESKTOP = join(ROOT, 'apps', 'desktop')
 
@@ -39,12 +41,7 @@ const bad = (what, detail) => {
   if (detail !== undefined) console.log(`        ${detail}`)
 }
 
-const run = (command, argv, label) => {
-  const result = spawnSync(command, argv, { cwd: ROOT, shell: true, encoding: 'utf8' })
-  if (result.status === 0) {
-    ok(label)
-    return true
-  }
+const failure = (label, result) => {
   // A null status on Windows means the shim never ran, which is NOT a pass.
   const tail = `${result.stdout ?? ''}${result.stderr ?? ''}`
     .split('\n')
@@ -55,11 +52,38 @@ const run = (command, argv, label) => {
   return false
 }
 
+const run = (command, argv, label) => {
+  const result = spawnSync(command, argv, { cwd: ROOT, shell: true, encoding: 'utf8' })
+  if (result.status === 0) {
+    ok(label)
+    return true
+  }
+  return failure(label, result)
+}
+
+/*
+ * The unit tests, with the gate's one allowance (gate-support.mjs): a red run whose EVERY failure timed out runs
+ * those files once more, alone. An assertion, a file that would not load or an unreadable log stays red. The 0.786
+ * ship went red three runs in a row, each on a test that passes alone in a second or two (a scan of every source
+ * file, a spring simulation): the whole suite's load on this PC, not the change. The default reporter is the one
+ * whose log says "timed out".
+ */
+const unitTests = () => {
+  const label = 'unit tests'
+  const first = spawnSync('npx', ['vitest', 'run', '--reporter=default'], { cwd: ROOT, shell: true, encoding: 'utf8' })
+  if (first.status === 0) return ok(label)
+  const decision = retryDecision(`${first.stdout ?? ''}${first.stderr ?? ''}`)
+  if (!decision.retry) return failure(label, first)
+  const again = spawnSync('npx', ['vitest', 'run', '--reporter=default', ...decision.files], { cwd: ROOT, shell: true, encoding: 'utf8' })
+  if (again.status !== 0) return failure(`${label} (timed out, then failed again alone: ${decision.files.join(', ')})`, again)
+  ok(`${label} (timed out in the full run, then passed alone: ${decision.files.join(', ')})`)
+}
+
 console.log('\nGates')
 
 // 1. The real gate, both configs, exactly as CI would run it.
 run('pnpm', ['typecheck'], 'pnpm typecheck (node AND web configs)')
-run('npx', ['vitest', 'run'], 'unit tests')
+unitTests()
 
 // 2. A version nobody bumped ships the previous release's bytes under a new
 //    name, which is worse than not shipping.
