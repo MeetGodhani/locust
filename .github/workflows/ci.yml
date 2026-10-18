@@ -22,6 +22,9 @@ permissions:
 
 jobs:
   test:
+    # A Linux-only package run (`only: linux`, while a Linux check is being worked on) skips the Windows suite;
+    # every push, pull request and release still runs it first.
+    if: github.event_name != 'workflow_dispatch' || inputs.only != 'linux'
     runs-on: windows-latest
     timeout-minutes: 40
     steps:
@@ -37,7 +40,7 @@ jobs:
       - run: pnpm test
 
   package:
-    if: github.event_name == 'workflow_dispatch'
+    if: ${{ !cancelled() && github.event_name == 'workflow_dispatch' && (needs.test.result == 'success' || (inputs.only == 'linux' && needs.test.result == 'skipped')) }}
     needs: test
     strategy:
       # Each system's images are attached by their own job's result (mac-attach-dl.sh, linux-attach-dl.sh), so a

@@ -108,6 +108,23 @@ const evaluate = async (expression) => {
   }
 }
 
+/** What the window shows, as a picture the workflow keeps. */
+const shoot = async (file) => {
+  const id = nextId++
+  const shot = await new Promise((resolve) => {
+    waiting.set(id, { resolve: () => undefined, reject: () => undefined })
+    const listener = (event) => {
+      const message = JSON.parse(String(event.data))
+      if (message.id !== id) return
+      socket.removeEventListener('message', listener)
+      resolve(message.result?.data)
+    }
+    socket.addEventListener('message', listener)
+    socket.send(JSON.stringify({ id, method: 'Page.captureScreenshot', params: { format: 'png' } }))
+  })
+  if (typeof shot === 'string') await writeFile(file, Buffer.from(shot, 'base64'))
+}
+
 try {
   let page
   for (let i = 0; i < 120 && page === undefined; i += 1) {
@@ -138,9 +155,15 @@ try {
       if (face) { face.click(); await new Promise((r) => setTimeout(r, 800)); return 'opened' }
       await new Promise((r) => setTimeout(r, 500))
     }
-    return 'no face: ' + (document.body.innerText ?? '').slice(0, 200)
+    // What the window had instead (0.789): its size, the faces it drew, and the roster the app loaded.
+    const roster = await window.desktop?.listTeammates?.().catch(() => undefined)
+    const names = roster?.ok === true ? roster.data.teammates.map((t) => t.name).join(', ') : 'unreadable'
+    const faces = [...document.querySelectorAll('.lc-faces__one')].map((one) => one.getAttribute('aria-label')).join(' | ')
+    return 'no face: window ' + window.innerWidth + 'x' + window.innerHeight + ' | roster: ' + names + ' | faces: ' + (faces || 'none')
+      + ' | ' + (document.body.innerText ?? '').replace(/\\s+/g, ' ').slice(0, 400)
   })()`)
   check("Ash's conversation opens", opened === 'opened', String(opened))
+  if (opened !== 'opened') await shoot(`${SYSTEM === 'macOS' ? 'mac' : 'linux'}-no-face.png`)
 
   // Up to three turns (0.720): on 0.720's first Mac run OpenCode appeared and was gone 3 s later, the turn over
   // on its own, and Stop had nothing to stop (run 38045981686). A turn that ends before Stop proves nothing
@@ -197,20 +220,7 @@ try {
     })()`)
     const running = String(sent).startsWith('running')
     if (!running) {
-      // What the window showed, as a picture the workflow keeps.
-      const id = nextId++
-      const shot = await new Promise((resolve) => {
-        waiting.set(id, { resolve: () => undefined, reject: () => undefined })
-        const listener = (event) => {
-          const message = JSON.parse(String(event.data))
-          if (message.id !== id) return
-          socket.removeEventListener('message', listener)
-          resolve(message.result?.data)
-        }
-        socket.addEventListener('message', listener)
-        socket.send(JSON.stringify({ id, method: 'Page.captureScreenshot', params: { format: 'png' } }))
-      })
-      if (typeof shot === 'string') await writeFile(`${SYSTEM === 'macOS' ? 'mac' : 'linux'}-smoke.png`, Buffer.from(shot, 'base64'))
+      await shoot(`${SYSTEM === 'macOS' ? 'mac' : 'linux'}-smoke.png`)
     }
     // Let the runtime get going: the Stop that matters ends a process tree already doing work.
     // Waited for, not assumed: on a runner just started, OpenCode can take a while to appear.
