@@ -23,6 +23,9 @@ const base: PublicMemory = {
   status: 'kept',
   enabled: true
 }
+// The day as this computer writes it, as the screen does: "Sep 24" in en-US, "24 Sept" in en-IN, where a written-out
+// month-first day failed (2026-10-18).
+const day = (iso: string): string => new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 const screen = (memories: readonly PublicMemory[]): string =>
   renderToStaticMarkup(
     <MemoryScreen
@@ -48,7 +51,7 @@ describe('a rewritten memory on the Memory screen', () => {
     expect(html).toContain('lc-memory__was')
     expect(html).toContain('Was: Orb suite: 29/31, two flaky.')
     expect(html).toContain('>Put it back</button>')
-    expect(html).toMatch(/changed [A-Z][a-z]{2} 24/)
+    expect(html).toContain(`changed ${day('2026-09-24T05:00:00.000Z')}`)
   })
 
   it('shows nothing extra for a memory never changed', () => {

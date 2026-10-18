@@ -24,6 +24,9 @@ const memory: PublicMemory = {
   enabled: true
 }
 const forgotten: PublicForgottenMemory = { memory, forgottenAt: '2026-09-24T05:00:00.000Z', forgottenBy: { teammateId: 'tm_booty', name: 'Booty' } }
+// The day as this computer writes it, as the screen does: "Sep 24" in en-US, "24 Sept" in en-IN, where a written-out
+// "Sep 24" failed (2026-10-18).
+const day = (iso: string): string => new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 
 const screen = (props: { readonly forgotten?: readonly PublicForgottenMemory[]; readonly memories?: readonly PublicMemory[] }): string =>
   renderToStaticMarkup(
@@ -54,7 +57,7 @@ describe('Recently forgotten', () => {
     expect(html).toContain('lc-memory is-forgotten')
     expect(html).toContain('The API is on port 3000.')
     expect(html).toContain('forgotten by Booty')
-    expect(html).toMatch(/Sep 24/)
+    expect(html).toContain(day(forgotten.forgottenAt))
     expect(html).toContain('>Restore</button>')
   })
 

@@ -8,6 +8,9 @@ import { CloudHours } from './components/CloudComputers.js'
  * includes, what Locust counts and what only GitHub can, and GitHub's exact count a click away.
  */
 const text = (html: string): string => html.replace(/<[^>]+>/g, ' ').replace(/&#x27;/g, "'").replace(/\s+/g, ' ')
+// The day as this computer writes it, as Settings does: "Oct 13" in en-US, "13 Oct" in en-IN, where a written-out
+// "Oct 13" failed (2026-10-18).
+const day = (iso: string): string => new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 
 describe('the hours, in Settings', () => {
   it('says about how many this month against what GitHub includes, with a meter and GitHub a click away', () => {
@@ -24,6 +27,8 @@ describe('the hours, in Settings', () => {
   })
 
   it('says when the first month is counted from', () => {
-    expect(text(renderToStaticMarkup(<CloudHours use={{ hours: 0.05, since: '2026-10-13T15:00:00.000Z' }} />))).toMatch(/About a few minutes of the 60 GitHub includes.*Counted since Oct 13\./)
+    const shown = text(renderToStaticMarkup(<CloudHours use={{ hours: 0.05, since: '2026-10-13T15:00:00.000Z' }} />))
+    expect(shown).toContain('About a few minutes of the 60 GitHub includes')
+    expect(shown).toContain(`Counted since ${day('2026-10-13T15:00:00.000Z')}.`)
   })
 })

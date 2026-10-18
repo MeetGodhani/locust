@@ -9,6 +9,9 @@ import type { RuntimeUpdateView } from '../../shared/ipc.js'
  */
 const view = (status: RuntimeUpdateView['status']): RuntimeUpdateView => ({ runtime: 'codex', installed: '0.153.0', latest: '0.156.1', status })
 const NOW = new Date('2026-09-24T12:00:00')
+// The day as this computer writes it, as the row does: "Sep 22" in en-US, "22 Sept" in en-IN, where a written-out
+// "Sep 22" failed (2026-10-18).
+const day = (iso: string): string => new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 
 describe("a runtime's row", () => {
   it('says nothing when the agent is current', () => {
@@ -33,7 +36,7 @@ describe("a runtime's row", () => {
   it('says an update is under way, landed, or failed -- and when', () => {
     expect(updateLine(view({ kind: 'updating', version: '0.156.1' }), NOW)).toBe('Updating to 0.156.1…')
     expect(updateLine(view({ kind: 'updated', from: '0.153.0', to: '0.156.1', at: '2026-09-24T11:05:00' }), NOW)).toMatch(/^Updated from 0\.153\.0 to 0\.156\.1 at 11:05/)
-    expect(updateLine(view({ kind: 'updated', from: '0.153.0', to: '0.156.1', at: '2026-09-22T11:05:00' }), NOW)).toMatch(/^Updated from 0\.153\.0 to 0\.156\.1 on Sep 22/)
+    expect(updateLine(view({ kind: 'updated', from: '0.153.0', to: '0.156.1', at: '2026-09-22T11:05:00' }), NOW)).toBe(`Updated from 0.153.0 to 0.156.1 on ${day('2026-09-22T11:05:00')}.`)
     expect(updateLine(view({ kind: 'failed', version: '0.156.1', what: 'npm could not replace the files.', at: '2026-09-24T11:05:00' }), NOW)).toMatch(/^Could not update to 0\.156\.1 at 11:05.*: npm could not replace the files\.$/)
   })
 })
