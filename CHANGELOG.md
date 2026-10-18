@@ -11,6 +11,12 @@ Settings shows this file as What's new. An entry may group its changes under
 about when they arrive on it carries `<!-- big -->` on the line under its
 heading: the home screen then shows it once, as a splash.
 
+## 0.791.0 - 2026-10-18
+
+### New
+
+- **A company can set Locust's limits once, for everyone on a computer.** An administrator puts one policy file on the machine, and Locust follows it: which AI agents and models teammates may use, the most a turn may do (Auto can be ruled out), the highest monthly spend limit, and whether other apps, your phone and cloud computers can connect. Locust checks it before anything starts, and Settings shows what it sets as "Set by your organization", so it cannot be loosened there. With no policy file, nothing changes. The guide for administrators is docs/ADMIN.md on GitHub.
+
 ## 0.790.0 - 2026-10-18
 
 ### New
