@@ -4083,8 +4083,8 @@ export function buildThread(
         key: `files_refused_${message.itemId}`,
         type: 'diagnostic',
         level: 'warning',
-        // Since 0.516 only an absolute path (or one that is no path) is refused here: a `..` path goes to the host.
-        message: `Not shown as a file: ${refused.map((file) => file.path).join(', ')} -- a file is handed over by its path from the conversation's folder, and ${refused.length === 1 ? 'this is not one' : 'these are not'}.`
+        // Since 0.787 only a network or device path (or one that is no path) is refused here: a `..` or whole path goes to the host.
+        message: `Not shown as a file: ${refused.map((file) => file.path).join(', ')} -- a file is handed over by its path on this computer, and ${refused.length === 1 ? 'this is not one' : 'these are not'}.`
       })
     }
   }

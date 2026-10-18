@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { MAX_FILES_PER_REPLY, parseFileBlocks, stripFileBlocks } from './handover.js'
+import { MAX_FILES_PER_REPLY, handedFileOnDisk, isWholePath, parseFileBlocks, refusedFileLines, stripFileBlocks } from './handover.js'
 
 /**
  * A teammate hands the person a file.
@@ -63,10 +63,33 @@ describe('paths this app will not point at', () => {
     expect(dropped('..rc')).toBe(1)
   })
 
-  it('drops an absolute path, in every spelling this machine has', () => {
-    expect(dropped('/etc/passwd')).toBe(0)
-    expect(dropped('C:\\Windows\\System32\\drivers\\etc\\hosts')).toBe(0)
+  it('leaves a whole path to the host too, which opens it only when the teammate named it as its own (0.787)', () => {
+    // Codex wrote its review where it was asked to, D:\work\scratch, and
+    // handed it over by that path; dropped here, the thread said only "Not
+    // shown as a file" (Colin, 2026-10-18). The host opens a whole path
+    // outside its folders only for a file the teammate's own record names
+    // (main/named-files.ts), so these reach it and are judged there.
+    expect(parseFileBlocks('<locust-file>\nD:\\work\\scratch\\toaster-review2\\Codex.md :: the review\n</locust-file>')).toEqual([
+      { path: 'D:/work/scratch/toaster-review2/Codex.md', note: 'the review' }
+    ])
+    expect(dropped('/Users/someone/notes/report.md')).toBe(1)
+    expect(dropped('C:/Users/someone/Desktop/report.md')).toBe(1)
+  })
+
+  it('drops a network or device path, which would reach another computer just by being looked at', () => {
     expect(dropped('\\\\server\\share\\file.txt')).toBe(0)
+    expect(dropped('//server/share/file.txt')).toBe(0)
+    expect(dropped('\\\\?\\C:\\Windows\\win.ini')).toBe(0)
+    expect(dropped('\\\\.\\pipe\\anything')).toBe(0)
+  })
+
+  it('drops a drive with no folder, which names wherever that drive last was', () => {
+    expect(dropped('D:report.md')).toBe(0)
+  })
+
+  it('says under the message what it dropped, and no longer says it of a whole path (0.787)', () => {
+    const block = '<locust-file>\nD:/work/scratch/review/Codex.md\n\\\\server\\share\\file.txt\n</locust-file>'
+    expect(refusedFileLines(block).map((line) => line.path)).toEqual(['//server/share/file.txt'])
   })
 
   it('drops a path carrying a control character', () => {
@@ -88,6 +111,22 @@ describe('paths this app will not point at', () => {
     const [file] = parseFileBlocks(`<locust-file>\ndocs/a.md :: ${note}\n</locust-file>`)
     expect(file?.note?.length).toBeLessThanOrEqual(120)
     expect(file?.note?.endsWith('…')).toBe(true)
+  })
+})
+
+describe('where a handed file is on disk', () => {
+  it('is in the conversation\'s folder for a path in it, and the path itself for a whole one (0.787)', () => {
+    expect(handedFileOnDisk('C:/Users/someone/.claude', 'docs/report.md')).toBe('C:/Users/someone/.claude/docs/report.md')
+    // Joined, this was C:/Users/someone/.claude/D:/work/..., a file that cannot exist.
+    expect(handedFileOnDisk('C:/Users/someone/.claude', 'D:/work/scratch/review/Codex.md')).toBe('D:/work/scratch/review/Codex.md')
+    expect(handedFileOnDisk('/home/someone/project', '/home/someone/notes.md')).toBe('/home/someone/notes.md')
+  })
+
+  it('tells a whole path from one in the folder', () => {
+    expect(isWholePath('D:/work/a.md')).toBe(true)
+    expect(isWholePath('/home/a.md')).toBe(true)
+    expect(isWholePath('docs/a.md')).toBe(false)
+    expect(isWholePath('../Documents/a.md')).toBe(false)
   })
 })
 

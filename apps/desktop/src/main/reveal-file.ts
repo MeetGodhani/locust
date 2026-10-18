@@ -32,14 +32,15 @@
  * to run something is theirs and looks like what it is.
  */
 
-import { isAbsolute, relative, resolve } from 'node:path'
+import { dirname, isAbsolute, relative, resolve } from 'node:path'
 
 /** Why a reveal was refused, in words the card can show. */
 export type RevealRefusal =
   | { readonly ok: false; readonly reason: 'no-path' }
   | { readonly ok: false; readonly reason: 'outside'; readonly path: string }
 
-export type RevealDecision = { readonly ok: true; readonly path: string } | RevealRefusal
+/** `named`: outside every root, honoured because a teammate's own record names it (0.787, `decideTeammateFile`). */
+export type RevealDecision = { readonly ok: true; readonly path: string; readonly named?: true } | RevealRefusal
 
 /**
  * Whether `child` is inside `parent`, by path arithmetic rather than string
@@ -108,4 +109,32 @@ export function decideReveal(requested: unknown, roots: readonly string[]): Reve
   return roots.some((root) => contains(root, resolved))
     ? { ok: true, path: resolved }
     : { ok: false, reason: 'outside', path: resolved }
+}
+
+/**
+ * A teammate's file, wherever it is (0.787): inside one of `roots`, or
+ * outside them all and named as the teammate's own by its recorded turn
+ * (main/named-files.ts). `named` is the host's lookup in its own ledger, so
+ * the renderer's path is still only a request -- one the host honours for a
+ * file it has itself shown as a teammate's.
+ */
+export async function decideTeammateFile(
+  requested: unknown,
+  roots: readonly string[],
+  named: (path: string) => Promise<boolean>
+): Promise<RevealDecision> {
+  const decision = decideReveal(requested, roots)
+  if (decision.ok || decision.reason === 'no-path' || typeof requested !== 'string' || !isAbsolute(requested)) return decision
+  // A network or device path is never looked up, and so never looked at.
+  if (/^[\\/]{2}/.test(requested)) return decision
+  return (await named(decision.path)) ? { ok: true, path: decision.path, named: true } : decision
+}
+
+/**
+ * The folders a READ asks its link question of (`insideOnDisk`): a named file
+ * is inside none of the roots, so it is asked of its own folder -- a link
+ * there that leads somewhere else is still not the file the teammate named.
+ */
+export function readRoots(decision: { readonly path: string; readonly named?: true }, roots: readonly string[]): readonly string[] {
+  return decision.named === true ? [dirname(decision.path)] : roots
 }

@@ -150,7 +150,7 @@ import type { BackgroundStartResponse, PublicBackgroundRun } from '../shared/bac
 import { FOLDER_CHANGES_CHANNEL, FOLDER_COMMIT_CHANNEL, FOLDER_REPOSITORY_CHANNEL, type CommitResult, type FolderChanges } from '../shared/folder-commit.js'
 import { readRuntimeArtifacts } from './runtime-artifacts.js'
 import { relative } from 'node:path'
-import { decideReveal, insideOnDisk } from './reveal-file.js'
+import { decideReveal, decideTeammateFile, insideOnDisk, readRoots } from './reveal-file.js'
 import { readWorkspaceImage } from './workspace-image.js'
 import { readPdfPages } from './pdf-pages.js'
 import { addConnector, removeConnector } from './connector-add.js'
@@ -205,7 +205,7 @@ import { changedSince } from './memory-provenance.js'
 const ROUTINE_TICK_MS = 60_000
 const ROUTINE_FIRST_TICK_MS = 15_000
 import type { RoutineRunner } from './routine-runner.js'
-import { readOneMission, deleteMissionRecord, knownDigests, newestTurnOf, readMissionHistory, spendByTeammate, usageTurns, withLiveMissionIds } from './mission-history.js'
+import { readOneMission, deleteMissionRecord, knownDigests, namedByATeammate, newestTurnOf, readMissionHistory, spendByTeammate, usageTurns, withLiveMissionIds } from './mission-history.js'
 import { isUsageRange, usageSummary } from '../shared/usage.js'
 import { limitReached, limitRefusal, monthOf } from '../shared/spend.js'
 import { createOwnModelStore, OwnModelRefusal, ownModelAddress, ownModelId, testOwnEndpoint } from './own-models.js'
@@ -3360,6 +3360,8 @@ if (!ownsSingleInstanceLock) {
         return []
       }
     }
+    // A file outside every folder above that a teammate's own record names (0.787, named-files.ts).
+    const namedFile = (path: string): Promise<boolean> => namedByATeammate(missionLedger, path).catch(() => false)
 
     const antigravityStartData = (mission: {
       readonly runId: string
@@ -5406,19 +5408,20 @@ if (!ownsSingleInstanceLock) {
       // disowning its own work. All of them are the HOST's paths; the
       // renderer still names nothing it was not already shown.
       // And a comparison column's copy (0.555): a file a column wrote there is one this app showed you.
-      const decision = decideReveal(requested, [
+      // And a file outside them all that a teammate's own record names (0.787, named-files.ts).
+      const decision = await decideTeammateFile(requested, [
         ...(await workedInFolders()),
         ...(await teammateFolders()),
         ledgerDirectory,
         compareRoot()
-      ])
+      ], namedFile)
       if (!decision.ok) {
         return {
           ok: false,
           message:
             decision.reason === 'no-path'
               ? 'There is no file to show.'
-              : 'That file is outside the folder your teammates work in, so Locust will not open it.'
+              : 'That file is outside the folders your teammates work in, and no teammate wrote it or handed it over, so Locust will not open it.'
         } as const
       }
       /*
@@ -5455,9 +5458,9 @@ if (!ownsSingleInstanceLock) {
      *
      * The containment is the reveal's, exactly, and for the reason that file
      * gives: the SOURCE is a request from the renderer and is honoured only
-     * inside a folder the host already knows a mission ran in. Without that a
-     * model could hand over any path on the disk and have the app copy it out
-     * to somewhere the person can read.
+     * inside a folder the host already knows a mission ran in, or for a file
+     * a teammate's own record names (0.787, named-files.ts) -- one that
+     * teammate could already read and repeat to the person itself.
      *
      * The DESTINATION is never the renderer's. It comes back from a native
      * save dialog, so the only place this can write is one the person just
@@ -5469,19 +5472,20 @@ if (!ownsSingleInstanceLock) {
     ipcMain.handle(WORKSPACE_SAVE_COPY_CHANNEL, async (event, requested: unknown) => {
       if (!fromOwnWindow(event)) return { ok: false, message: 'That request was rejected.' } as const
       // And a comparison column's copy (0.555): a file a column wrote there is one this app showed you.
-      const decision = decideReveal(requested, [
+      // And a file outside them all that a teammate's own record names (0.787, named-files.ts).
+      const decision = await decideTeammateFile(requested, [
         ...(await workedInFolders()),
         ...(await teammateFolders()),
         ledgerDirectory,
         compareRoot()
-      ])
+      ], namedFile)
       if (!decision.ok) {
         return {
           ok: false,
           message:
             decision.reason === 'no-path'
               ? 'There is no file to save.'
-              : 'That file is outside the folder your teammates work in, so Locust will not copy it.'
+              : 'That file is outside the folders your teammates work in, and no teammate wrote it or handed it over, so Locust will not copy it.'
         } as const
       }
       const window = BrowserWindow.fromWebContents(event.sender)
@@ -5519,7 +5523,7 @@ if (!ownsSingleInstanceLock) {
      */
     ipcMain.handle(WORKSPACE_IMAGE_CHANNEL, async (event, requested: unknown, folder: unknown) => {
       if (!fromOwnWindow(event)) return { ok: false, message: 'That request was rejected.' } as const
-      return readWorkspaceImage(requested, folder ?? workspacePath, [...(await workedInFolders()), ...(await teammateFolders()), compareRoot()])
+      return readWorkspaceImage(requested, folder ?? workspacePath, [...(await workedInFolders()), ...(await teammateFolders()), compareRoot()], namedFile)
     })
 
     /*
@@ -5797,12 +5801,12 @@ if (!ownsSingleInstanceLock) {
        * renderer draws them as text (shared/office-document.ts).
        */
       if (OFFICE_EXTENSIONS.has(sheetKind)) {
-        const decision = decideReveal(requested, roots)
+        const decision = await decideTeammateFile(requested, roots, namedFile)
         if (!decision.ok) {
-          return { ok: false, message: 'That file is outside the folder your teammates work in, so Locust will not open it.' } as const
+          return { ok: false, message: 'That file is outside the folders your teammates work in, and no teammate wrote it or handed it over, so Locust will not open it.' } as const
         }
         try {
-          if (!(await insideOnDisk(decision.path, roots))) return { ok: false, message: linkedOut } as const
+          if (!(await insideOnDisk(decision.path, readRoots(decision, roots)))) return { ok: false, message: linkedOut } as const
           const measured = await stat(decision.path)
           if (!measured.isFile()) return { ok: false, message: 'That is a folder, not a file.' } as const
           if (measured.size > MAX_OFFICE_FILE_BYTES) {
@@ -5820,12 +5824,12 @@ if (!ownsSingleInstanceLock) {
         }
       }
       if (SHEET_EXTENSIONS.has(sheetKind)) {
-        const decision = decideReveal(requested, roots)
+        const decision = await decideTeammateFile(requested, roots, namedFile)
         if (!decision.ok) {
-          return { ok: false, message: 'That file is outside the folder your teammates work in, so Locust will not open it.' } as const
+          return { ok: false, message: 'That file is outside the folders your teammates work in, and no teammate wrote it or handed it over, so Locust will not open it.' } as const
         }
         try {
-          if (!(await insideOnDisk(decision.path, roots))) return { ok: false, message: linkedOut } as const
+          if (!(await insideOnDisk(decision.path, readRoots(decision, roots)))) return { ok: false, message: linkedOut } as const
           const measured = await stat(decision.path)
           if (!measured.isFile()) return { ok: false, message: 'That is a folder, not a file.' } as const
           if (measured.size > MAX_SHEET_FILE_BYTES) {
@@ -5846,15 +5850,15 @@ if (!ownsSingleInstanceLock) {
       if (!isViewableText(requested)) {
         return { ok: false, message: 'Locust does not open that kind of file here.' } as const
       }
-      const decision = decideReveal(requested, roots)
+      const decision = await decideTeammateFile(requested, roots, namedFile)
       if (!decision.ok) {
         return {
           ok: false,
-          message: 'That file is outside the folder your teammates work in, so Locust will not open it.'
+          message: 'That file is outside the folders your teammates work in, and no teammate wrote it or handed it over, so Locust will not open it.'
         } as const
       }
       try {
-        if (!(await insideOnDisk(decision.path, roots))) return { ok: false, message: linkedOut } as const
+        if (!(await insideOnDisk(decision.path, readRoots(decision, roots)))) return { ok: false, message: linkedOut } as const
         const measured = await stat(decision.path)
         if (!measured.isFile()) return { ok: false, message: 'That is a folder, not a file.' } as const
         if (measured.size > MAX_TEXT_BYTES) {

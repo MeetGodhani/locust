@@ -14,7 +14,8 @@ import { blocksOutsideCode, stripBlocksOutsideCode } from './protocolTags.js'
  *     </locust-file>
  *
  * One path per line, the note after `::` optional, paths relative to the
- * folder the teammates work in. Same shape as every other block this host
+ * folder the teammates work in -- or whole, for a file written somewhere
+ * else (0.787, see `acceptable`). Same shape as every other block this host
  * reads, for the same reason `peer-share.ts` gives: `codex exec` and
  * `claude -p` are one prompt in and one transcript out, so a decision has to
  * travel in the transcript in a form the host can find without guessing.
@@ -50,7 +51,7 @@ export const MAX_FILE_NOTE_LENGTH = 120
 const BLOCK = /<locust-file\s*>([\s\S]*?)<\/locust-file>/g
 
 export interface HandedFile {
-  /** Relative to the conversation's folder, forward slashes, never absolute; `..` allowed since 0.516, the host decides. */
+  /** Relative to the conversation's folder, or whole since 0.787; forward slashes; `..` allowed since 0.516. The host decides. */
   readonly path: string
   readonly note?: string
 }
@@ -58,9 +59,10 @@ export interface HandedFile {
 /**
  * Paths this app will not draw a button for.
  *
- * Narrow on purpose: an absolute path, a control character or the example is
- * refused here. A path that climbs out with `..` is the host's to judge since
- * 0.516 (see `acceptable`): it holds the folders Locust works in.
+ * Narrow on purpose: a network or device path, a control character or the
+ * example is refused here. A path that climbs out with `..` (0.516) and a
+ * whole path (0.787) are the host's to judge (see `acceptable`): it holds
+ * the folders Locust works in and what each teammate wrote.
  * A dropped line is simply not drawn -- no card, no error to the model -- the
  * same way `parseShareBlocks` drops a block with no recipient.
  */
@@ -77,9 +79,19 @@ function acceptable(path: string): boolean {
   // A control character in a path is never a real path and is exactly what a
   // terminal-escape trick looks like; the store refuses them too.
   if (/[\u0000-\u001f\u007f]/.test(path)) return false
-  // Absolute, in either spelling, plus a Windows drive letter and a UNC
-  // share. The path is relative to the workspace by definition.
-  if (path.startsWith('/') || path.startsWith('\\') || /^[a-z]:/i.test(path)) return false
+  // A network share or a device (`\\server\share`, `\\?\`, both `//` by now):
+  // even looking for one reaches another computer, and Windows signs in to it.
+  if (path.startsWith('//')) return false
+  // `D:notes.md` is relative to whatever folder that drive was last in.
+  if (/^[a-z]:(?!\/)/i.test(path)) return false
+  /*
+   * A WHOLE PATH IS LET THROUGH (0.787), for the reason `..` was. Codex,
+   * asked to write its review to D:\work\scratch, handed over
+   * `D:/work/scratch/toaster-review2/Codex.md` and the thread said only "Not
+   * shown as a file"; Colin: "claude code and the other apps still let you
+   * access the file". The host opens a whole path outside its folders only
+   * when the teammate's own record named it (main/named-files.ts).
+   */
   /*
    * `..` IS LET THROUGH (0.516), to the host's own rule. A teammate in one
    * folder wrote a report in another Locust works in and handed it as
@@ -97,6 +109,16 @@ function acceptable(path: string): boolean {
 /** `docs\report.md` -> `docs/report.md`. One spelling reaches the host. */
 function normalize(path: string): string {
   return path.replace(/\\/g, '/').replace(/^\.\//, '').trim()
+}
+
+/** Whether a handed path is whole (`D:/scratch/a.md`, `/home/a.md`) rather than in the folder (0.787). */
+export function isWholePath(path: string): boolean {
+  return /^(?:[a-z]:)?\//i.test(path)
+}
+
+/** Where a handed file is on disk: a whole path as it is, any other in the conversation's folder. */
+export function handedFileOnDisk(folder: string, path: string): string {
+  return isWholePath(path) ? path : `${folder}/${path}`
 }
 
 /**
@@ -139,6 +161,7 @@ export function parseFileBlocks(text: string): readonly HandedFile[] {
  * `../Documents/.../report.md` -- refused for leaving the folder, which is
  * right, and said nowhere, so he asked "did you send an md? i didnt see
  * anything". A refused path is now said under the message, as a path.
+ * Since 0.787 that is only a network or device path, or a drive with no folder.
  */
 export function refusedFileLines(text: string): readonly { readonly path: string; readonly why: string }[] {
   const refused: { path: string; why: string }[] = []
@@ -150,7 +173,7 @@ export function refusedFileLines(text: string): readonly { readonly path: string
       if (acceptable(path) || path.length === 0 || path.toLowerCase() === FILE_BLOCK_EXAMPLE_PATH) continue
       // Said as a path, never as anything to press: a control character is not shown at all.
       if (/[\u0000-\u001f\u007f]/.test(path) || path.length > 400) continue
-      refused.push({ path, why: 'it is not a path inside a folder Locust works in' })
+      refused.push({ path, why: 'it is not a path to a file on this computer' })
       if (refused.length >= MAX_FILES_PER_REPLY) return refused
     }
   }

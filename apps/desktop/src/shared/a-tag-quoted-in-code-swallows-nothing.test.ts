@@ -34,7 +34,9 @@ describe('a tag quoted in code swallows nothing', () => {
   })
 
   it('says a handed file it will not draw, rather than nothing', () => {
-    expect(refusedFileLines('<locust-file>\nC:\\Users\\x\\report.md\n</locust-file>')).toEqual([{ path: 'C:/Users/x/report.md', why: 'it is not a path inside a folder Locust works in' }])
+    expect(refusedFileLines('<locust-file>\n\\\\server\\share\\report.md\n</locust-file>')).toEqual([{ path: '//server/share/report.md', why: 'it is not a path to a file on this computer' }])
+    // A whole path is the host's to judge since 0.787: drawn, and opened when the teammate named it as its own.
+    expect(refusedFileLines('<locust-file>\nC:\\Users\\x\\report.md\n</locust-file>')).toEqual([])
     expect(refusedFileLines('<locust-file>\ndocs/report.md\n</locust-file>')).toEqual([])
     expect(refusedFileLines('<locust-file>\npath/relative/to/the/folder.md\n</locust-file>')).toEqual([])
   })

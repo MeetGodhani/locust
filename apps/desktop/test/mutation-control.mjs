@@ -51,8 +51,59 @@ const APPROVAL_RULES = join(ROOT, 'src', 'shared', 'approval-rules.ts')
 const MCP_TOOLS = join(ROOT, 'src', 'main', 'locust-mcp-tools.ts')
 const MEMORY_STORE = join(ROOT, 'src', 'main', 'memory-store.ts')
 const MEMORY_READER = join(ROOT, 'src', 'main', 'memory-reader.ts')
+const NAMED_FILES = join(ROOT, 'src', 'main', 'named-files.ts')
+const REVEAL = join(ROOT, 'src', 'main', 'reveal-file.ts')
+const HANDOVER = join(ROOT, 'src', 'shared', 'handover.ts')
 
 const MUTATIONS = [
+  {
+    file: NAMED_FILES,
+    name: 'written-elsewhere: a declined step names its target again',
+    from: '    if (command === undefined || (status !== undefined && DID_NOT_HAPPEN.test(status))) continue',
+    to: '    if (command === undefined) continue',
+    expect: 'names nothing for a step that was declined, failed, or never finished',
+    tests: ['src/main/a-file-written-elsewhere-opens.test.ts']
+  },
+  {
+    file: REVEAL,
+    name: 'written-elsewhere: a network path is looked up like any other',
+    from: '  if (/^[\\\\/]{2}/.test(requested)) return decision\n',
+    to: '',
+    expect: 'never looks up a network path, a relative one, or one inside the folder',
+    tests: ['src/main/a-file-written-elsewhere-opens.test.ts']
+  },
+  {
+    file: REVEAL,
+    name: 'written-elsewhere: a file the teammate named outside the folders is refused again',
+    from: '  return (await named(decision.path)) ? { ok: true, path: decision.path, named: true } : decision',
+    to: '  return decision',
+    expect: 'opens the one the teammate wrote and handed over, in any spelling of it',
+    tests: ['src/main/a-file-written-elsewhere-opens.test.ts']
+  },
+  {
+    file: HISTORY,
+    name: 'written-elsewhere: the history forgets what a turn named',
+    from: '      ...(named.length === 0 ? {} : { named }),\n',
+    to: '',
+    expect: 'finds a file handed over while the turn is still running',
+    tests: ['src/main/a-file-written-elsewhere-opens.test.ts']
+  },
+  {
+    file: HANDOVER,
+    name: 'written-elsewhere: a network path is drawn as a file',
+    from: "  if (path.startsWith('//')) return false\n",
+    to: '',
+    expect: 'drops a network or device path, which would reach another computer just by being looked at',
+    tests: ['src/shared/handover.test.ts']
+  },
+  {
+    file: HANDOVER,
+    name: 'written-elsewhere: a whole path is joined onto the folder',
+    from: '  return isWholePath(path) ? path : `${folder}/${path}`',
+    to: '  return `${folder}/${path}`',
+    expect: "is in the conversation's folder for a path in it, and the path itself for a whole one (0.787)",
+    tests: ['src/shared/handover.test.ts']
+  },
   {
     file: MCP_TOOLS,
     name: 'mcp-startup: a conversation claim is released before its turn starts',

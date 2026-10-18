@@ -16,6 +16,7 @@ import type { MissionReadResponse,
   PublicRecoveredMission
 } from '../shared/ipc.js'
 import { replaceFile } from './replace-file.js'
+import { filesNamedIn, namedFileKey } from './named-files.js'
 
 const MAX_HISTORY_MISSIONS = 20
 /**
@@ -537,6 +538,8 @@ interface CachedLedgerFile {
   readonly unpricedAt?: string
   /** What the turn counts for in Usage (0.714): its receipt, and the turn it continues. */
   readonly turn?: UsageTurnRead
+  /** The whole paths its record names as the teammate's (0.787, named-files.ts), as keys. */
+  readonly named?: readonly string[]
   /** The whole record, kept only while it is among the newest. */
   full?: RecoveredMission
 }
@@ -600,6 +603,7 @@ async function refreshedLedger(ledger: MissionLedger): Promise<{
     const money = moneyOfRun(mission.events)
     const unpricedAt = unpricedRunAt(mission.events, isOwnModel(mission.metadata.runtime, mission.metadata.model))
     const turn = usageTurnOf(mission)
+    const named = filesNamedIn(mission.events)
     cache.set(missionId, {
       missionId,
       stamp,
@@ -610,6 +614,7 @@ async function refreshedLedger(ledger: MissionLedger): Promise<{
       ...(money === undefined ? {} : { money }),
       ...(unpricedAt === undefined ? {} : { unpricedAt }),
       turn,
+      ...(named.length === 0 ? {} : { named }),
       full: mission
     })
   }
@@ -622,6 +627,19 @@ async function refreshedLedger(ledger: MissionLedger): Promise<{
     return entry === undefined ? [] : [entry]
   })
   return { cache, entries, listingIssues: listing.issues.length, readMission, totalFiles: listing.totalFiles ?? listing.files.length }
+}
+
+/**
+ * Whether a teammate's recorded turn names this whole path as its own (0.787,
+ * named-files.ts). Through the history's cache, which reads a file again
+ * when it changes: a turn still running is read as it grows, so a file it
+ * handed over a moment ago is found.
+ */
+export async function namedByATeammate(ledger: MissionLedger, path: string): Promise<boolean> {
+  const key = namedFileKey(path)
+  if (key === undefined) return false
+  const refreshed = await refreshedLedger(ledger)
+  return refreshed?.entries.some((entry) => entry.named?.includes(key) === true) ?? false
 }
 
 /** A turn's usage as its file was read: everything but which conversation it is in, found from the whole ledger. */

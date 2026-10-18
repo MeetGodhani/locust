@@ -99,3 +99,32 @@ describe('saving a copy of a handed file', () => {
     expect(html).toMatch(/title="the rollup you asked for[^"]*Show docs\/report\.md/)
   })
 })
+
+/**
+ * A file written somewhere else, handed over by its whole path (0.787).
+ *
+ * Colin, 2026-10-18: Codex wrote its review to D:\work\scratch and handed it
+ * over by that path, and the thread said only "Not shown as a file". The
+ * card now draws it by its file's name -- a long folder name cut the name
+ * itself short in the pill ("…/locust-drive-written-elsewhere-out-25NpVQ/rep…",
+ * the 0.787 drive) -- with all of it on hover; the host decides whether it opens.
+ */
+describe('a file handed over by its whole path', () => {
+  const whole: ThreadItem = {
+    key: 'files_3',
+    type: 'files',
+    files: [{ path: 'D:/work/scratch/toaster-review2/Codex.md', note: 'the review' }]
+  }
+
+  it('is drawn as a control, by its file\'s name, with all of its path on hover', () => {
+    const html = drawn([whole])
+    expect(html).toContain('<button')
+    expect(html).toContain('lc-handedfile__path">Codex.md<')
+    expect(html).toContain('Show D:/work/scratch/toaster-review2/Codex.md in the file manager')
+    expect(html).toContain('Save a copy of D:/work/scratch/toaster-review2/Codex.md')
+  })
+
+  it('leaves a path in the folder exactly as it was drawn before', () => {
+    expect(drawn([item])).toContain('>docs/report.md<')
+  })
+})

@@ -18,6 +18,7 @@ import type {
 import type { TurnVersions } from '../missionView.js'
 import type { MissionMode, RewindPutBackResponse } from '../../../shared/ipc.js'
 import { activityEntries, buildThread, netFileEntries, cancellationSummary, editedFiles, decisionStanding, errorAlreadyShown, foldNoticeKeys, helperAskedBy, lastPlanOf, modeRefusedATool, pathInWorkspace, readPlan, relativePath, sentAgainBy, stepsLine, stoppedBeforeSaying, terminalSeamBefore, threadMarkers, threadPeerCards, turnAttachments, turnPromptLine, usageWindowLabel } from '../missionView.js'
+import { handedFileOnDisk, isWholePath } from '../../../shared/handover.js'
 import type { GroupBoundary, GroupLeaving, LiveStarter, TurnSwitch } from '../missionView.js'
 import { parseAgentText } from '../agentText.js'
 import { folderName, ranOnLine } from '../ranOn.js'
@@ -104,7 +105,7 @@ function HandedFiles({
     const bridge = window.desktop
     setRefused(undefined)
     if (bridge === undefined || workspacePath === undefined) return
-    void bridge[action](`${workspacePath}/${path}`)
+    void bridge[action](handedFileOnDisk(workspacePath, path))
       .then((answer) => setRefused(answer.ok ? undefined : answer.message))
       // The host never answered. Say what is still true: nothing moved.
       .catch(() => setRefused('Locust could not reach that file. Nothing was changed.'))
@@ -140,7 +141,8 @@ function HandedFiles({
             onClick={() => (onOpenFile === undefined ? ask('revealFile', file.path) : onOpenFile(file.path))}
           >
             <Icon name="file" size={12} />
-            <span className="lc-handedfile__path">{file.path}</span>
+            {/* A whole path (0.787) reads as its file's name: its folders cut the name short in the pill. The title has all of it. */}
+            <span className="lc-handedfile__path">{isWholePath(file.path) ? file.path.split('/').pop() : file.path}</span>
             {file.note !== undefined && <span className="lc-handedfile__note">{file.note}</span>}
           </button>
           {/*
@@ -158,7 +160,7 @@ function HandedFiles({
               className="lc-handedfile__save"
               label={file.path}
               text={async () => {
-                const read = await window.desktop?.readTextFile(`${workspacePath}/${file.path}`)
+                const read = await window.desktop?.readTextFile(handedFileOnDisk(workspacePath, file.path))
                 if (read === undefined) return { refused: 'Locust could not reach that file.' }
                 if (!read.ok) return { refused: read.message }
                 // A spreadsheet or a Word file has no text to copy as it is: saving a copy keeps it whole.

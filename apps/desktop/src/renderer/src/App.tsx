@@ -2008,8 +2008,8 @@ export default function App(): ReactElement {
     /*
      * Two callers, two shapes of path.
      *
-     * A handed file is relative by construction -- `handover.ts` drops any
-     * absolute path a model writes. An activity row's file is absolute,
+     * A handed file is relative to the folder, or whole since 0.787 (a file
+     * written elsewhere, handed over by its full path). An activity row's file is absolute,
      * because that is what the runtime reported acting on, and it is not
      * always inside the workspace. Joining the workspace onto an already
      * absolute path produces `C:/ws/C:/elsewhere/notes.md`, which the host
