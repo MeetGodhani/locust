@@ -1,7 +1,7 @@
 blank_issues_enabled: true
 contact_links:
   - name: A security problem
-    url: https://github.com/locust-lol/locust/blob/main/SECURITY.md
+    url: https://github.com/StopBanning/locust/blob/main/SECURITY.md
     about: Please report it privately (the Security tab, or email), not in a public issue.
   - name: Download Locust
     url: https://locust.lol
