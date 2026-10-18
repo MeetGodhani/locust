@@ -39,6 +39,7 @@ import {
  * before going on, and an answer that arrives for a call already ended is not handed back as a call.
  */
 export interface VoiceCallDeps {
+  readonly policyRefusal?: (target?: VoiceCallTarget, preview?: boolean) => Promise<string | undefined>
   /** Codex as discovery found it, when it is ready to start. */
   readonly codex: () => Promise<ExecutableLaunch | undefined>
   readonly spawn: (executablePath: string, args: readonly string[], env?: Readonly<Record<string, string>>) => AppServerProcess
@@ -228,6 +229,8 @@ export function createVoiceCalls(deps: VoiceCallDeps): VoiceCalls {
 
   return {
     async available() {
+      const managed = await deps.policyRefusal?.()
+      if (managed !== undefined) return { available: false, why: managed }
       if (deps.folder() === undefined) return { available: false, why: 'Pick a folder first.' }
       const codex = await deps.codex().catch(() => undefined)
       return codex === undefined
@@ -244,6 +247,11 @@ export function createVoiceCalls(deps: VoiceCallDeps): VoiceCalls {
       current = ticket
       if (previous !== undefined) await cancel(previous)
       if (ticket.cancelled) return { ok: false, message: ENDED }
+      if (deps.policyRefusal !== undefined) {
+        const managed = await deps.policyRefusal(target, preview !== undefined)
+        if (ticket.cancelled) return { ok: false, message: ENDED }
+        if (managed !== undefined) { if (current === ticket) current = undefined; return { ok: false, message: managed } }
+      }
       const folder = deps.folder()
       if (folder === undefined) { if (current === ticket) current = undefined; return { ok: false, message: 'Pick a folder first.' } }
       // The teammate the call is with (0.746); one that cannot be found makes an ordinary call, never a refused one.

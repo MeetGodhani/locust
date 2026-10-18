@@ -1,5 +1,8 @@
 // H1: first, before any import can spawn -- no bare name is found in its working folder.
 import './no-planted-executables.js'
+import { OrganizationPolicyError, readOrganizationPolicy } from './organization-policy.js'
+import { createSpendRefusal } from './organization-spend.js'
+import { policyCloudTerminalRefusal, policyFeatureRefusal, policyModels, policyTurnRefusal, policyUnmeteredRefusal, type PolicyTurn } from '../shared/organization-policy.js'
 import { randomUUID } from 'node:crypto'
 import { startAppServerProcess } from './app-server-process.js'
 import { ownGitArgs } from './git-guard.js'
@@ -45,7 +48,7 @@ import { environmentOf, githubRepoOf, leavingNoLog } from './cloud-tasks.js'
 import { createCloudComputers } from './cloud-computer.js'
 import { createCloudTurns } from './cloud-turns.js'
 import { isCloudAgent, type CloudAgent } from '../shared/cloud-computer.js'
-import { createClaudeCloud } from './claude-cloud.js'
+import { choiceArgs, createClaudeCloud } from './claude-cloud.js'
 import { createRemoteControl } from './claude-remote-control.js'
 import { registerRemoteControlIpc } from './remote-control-ipc.js'
 import { runInPseudoTerminal } from './pseudo-terminal.js'
@@ -213,7 +216,7 @@ const ROUTINE_FIRST_TICK_MS = 15_000
 import type { RoutineRunner } from './routine-runner.js'
 import { readOneMission, deleteMissionRecord, knownDigests, namedByATeammate, newestTurnOf, readMissionHistory, spendByTeammate, usageTurns, withLiveMissionIds } from './mission-history.js'
 import { isUsageRange, usageSummary } from '../shared/usage.js'
-import { limitReached, limitRefusal, monthOf } from '../shared/spend.js'
+import { monthOf } from '../shared/spend.js'
 import { createOwnModelStore, OwnModelRefusal, ownModelAddress, ownModelId, testOwnEndpoint } from './own-models.js'
 import { changelogPaths, entries as changelogEntries, readChangelog, splashEntries } from './changelog.js'
 import type { ChangelogEntry } from './changelog.js'
@@ -1692,6 +1695,7 @@ if (!ownsSingleInstanceLock) {
     const linuxInstall = process.platform === 'linux' && app.isPackaged ? linuxInstallOf(process.env, process.resourcesPath) : undefined
     const linuxUpdateTest = linuxUpdateTestOf(linuxInstall, process.env)
     const appVersion = linuxUpdateTest?.version ?? app.getVersion()
+    const organizationPolicy = readOrganizationPolicy({ packaged: app.isPackaged, note })
     /*
      * The first line of every run.
      *
@@ -1825,8 +1829,9 @@ if (!ownsSingleInstanceLock) {
     let workspacePath = workspace.path ?? process.cwd()
     const NO_WORKSPACE_MESSAGE =
       'Choose the folder your teammates work in first. Locust was opened from its own install folder, and no teammate should work in there.'
-    const noWorkspaceRefusal = () =>
-      workspaceChosen ? undefined : ({ ok: false, error: { code: 'NO_WORKSPACE', message: NO_WORKSPACE_MESSAGE } } as const)
+    const noWorkspaceRefusal = () => organizationPolicy.error !== undefined
+      ? ({ ok: false, error: { code: 'POLICY_REFUSED', message: organizationPolicy.error } } as const)
+      : workspaceChosen ? undefined : ({ ok: false, error: { code: 'NO_WORKSPACE', message: NO_WORKSPACE_MESSAGE } } as const)
 
     // Named once, because two things need it: the ledger itself, and the
     // reveal root that lets someone open the folder when a write to it fails.
@@ -2410,15 +2415,9 @@ if (!ownsSingleInstanceLock) {
      * teammate WITH a limit costs a pass over the ledger, and that pass goes
      * through the history's own cache.
      */
-    const spendRefusal = async (teammateId: string): Promise<string | undefined> => {
-      const teammate = (await teammates.list()).find((entry) => entry.teammateId === teammateId)
-      if (teammate?.monthlyLimitUsd === undefined) return undefined
-      const now = new Date()
-      const month = monthOf(now)
-      if (month === undefined) return undefined
-      const spent = (await spendByTeammate(missionLedger, await teammates.missionOwners(), month))?.get(teammateId)
-      return limitReached(spent, teammate.monthlyLimitUsd) ? limitRefusal(teammate.name, spent, teammate.monthlyLimitUsd, now) : undefined
-    }
+    const spendRefusal = createSpendRefusal({ policy: organizationPolicy, ledger: missionLedger, teammates: () => teammates })
+    const policyStartRefusal = async (turn: PolicyTurn, teammateId?: string): Promise<string | undefined> =>
+      policyTurnRefusal(organizationPolicy, turn) ?? await spendRefusal(teammateId)
     /*
      * 0.391: what the person did in a runtime's own terminal comes back into
      * the conversation (terminal-catch-up.ts). Read lazily: the services and
@@ -2472,6 +2471,7 @@ if (!ownsSingleInstanceLock) {
     ipcMain.handle(ACP_AGENTS_REMOVE_CHANNEL, (event, id: unknown) =>
       fromOwnWindow(event) ? acpAgents.remove(id) : { ok: false, message: 'Only Locust’s own window can remove an agent.' })
     const codexMissions = createCodexMissionService({
+      organizationPolicy,
       workspacePath,
       // 0.458: the window's folder now, and a conversation's own folder by id.
       currentFolder: () => workspacePath,
@@ -2634,6 +2634,7 @@ if (!ownsSingleInstanceLock) {
     // through its transcript. Its own service, so its heuristics cannot leak
     // into the transports that read a process.
     const antigravityMissions = createAntigravityMissionService({
+      organizationPolicy,
       // Read live (0.458): Antigravity works in whichever folder the window is in.
       get workspacePath() {
         return workspacePath
@@ -3118,9 +3119,9 @@ if (!ownsSingleInstanceLock) {
       const own = await ownModels.catalog().catch(() => [])
       // And the agents the person added (0.777), read fresh as their own models are.
       const added = await acpAgents.list().then((listed) => (listed.ok ? acpCatalog(listed.agents) : [])).catch(() => [])
-      if (own.length === 0 && added.length === 0) return read
+      if (own.length === 0 && added.length === 0 && !read.ok) return read
       // The usage reading rides along with the models it was read beside (0.390).
-      return { ok: true, data: { ...(read.ok ? read.data : {}), models: [...own, ...added, ...(read.ok ? read.data.models : [])] } } as const
+      return { ok: true, data: { ...(read.ok ? read.data : {}), models: policyModels(organizationPolicy, [...own, ...added, ...(read.ok ? read.data.models : [])]) } } as const
     })
 
     ipcMain.handle(OWN_MODEL_LIST_CHANNEL, async (event) => {
@@ -3300,7 +3301,7 @@ if (!ownsSingleInstanceLock) {
       return answered
     }
 
-    const teammates = createTeammateStore({ rootDirectory: app.getPath('userData') })
+    const teammates = createTeammateStore({ rootDirectory: app.getPath('userData'), organizationPolicy })
     missionServiceForShutdown = codexMissions
     antigravityServiceForShutdown = antigravityMissions
     ledgerForShutdown = missionLedger
@@ -4157,6 +4158,7 @@ if (!ownsSingleInstanceLock) {
       return write
     }
     const voiceCalls = createVoiceCalls({
+      policyRefusal: (target, preview) => policyStartRefusal({ runtime: 'codex', mode: preview === true ? 'ask' : 'approve-each' }, target?.teammateId),
       voice: voiceCallVoice,
       // Talk pressed in a teammate's conversation is a call with that teammate (0.746): its name, role, runtime and voice.
       teammate: async (target) => {
@@ -4691,6 +4693,9 @@ if (!ownsSingleInstanceLock) {
         launchFor: async (runtime) => (await discoverForWork()).find((entry) => entry.id === runtime)?.executable
       })
       if ('refused' in request) return { ok: false, message: request.refused } as const
+      if (!isMissionRuntime(request.runtime)) return { ok: false, message: 'That AI agent is not supported here.' } as const
+      const managed = policyUnmeteredRefusal(organizationPolicy, { runtime: request.runtime, mode: 'auto' })
+      if (managed !== undefined) return { ok: false, message: managed } as const
       return openInTerminal(request, {
         ...(process.env.LOCALAPPDATA === undefined ? {} : { localAppData: process.env.LOCALAPPDATA }),
         // The drives' seam: a console window is one they can find and close.
@@ -5025,14 +5030,16 @@ if (!ownsSingleInstanceLock) {
       if (prompt.trim().length === 0 || prompt.length > MAX_PROMPT_LENGTH) return { ok: false, message: 'A background turn needs a message.' }
       const mode = asked.mode
       if (mode !== 'ask' && mode !== 'plan' && mode !== 'accept-edits' && mode !== 'approve-each' && mode !== 'auto') return { ok: false, message: 'That mode is not one a background turn can use.' }
-      // Auto is the person's own switch, checked here as for every run (codex-mission's autoModeAllowed).
-      if (mode === 'auto' && (await teammates.readSettings()).autoMode !== true) return { ok: false, message: 'Auto is off in Settings, so a background turn cannot use it.' }
       if (freeRoutesOnly(process.argv, process.env) && process.env.LOCUST_SPEND !== '1') return { ok: false, message: 'This window spends nothing, and a background turn runs Claude Code on your plan.' }
       const text = (key: string): string | undefined => (typeof asked[key] === 'string' && (asked[key] as string).length > 0 && (asked[key] as string).length <= 200 ? (asked[key] as string) : undefined)
       const conversation = text('conversation')
       const teammateId = text('teammateId')
       const model = text('model')
       const effort = text('effort')
+      const managed = await policyStartRefusal({ runtime: 'claude', mode, model }, teammateId)
+      if (managed !== undefined) return { ok: false, message: managed }
+      // Policy narrows the person's own Auto switch; it never enables it.
+      if (mode === 'auto' && (await teammates.readSettings()).autoMode !== true) return { ok: false, message: 'Auto is off in Settings, so a background turn cannot use it.' }
       const started = await backgroundRuns.start({
         prompt,
         folder: workspacePath,
@@ -5051,6 +5058,8 @@ if (!ownsSingleInstanceLock) {
       if (fromOwnWindow(event) && typeof id === 'string') await backgroundRuns.dismiss(id)
     })
     const openClaudeTerminal = async (request: { readonly sessionId: string; readonly attach?: true; readonly setup?: true }) => {
+      const managed = policyUnmeteredRefusal(organizationPolicy, { runtime: 'claude', mode: 'auto' })
+      if (managed !== undefined) return { ok: false, message: managed }
       const launch = await claudeLaunch()
       if (launch === undefined) return { ok: false, message: 'Claude Code is not installed or not signed in on this computer.' }
       return openInTerminal({ runtime: 'claude', cwd: workspacePath, launch, title: 'Claude Code', ...request }, {
@@ -5078,6 +5087,8 @@ if (!ownsSingleInstanceLock) {
     })
     ipcMain.handle(CLOUD_START_CHANNEL, async (event, prompt: unknown, teammateId: unknown) => {
       if (!fromOwnWindow(event) || typeof prompt !== 'string') return { ok: false, message: 'That cloud task could not be started.' }
+      const managed = policyUnmeteredRefusal(organizationPolicy, { runtime: 'codex', mode: 'auto', cloud: true }) ?? await spendRefusal(typeof teammateId === 'string' ? teammateId : undefined)
+      if (managed !== undefined) return { ok: false, message: managed }
       if (freeRoutesOnly(process.argv, process.env)) return { ok: false, message: FREE_ONLY_REFUSAL }
       if ((await codexLaunch()) === undefined) return { ok: false, message: 'Cloud tasks run through Codex CLI, which is not installed or not signed in here. Settings > AI agents shows how.' }
       const started = await cloudTasks.start({ folder: workspacePath, prompt: prompt.slice(0, 20_000), ...(typeof teammateId === 'string' ? { teammateId } : {}) })
@@ -5141,6 +5152,8 @@ if (!ownsSingleInstanceLock) {
     ipcMain.handle(CLOUD_COMPUTER_TERMINAL_CHANNEL, async (event, value: unknown) => {
       const name = computerName(value)
       if (!fromOwnWindow(event) || name === undefined) return { ok: false, message: 'That terminal could not be opened.' }
+      const managed = policyCloudTerminalRefusal(organizationPolicy)
+      if (managed !== undefined) return { ok: false, message: managed }
       return openProgramInTerminal({ file: ghCommand(), args: ['codespace', 'ssh', '-c', name] }, workspacePath, 'Your cloud computer', {
         ...(process.env.LOCALAPPDATA === undefined ? {} : { localAppData: process.env.LOCALAPPDATA })
       })
@@ -5172,6 +5185,8 @@ if (!ownsSingleInstanceLock) {
     ipcMain.handle(CLOUD_COMPUTER_FOLDER_CHANNEL, async (event) => (fromOwnWindow(event) ? cloudTurns.forFolder(workspacePath) : { ok: false, message: 'That request was rejected.' }))
     ipcMain.handle(CLOUD_COMPUTER_SETUP_CHANNEL, async (event, request: unknown) => {
       if (!fromOwnWindow(event)) return { ok: false, message: 'That request was rejected.' }
+      const managed = policyFeatureRefusal(organizationPolicy, 'cloud')
+      if (managed !== undefined) return { ok: false, message: managed }
       const asked = typeof request === 'object' && request !== null ? (request as Record<string, unknown>).agent : undefined
       const agent = isCloudAgent(asked) ? asked : undefined
       return cloudTurns.setUp({
@@ -5186,6 +5201,8 @@ if (!ownsSingleInstanceLock) {
       const name = computerName(asked.name)
       const agent = isCloudAgent(asked.agent) ? asked.agent : undefined
       if (!fromOwnWindow(event) || name === undefined || agent === undefined) return { ok: false, message: 'That sign-in was not started.' }
+      const managed = policyFeatureRefusal(organizationPolicy, 'cloud')
+      if (managed !== undefined) return { ok: false, message: managed }
       return cloudTurns.signIn({
         name,
         agent,
@@ -5208,6 +5225,8 @@ if (!ownsSingleInstanceLock) {
     // GitHub's codespace permission, which the person gives in the terminal and their browser: Locust never sees it.
     ipcMain.handle(CLOUD_COMPUTER_ALLOW_CHANNEL, async (event) => {
       if (!fromOwnWindow(event)) return { ok: false, message: 'That request was rejected.' }
+      const managed = policyFeatureRefusal(organizationPolicy, 'cloud')
+      if (managed !== undefined) return { ok: false, message: managed }
       return openProgramInTerminal({ file: ghCommand(), args: ['auth', 'refresh', '-h', 'github.com', '-s', 'codespace'] }, workspacePath, 'Allow Locust to make codespaces', {
         ...(process.env.LOCALAPPDATA === undefined ? {} : { localAppData: process.env.LOCALAPPDATA })
       })
@@ -5230,7 +5249,9 @@ if (!ownsSingleInstanceLock) {
     const claudeCloud = createClaudeCloud({ discover: discoverForWork, storePath: join(app.getPath('userData'), 'claude-cloud.json'), terminal: runInPseudoTerminal })
     const remoteControl = createRemoteControl({ discover: discoverForWork, folder: () => workspacePath })
     remoteControlForShutdown = remoteControl
-    registerRemoteControlIpc(ipcMain, remoteControl, fromOwnWindow, () => freeRoutesOnly(process.argv, process.env) ? FREE_ONLY_REFUSAL : undefined)
+    registerRemoteControlIpc(ipcMain, remoteControl, fromOwnWindow, () => policyFeatureRefusal(organizationPolicy, 'phone')
+      ?? policyUnmeteredRefusal(organizationPolicy, { runtime: 'claude', mode: 'auto' })
+      ?? (freeRoutesOnly(process.argv, process.env) ? FREE_ONLY_REFUSAL : undefined))
     const publicSession = <T extends { folder: string }>(session: T): Omit<T, 'folder'> => {
       const { folder: _folder, ...rest } = session
       return rest
@@ -5240,6 +5261,9 @@ if (!ownsSingleInstanceLock) {
       if (freeRoutesOnly(process.argv, process.env)) return { ok: false, message: FREE_ONLY_REFUSAL }
       // Plain strings only; claude-cloud passes a name or level and nothing else (choiceArgs).
       const picked = typeof choice === 'object' && choice !== null ? (choice as Record<string, unknown>) : {}
+      const args = choiceArgs({ ...(typeof picked.model === 'string' ? { model: picked.model } : {}) })
+      const managed = policyUnmeteredRefusal(organizationPolicy, { runtime: 'claude', mode: 'auto', model: args[0] === '--model' ? args[1] : undefined, cloud: true }) ?? await spendRefusal(typeof teammateId === 'string' ? teammateId : undefined)
+      if (managed !== undefined) return { ok: false, message: managed }
       const started = await claudeCloud.start(workspacePath, prompt.slice(0, 20_000), typeof teammateId === 'string' ? teammateId : undefined, {
         ...(typeof picked.model === 'string' ? { model: picked.model } : {}),
         ...(typeof picked.effort === 'string' ? { effort: picked.effort } : {}),
@@ -5251,14 +5275,20 @@ if (!ownsSingleInstanceLock) {
     ipcMain.handle(CLAUDE_CLOUD_ENVIRONMENT_CHANNEL, async (event) => fromOwnWindow(event) ? claudeCloud.environment(workspacePath) : undefined)
     ipcMain.handle(CLAUDE_CLOUD_HOME_CHANNEL, async (event, id: unknown) => {
       if (!fromOwnWindow(event) || typeof id !== 'string') return { ok: false, message: 'That cloud session could not be brought home.' }
+      const managed = policyUnmeteredRefusal(organizationPolicy, { runtime: 'claude', mode: 'auto', cloud: true })
+      if (managed !== undefined) return { ok: false, message: managed }
       return claudeCloud.home(id)
     })
     ipcMain.handle(CLAUDE_CLOUD_TERMINAL_CHANNEL, async (event, id: unknown) => {
       if (!fromOwnWindow(event) || typeof id !== 'string') return { ok: false, message: 'That cloud session could not be opened. Open it on claude.ai.' }
+      const managed = policyUnmeteredRefusal(organizationPolicy, { runtime: 'claude', mode: 'auto', cloud: true })
+      if (managed !== undefined) return { ok: false, message: managed }
       return claudeCloud.continueInTerminal(id)
     })
     ipcMain.handle(CLAUDE_CLOUD_SEND_CHANNEL, async (event, id: unknown, message: unknown) => {
       if (!fromOwnWindow(event) || typeof id !== 'string' || typeof message !== 'string') return { ok: false, message: 'That could not be sent to the cloud session.' }
+      const managed = policyUnmeteredRefusal(organizationPolicy, { runtime: 'claude', mode: 'auto', cloud: true })
+      if (managed !== undefined) return { ok: false, message: managed }
       if (freeRoutesOnly(process.argv, process.env)) return { ok: false, message: FREE_ONLY_REFUSAL }
       return claudeCloud.send(id, message.slice(0, 20_000))
     })
@@ -6147,6 +6177,8 @@ if (!ownsSingleInstanceLock) {
     ipcMain.handle(TEAMMATE_CREATE_CHANNEL, async (event, request: unknown) => {
       if (!fromOwnWindow(event)) return teammateRejected('The teammate could not be created.')
       const input = (typeof request === 'object' && request !== null ? request : {}) as Record<string, unknown>
+      const managed = isTeammateRoute(input.route) ? policyTurnRefusal(organizationPolicy, input.route) : undefined
+      if (managed !== undefined) return teammateRejected(managed)
       try {
         // roleTitle was dropped here since Custom teammates got titles: every
         // one read "Custom" on the sidebar and in the brief (found 2026-09-05).
@@ -6162,6 +6194,7 @@ if (!ownsSingleInstanceLock) {
         // name another teammate has (A2.18), which the window already knows
         // and which is the one refusal a person can fix from the sentence.
         if (error instanceof TeammateNameTakenError) return teammateRejected(error.message)
+        if (error instanceof OrganizationPolicyError) return teammateRejected(error.message)
         // The real cause, when it is the file (R26): "Check the name, hue and
         // role" was said for a roster that would not read at all.
         const rosterReads = await teammates.list().then(() => true, () => false)
@@ -6173,6 +6206,8 @@ if (!ownsSingleInstanceLock) {
     ipcMain.handle(TEAMMATE_UPDATE_CHANNEL, async (event, request: unknown) => {
       if (!fromOwnWindow(event)) return teammateRejected('The teammate could not be updated.')
       const input = (typeof request === 'object' && request !== null ? request : {}) as Record<string, unknown>
+      const managed = isTeammateRoute(input.route) ? policyTurnRefusal(organizationPolicy, input.route) : undefined
+      if (managed !== undefined) return teammateRejected(managed)
       try {
         const teammate = await teammates.update({
           teammateId: input.teammateId,
@@ -6193,6 +6228,7 @@ if (!ownsSingleInstanceLock) {
         return { ok: true, data: { teammate: { ...teammate, route: input.route } } } as const
       } catch (error) {
         if (error instanceof TeammateNameTakenError) return teammateRejected(error.message)
+        if (error instanceof OrganizationPolicyError) return teammateRejected(error.message)
         return teammateRejected('That teammate could not be updated. Check the name, hue and role.')
       }
     })
@@ -7959,6 +7995,7 @@ if (!ownsSingleInstanceLock) {
         version: appVersion,
         packaged: app.isPackaged,
         platform: process.platform,
+        organizationPolicy,
         workspaceName: workspaceChosen ? basename(workspacePath) || workspacePath : '',
         workspacePath: workspaceChosen ? workspacePath : '',
         workspaceMade,
@@ -8511,8 +8548,11 @@ if (!ownsSingleInstanceLock) {
       }
       // Resolve before choosing a transport: discovery in the renderer may
       // still be partial, but the host already knows this teammate's route.
+      const savedTeammate = (await teammates.list().catch(() => [])).find((entry) => entry.teammateId === payload.teammateId)
+      const { runtime, model, effort } = routeAtStart(payload, savedTeammate)
+      const managed = policyTurnRefusal(organizationPolicy, { runtime, model, mode, cloud: payload.cloud === true })
+      if (managed !== undefined) return { ok: false, error: { code: 'POLICY_REFUSED', message: managed } } as const
       const peer = await peerContextFor(payload.teammateId)
-      const { runtime, model, effort } = routeAtStart(payload, peer?.self)
       // An agent being updated is being replaced on disk: a run started on
       // it now would start on half of one (runtime-updates.ts).
       if (runtimeUpdates.updating() === runtime) {
@@ -8721,6 +8761,7 @@ if (!ownsSingleInstanceLock) {
       }
     })
     const mcpHost = createLocustMcpHost({ directory: app.getPath('userData'), node: process.execPath,
+      refusal: () => policyFeatureRefusal(organizationPolicy, 'otherApps'),
       bridge: app.isPackaged ? join(process.resourcesPath, 'locust-mcp-bridge.mjs') : join(__dirname, '../../resources/locust-mcp-bridge.mjs'),
       call: (name, args) => name.startsWith('cli/') ? cliSessions.call(name, args) : mcpTools(name, args) })
     app.once('will-quit', () => cliSessions.dispose())
@@ -8794,6 +8835,7 @@ if (!ownsSingleInstanceLock) {
     const phoneHistory = () => phoneHistoryOnce(`${String(ledgerWrites())}|${phoneLive().join(',')}|${String(Math.floor(Date.now() / 60_000))}`)
     const phoneSending = new Set<string>()
     const phoneHost = createPhoneHost({
+      refusal: () => policyFeatureRefusal(organizationPolicy, 'phone'),
       directory: app.getPath('userData'),
       page: phonePage,
       calls: {

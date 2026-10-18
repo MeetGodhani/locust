@@ -689,9 +689,10 @@ export function usageTurnOf(mission: RecoveredMission): UsageTurnRead {
  * conversation's first turn, found by following `continuesFrom` back. Undefined
  * when the ledger cannot be listed file by file.
  */
-export async function usageTurns(ledger: MissionLedger): Promise<readonly UsageTurn[] | undefined> {
+export async function usageTurns(ledger: MissionLedger, requireReadable = false): Promise<readonly UsageTurn[] | undefined> {
   const refreshed = await refreshedLedger(ledger)
   if (refreshed === undefined) return undefined
+  if (requireReadable && (refreshed.listingIssues > 0 || refreshed.entries.some((entry) => entry.issues > 0))) return undefined
   const read = new Map<string, UsageTurnRead>()
   for (const entry of refreshed.entries) if (entry.turn !== undefined) read.set(entry.missionId, entry.turn)
   const rootOf = (missionId: string): string => {
@@ -723,10 +724,12 @@ export async function usageTurns(ledger: MissionLedger): Promise<readonly UsageT
 export async function spendByTeammate(
   ledger: MissionLedger,
   owners: Readonly<Record<string, string>>,
-  month: string
+  month: string,
+  requireReadable = false
 ): Promise<ReadonlyMap<string, Spend> | undefined> {
   const refreshed = await refreshedLedger(ledger)
   if (refreshed === undefined) return undefined
+  if (requireReadable && (refreshed.listingIssues > 0 || refreshed.entries.some((entry) => entry.issues > 0))) return undefined
   const runs = new Map<string, Spend[]>()
   for (const entry of refreshed.entries) {
     const owner = owners[entry.missionId]

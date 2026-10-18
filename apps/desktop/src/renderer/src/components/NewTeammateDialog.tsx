@@ -10,6 +10,8 @@ import { isPetPick } from '../../../shared/pet-picks.js'
 import type { MissionMode, PublicPet, PublicTeammate, TeammateHue, TeammateRole, PublicConnector, PublicModel, PublicRuntimeStatus, TeammateRoute } from '../../../shared/ipc.js'
 import { MAX_TEAMMATE_INSTRUCTIONS, ROLE_DESCRIPTIONS } from '../../../shared/ipc.js'
 import { defaultEffort, modelFamily, modeRunsOn, modesFor, modeSummary } from '../status.js'
+import { policyModeAllowed, policyMonthlyLimit } from '../../../shared/organization-policy.js'
+import { ManagedPolicyNote, useOrganizationPolicy } from '../organizationPolicy.js'
 import { effortFooter } from '../effortLevels.js'
 import { effortScale, joinEffort, splitEffort } from '../effortScale.js'
 import { EffortSlider } from './EffortSlider.js'
@@ -258,6 +260,8 @@ export function NewTeammateDialog({
   readonly platform?: string
 }): ReactElement {
   const editing = initial !== undefined
+  const policy = useOrganizationPolicy()
+  const policyLimit = policy?.policy.monthlyLimitUsd
   const [name, setName] = useState(initial?.name ?? '')
   // A save in flight (L22): the button is held until it lands.
   const [saving, setSaving] = useState(false)
@@ -282,8 +286,9 @@ export function NewTeammateDialog({
    * nobody is watching; the host checks this before every run it starts.
    * Typed as text so "12.50" can be typed through "12." on the way.
    */
-  const [limitText, setLimitText] = useState(initial?.monthlyLimitUsd === undefined ? '' : initial.monthlyLimitUsd.toFixed(2))
-  const limit = parsedLimit(limitText)
+  const [limitText, setLimitText] = useState(() => policyMonthlyLimit(policy, initial?.monthlyLimitUsd)?.toFixed(2) ?? '')
+  const limit = policyLimit === 0 ? 0 : parsedLimit(limitText)
+  const overPolicyLimit = policyLimit !== undefined && (typeof limit !== 'number' || limit > policyLimit)
   // THIS TEAMMATE'S OWN INSTRUCTIONS (0.706, from the Paperclip scrub): what a group's are, for one teammate.
   const [instructions, setInstructions] = useState(initial?.instructions ?? '')
   // ITS VOICE IN A CALL (0.746): Talk pressed in its conversation speaks as it, in this voice.
@@ -304,7 +309,7 @@ export function NewTeammateDialog({
     const was = ownRoute ?? composerRoute
     const wanted = was?.mode ?? mode
     // A mode the new runtime cannot run is not one it can be kept in.
-    const kept = modeRunsOn(wanted, choice.runtime, platform) ? wanted : modesFor(choice.runtime, platform)[0] ?? 'accept-edits'
+    const kept = modeRunsOn(wanted, choice.runtime, platform) && policyModeAllowed(policy, wanted) ? wanted : modesFor(choice.runtime, platform).find((value) => policyModeAllowed(policy, value)) ?? 'ask'
     // The level goes with the model that reported it; another model starts on its own default.
     const effort = was !== undefined && was.runtime === choice.runtime && was.model === choice.model ? was.effort : undefined
     setPicked({ runtime: choice.runtime, model: choice.model, mode: kept, ...(effort === undefined ? {} : { effort }) })
@@ -337,7 +342,7 @@ export function NewTeammateDialog({
   // A2.18: a name another teammate has would make both unreachable by name.
   const taken = takenNames.find((other) => other.trim().toLowerCase() === trimmed.toLowerCase())
   const agentMatch = trimmed.length === 0 ? undefined : agentNamed(trimmed)
-  const canCreate = trimmed.length > 0 && taken === undefined && limit !== 'invalid'
+  const canCreate = trimmed.length > 0 && taken === undefined && limit !== 'invalid' && !overPolicyLimit
   const look = botFor(avatar)
   /*
    * THE FACE: EYES, A MOUTH, OR A SCREEN (0.562). Colin: "should we just
@@ -841,14 +846,16 @@ export function NewTeammateDialog({
 
           <label className="lc-field lc-field--limit">
             <span className="lc-fieldlabel lc-mono">Monthly limit</span>
+            {policyLimit !== undefined && <><ManagedPolicyNote /><span className="lc-field__hint">Maximum {policyLimit.toFixed(2)} USD. You can set a lower amount.</span></>}
             <span className="lc-limitinput">
               <span className="lc-limitinput__currency lc-mono" aria-hidden="true">$</span>
               <input
                 type="text"
                 inputMode="decimal"
                 value={limitText}
-                placeholder="No limit"
-                aria-invalid={limit === 'invalid'}
+                disabled={policyLimit === 0}
+                placeholder={policyLimit === undefined ? 'No limit' : policyLimit.toFixed(2)}
+                aria-invalid={limit === 'invalid' || overPolicyLimit}
                 onChange={(event) => setLimitText(event.target.value)}
                 onBlur={() => {
                   if (typeof limit === 'number') setLimitText(limit.toFixed(2))
@@ -937,7 +944,7 @@ export function NewTeammateDialog({
                   ...(picked === undefined ? {} : { route: picked }),
                   // An edit always says: an amount, or null to lift one. A new
                   // teammate only says when there is an amount.
-                  ...(typeof limit === 'number' ? { monthlyLimitUsd: limit } : editing ? { monthlyLimitUsd: null } : {}),
+                  ...(typeof limit === 'number' && limit > 0 ? { monthlyLimitUsd: limit } : limit === 0 ? {} : editing ? { monthlyLimitUsd: null } : {}),
                   // The same rule as the limit: an edit always says (null clears); a new teammate only when there are some.
                   ...(instructions.trim().length > 0 ? { instructions: instructions.trim() } : editing ? { instructions: null } : {}),
                   // The same again: an edit always says (null goes back to Talk's own); a new teammate only when one is picked.

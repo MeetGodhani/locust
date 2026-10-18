@@ -520,7 +520,7 @@ export function createRoutineRunner(options: RoutineRunnerOptions): RoutineRunne
         await options.routines.saveProgress(routine.routineId, { ...intent, status: 'running',
           missionId: response.data.missionId, runId: response.data.runId }, intent.attemptId)
       } else if (step === 1 && (prior === undefined || prior.status === 'abandoned')
-        && ['INVALID_PROMPT', 'RUN_ALREADY_ACTIVE', 'CODEX_UNAVAILABLE', 'SPEND_LIMIT_REACHED'].includes(response.error.code)) {
+        && ['INVALID_PROMPT', 'RUN_ALREADY_ACTIVE', 'CODEX_UNAVAILABLE', 'SPEND_LIMIT_REACHED', 'POLICY_REFUSED'].includes(response.error.code)) {
         // Only preflight refusals prove no dispatch. RUNTIME_START_FAILED and
         // PERSISTENCE_FAILED can also come from the spawn boundary; without an
         // id they remain uncertain, even though the service returned an error.

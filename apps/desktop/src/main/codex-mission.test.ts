@@ -238,6 +238,37 @@ function scheduledService(
 }
 
 describe('Codex mission service', () => {
+  it('refuses a forbidden Cursor effort variant before recording or dispatching a turn', async () => {
+    const start = vi.fn(() => { throw new Error('must not run') })
+    const createMission = vi.fn(async () => undefined)
+    const cursor: RuntimeDiscovery = { ...codexRuntime(), id: 'cursor', displayName: 'Cursor Agent', modelHints: { aliases: [], efforts: ['low', 'high'], models: [{ id: 'family-low', displayName: 'Family Low' }, { id: 'family-high', displayName: 'Family High' }] } }
+    const { service } = scheduledService({ start }, fakeLedger({ createMission }), { discover: async () => [cursor], organizationPolicy: { present: true, path: '/admin/policy.json', policy: { allowedModels: { cursor: ['family-low'] } } } })
+    expect(await service.start('Work', 'cursor', 'accept-edits', { model: 'family-low', effort: 'high' }, () => undefined)).toMatchObject({ ok: false, error: { code: 'POLICY_REFUSED', message: expect.stringContaining('allowedModels') } })
+    expect(start).not.toHaveBeenCalled()
+    expect(createMission).not.toHaveBeenCalled()
+    await service.dispose()
+  })
+  it('keeps a running mission untouched when organization policy refuses the handoff target', async () => {
+    const checkpoint = vi.fn(async () => { throw new Error('This handoff must not stop or reconcile the live run') })
+    const ledger = fakeLedger({ createCheckpoint: checkpoint })
+    const organizationPolicy = { present: true, path: '/admin/policy.json', policy: { allowedAgents: ['codex'] as const } }
+    let signal: AbortSignal | undefined
+    const { service, scheduled } = scheduledService({ start: (_spec, _prompt, options) => {
+      signal = options?.signal
+      return { records: records([]), completion: new Promise((resolve) => {
+        signal?.addEventListener('abort', () => resolve(completion({ cancelled: true })), { once: true })
+      }) }
+    } }, ledger, { organizationPolicy, discover: async () => [codexRuntime(), { ...codexRuntime(), id: 'claude', displayName: 'Claude Code' }] })
+    const started = await service.start('Work', 'codex', 'ask', {}, () => undefined)
+    if (!started.ok) throw new Error(started.error.message)
+    for (const run of scheduled) run()
+    const refused = await service.handOff(started.data.runId, 'claude', 'ask', {}, () => undefined)
+    expect(refused).toMatchObject({ ok: false, error: { code: 'HANDOFF_REFUSED', untouched: true, message: expect.stringContaining('allowedAgents') } })
+    expect(signal?.aborted).toBe(false)
+    expect(checkpoint).not.toHaveBeenCalled()
+    expect(service.hasMission(started.data.missionId)).toBe(true)
+    await service.dispose()
+  })
   // L5 (the code review): a start still in its pre-spawn look at the tree
   // spawned anyway after the window closed or the app quit -- nothing checked
   // again once that await returned.

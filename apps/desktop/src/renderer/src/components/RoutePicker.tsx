@@ -11,6 +11,8 @@ import { levelsLine } from '../effortScale.js'
 import { effortName } from '../effortLevels.js'
 import { FREE_START_RUNTIME } from '../../../shared/runtime-install.js'
 import { MAX_COMPARE_SLOTS, MIN_COMPARE_SLOTS } from '../../../shared/compare.js'
+import { policyModelAllowed } from '../../../shared/organization-policy.js'
+import { ManagedPolicyNote, useOrganizationPolicy } from '../organizationPolicy.js'
 
 export interface RouteChoice {
   readonly runtime: MissionRuntimeId
@@ -379,6 +381,7 @@ export function RoutePicker({
   readonly compare?: ComparePicking
 }): ReactElement {
   const comparing = compare?.on === true
+  const policy = useOrganizationPolicy()
   const [query, setQuery] = useState('')
   const [olderOpen, setOlderOpen] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -388,8 +391,8 @@ export function RoutePicker({
   }, [])
 
   const rows = useMemo(
-    () => buildRows(runtimes, models, active, resolvedModels, recentRoutes, limitedRuntimes),
-    [runtimes, models, active, resolvedModels, recentRoutes, limitedRuntimes]
+    () => buildRows(runtimes, models, active, resolvedModels, recentRoutes, limitedRuntimes).filter((row) => policyModelAllowed(policy, row.runtime, row.model)),
+    [runtimes, models, active, resolvedModels, recentRoutes, limitedRuntimes, policy]
   )
   const needle = routeSearchText(query)
   const searching = needle.length > 0
@@ -578,6 +581,7 @@ export function RoutePicker({
           */}
       </div>
       {notice !== undefined && <div className="lc-picker__notice">{notice}</div>}
+      {(policy?.policy.allowedAgents !== undefined || policy?.policy.allowedModels !== undefined) && <ManagedPolicyNote />}
       <div className="lc-picker__list" ref={listRef}>
         {shown.map((row, index) => {
           const header = row.group === lastGroup ? undefined : row.group

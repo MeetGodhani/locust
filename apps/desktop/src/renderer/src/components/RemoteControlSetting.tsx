@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import { REMOTE_CONTROL_LABEL, type RemoteControlState } from '../../../shared/claude-remote-control.js'
+import { policyFeatureRefusal, policyUnmeteredRefusal } from '../../../shared/organization-policy.js'
+import { ManagedPolicyNote, useOrganizationPolicy } from '../organizationPolicy.js'
 
 export function RemoteControlSetting() {
   const [state, setState] = useState<RemoteControlState>()
@@ -53,19 +55,22 @@ export function RemoteControlView({ state, busy, error, onToggle }: {
   readonly onToggle: (enabled: boolean) => Promise<void>
 }) {
   const problem = error ?? state?.error
+  const policy = useOrganizationPolicy()
+  const managed = (policyFeatureRefusal(policy, 'phone') ?? policyUnmeteredRefusal(policy, { runtime: 'claude', mode: 'auto' })) !== undefined
   // What Claude Code printed has a row of its own, and only when there is some.
   const printed = state !== undefined && (state.stdout.length > 0 || state.stderr.length > 0 || state.truncated)
   return <div className="lc-settingrows">
     <div className="lc-settingrow">
       <div className="lc-settingline__text">
         <div>{REMOTE_CONTROL_LABEL}</div>
+        {managed && <ManagedPolicyNote />}
         {/* One quiet line, the state first: the account it needs follows in the same voice, never brighter. */}
         <p className="lc-settings__lede">
           {state !== undefined && <><span role="status">{remoteControlSays(state)}</span>{' '}</>}
           It needs your claude.ai sign-in; API keys do not work. Team and Enterprise owners must allow Remote Control.
         </p>
       </div>
-      <button type="button" className={`lc-switch${state?.enabled ? ' is-on' : ''}`} role="switch" aria-label={REMOTE_CONTROL_LABEL} aria-checked={state?.enabled ?? false} disabled={busy || state === undefined || state.phase === 'stopping'} onClick={() => { void onToggle(!state?.enabled) }}><span className="lc-switch__knob" /></button>
+      <button type="button" className={`lc-switch${!managed && state?.enabled ? ' is-on' : ''}`} role="switch" aria-label={REMOTE_CONTROL_LABEL} aria-checked={!managed && (state?.enabled ?? false)} disabled={managed || busy || state === undefined || state.phase === 'stopping'} onClick={() => { void onToggle(!state?.enabled) }}><span className="lc-switch__knob" /></button>
     </div>
     {(printed || problem !== undefined) && <div className="lc-settingrow lc-remoteoutput">
       {state?.stdout && <><span className="lc-remoteoutput__label">Claude Code output</span><pre className="lc-remoteoutput__text">{state.stdout}</pre></>}

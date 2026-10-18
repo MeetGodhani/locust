@@ -54,8 +54,87 @@ const MEMORY_READER = join(ROOT, 'src', 'main', 'memory-reader.ts')
 const NAMED_FILES = join(ROOT, 'src', 'main', 'named-files.ts')
 const REVEAL = join(ROOT, 'src', 'main', 'reveal-file.ts')
 const HANDOVER = join(ROOT, 'src', 'shared', 'handover.ts')
+const ORG_POLICY = join(ROOT, 'src', 'main', 'organization-policy.ts')
+const ORG_RULES = join(ROOT, 'src', 'shared', 'organization-policy.ts')
+const ORG_SPEND = join(ROOT, 'src', 'main', 'organization-spend.ts')
+const ORG_MCP = join(ROOT, 'src', 'main', 'locust-mcp-host.ts')
+const ORG_PICKER = join(ROOT, 'src', 'renderer', 'src', 'components', 'RoutePicker.tsx')
+const ORG_COMPOSER = join(ROOT, 'src', 'renderer', 'src', 'components', 'Composer.tsx')
+const ORG_FILE_TEST = 'src/main/an-organization-policy-is-read-before-work-starts.test.ts'
+const ORG_START_TEST = 'src/main/a-managed-turn-is-refused-before-an-agent-starts.test.ts'
+const ORG_SPEND_TEST = 'src/main/a-person-cannot-lift-the-organizations-spend-limit.test.ts'
+const ORG_VIEW_TEST = 'src/renderer/src/managed-controls-say-who-set-them.test.tsx'
 
 const MUTATIONS = [
+  {
+    file: ORG_POLICY, name: 'org-policy: packaged apps accept the development override',
+    from: 'if (!options.packaged && env.LOCUST_POLICY_FILE !== undefined)',
+    to: 'if (env.LOCUST_POLICY_FILE !== undefined)',
+    expect: 'uses the machine-wide path on each platform and ignores the test override in a packaged app', tests: [ORG_FILE_TEST]
+  },
+  {
+    file: ORG_POLICY, name: 'org-policy: a malformed known switch is accepted',
+    from: "for (const key of ['otherApps', 'phone', 'cloud']) if (value[key] !== undefined && typeof value[key] !== 'boolean') bad(key)",
+    to: "for (const key of ['otherApps', 'phone', 'cloud']) if (false) bad(key)",
+    expect: 'validates every optional setting and rejects a malformed known key', tests: [ORG_FILE_TEST]
+  },
+  {
+    file: ORG_POLICY, name: 'org-policy: a broken file becomes unrestricted',
+    from: 'return { path, present: true, policy: {}, error }', to: 'return { path, present: true, policy: {} }',
+    expect: 'fails closed for broken JSON and names its file in every refusal', tests: [ORG_FILE_TEST]
+  },
+  {
+    file: ORG_RULES, name: 'org-policy: every runtime is allowed',
+    from: 'state.policy.allowedAgents.includes(runtime)', to: 'true',
+    expect: 'allows only listed agents, including all own ACP agents under one runtime id', tests: [ORG_FILE_TEST]
+  },
+  {
+    file: ORG_RULES, name: 'org-policy: every mode is allowed',
+    from: 'return highest === undefined || POLICY_MODE_ORDER.indexOf(mode) <= POLICY_MODE_ORDER.indexOf(highest)', to: 'return true',
+    expect: 'enforces every mode ceiling in the documented authority order', tests: [ORG_FILE_TEST]
+  },
+  {
+    file: ORG_RULES, name: 'org-policy: a default escapes the model allowlist',
+    from: "return id !== undefined && id !== 'account-default' && patterns.some((pattern) => policyModelMatches(pattern, id))",
+    to: "return id === undefined || id === 'account-default' || patterns.some((pattern) => policyModelMatches(pattern, id))",
+    expect: 'cannot use an unresolved default to escape a model allowlist', tests: [ORG_FILE_TEST]
+  },
+  {
+    file: ORG_RULES, name: 'org-policy: a personal limit can raise the managed cap',
+    from: 'Math.min(cap, personal)', to: 'Math.max(cap, personal)',
+    expect: 'caps an absent or higher personal limit while keeping a lower one', tests: [ORG_FILE_TEST]
+  },
+  {
+    file: ORG_SPEND, name: 'org-policy: a damaged unowned receipt allows spending',
+    from: 'usageTurns(options.ledger, options.policy.policy.monthlyLimitUsd !== undefined)', to: 'usageTurns(options.ledger, false)',
+    expect: 'fails closed if even one saved receipt has become unreadable', tests: [ORG_SPEND_TEST]
+  },
+  {
+    file: ORG_MCP, name: 'org-policy: a saved MCP opt-in overrides the company',
+    from: 'if (options.refusal?.() !== undefined) return state()', to: 'if (false) return state()',
+    expect: 'ignores a saved MCP opt-in, removes the old connection, and refuses forged enabling', tests: [ORG_START_TEST]
+  },
+  {
+    file: MISSIONS, name: 'org-policy: the central start skips the policy gate',
+    from: "if (managed !== undefined) return error('POLICY_REFUSED', managed) as CodexMissionStartResponse",
+    to: "if (false) return error('POLICY_REFUSED', managed) as CodexMissionStartResponse",
+    expect: 'refuses agents, models, modes, cloud turns and broken policies before discovery or recording', tests: [ORG_START_TEST]
+  },
+  {
+    file: MISSIONS, name: 'org-policy: a handoff skips the target policy before stopping',
+    from: 'if (managed !== undefined) return managed', to: 'if (false) return managed',
+    expect: 'keeps a running mission untouched when organization policy refuses the handoff target', tests: ['src/main/codex-mission.test.ts']
+  },
+  {
+    file: ORG_PICKER, name: 'org-policy: the picker offers forbidden fallback models',
+    from: '.filter((row) => policyModelAllowed(policy, row.runtime, row.model))', to: '',
+    expect: 'filters the picker including account-default fallbacks', tests: [ORG_VIEW_TEST]
+  },
+  {
+    file: ORG_COMPOSER, name: 'org-policy: the mode menu ignores the ceiling',
+    from: 'MODES.filter((option) => policyModeAllowed(policy, option.mode)).map(', to: 'MODES.map(',
+    expect: 'applies the ceiling to the mode menu, slash commands and the keyboard cycle', tests: [ORG_VIEW_TEST]
+  },
   {
     file: NAMED_FILES,
     name: 'written-elsewhere: a declined step names its target again',

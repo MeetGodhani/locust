@@ -86,8 +86,9 @@ export const SETTINGS_PAGES: readonly SettingsPage[] = [
     label: 'General',
     group: 'Locust',
     icon: 'settings',
-    headings: ['Let your other AI apps use Locust', 'Your phone', 'Voice typing', 'Talk from any app', 'Scout keeps watch', 'Startup', 'Updates', 'Report a problem', 'Help'],
+    headings: ['Managed by your organization', 'Let your other AI apps use Locust', 'Your phone', 'Voice typing', 'Talk from any app', 'Scout keeps watch', 'Startup', 'Updates', 'Report a problem', 'Help'],
     alsoKnownAs: {
+      'Managed by your organization': ['organization', 'organisation', 'policy', 'administrator', 'IT', 'managed settings'],
       'Let your other AI apps use Locust': ['MCP server', 'stdio', 'Claude Code', 'Codex', 'Cursor', 'other apps'],
       // A page on the home network, paired by a QR code (0.775).
       'Your phone': ['phone', 'mobile', 'QR code', 'iPhone', 'Android', 'away from your desk'],

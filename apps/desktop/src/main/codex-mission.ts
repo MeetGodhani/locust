@@ -1,3 +1,4 @@
+import { policyTurnRefusal } from '../shared/organization-policy.js'
 import {
   asProcessNormalizer,
   codexAppServerPolicy,
@@ -393,6 +394,7 @@ async function projectFolderOf(options: CodexMissionServiceOptions, missionId: s
 const MAX_WAITING_EVENTS = 1_000
 
 interface CodexMissionServiceOptions {
+  readonly organizationPolicy?: import('../shared/organization-policy.js').OrganizationPolicyState
   /** The folder the service was started in; `currentFolder` wins when given. */
   readonly workspacePath: string
   /** The folder the window is in NOW, for a turn that starts a conversation (0.458). */
@@ -672,7 +674,7 @@ interface CodexMissionServiceOptions {
 }
 
 function error(
-  code: 'INVALID_PROMPT' | 'RUN_ALREADY_ACTIVE' | 'CODEX_UNAVAILABLE' | 'RUNTIME_START_FAILED' | 'PERSISTENCE_FAILED' | 'RUN_NOT_ACTIVE' | 'HANDOFF_REFUSED' | 'SPEND_LIMIT_REACHED',
+  code: 'INVALID_PROMPT' | 'RUN_ALREADY_ACTIVE' | 'CODEX_UNAVAILABLE' | 'RUNTIME_START_FAILED' | 'PERSISTENCE_FAILED' | 'RUN_NOT_ACTIVE' | 'HANDOFF_REFUSED' | 'SPEND_LIMIT_REACHED' | 'POLICY_REFUSED',
   message: string,
   busy?: 'pool'
 ): CodexMissionStartResponse | CodexMissionCancelResponse | MissionHandoffResponse {
@@ -1333,11 +1335,11 @@ export function createCodexMissionService(options: CodexMissionServiceOptions): 
   }
 
   /**
-   * A limit that cannot be checked -- the ledger will not read -- lets the
-   * run start, and says so in the log: a turn is never refused over a check
-   * that could not be made, and the next start checks again.
+   * A personal limit check that throws keeps its existing fail-open behavior
+   * and is logged. Managed checks return an explicit refusal when receipts
+   * cannot be read (organization-spend.ts), rather than throwing here.
    */
-  async function spendRefusalFor(teammateId: string): Promise<string | undefined> {
+  async function spendRefusalFor(teammateId = ''): Promise<string | undefined> {
     if (options.spendRefusal === undefined) return undefined
     try {
       return await options.spendRefusal(teammateId)
@@ -1359,13 +1361,15 @@ export function createCodexMissionService(options: CodexMissionServiceOptions): 
   async function targetRefusal(
     runtime: MissionRuntimeId,
     mode: MissionMode,
-    route: { readonly model?: string },
+    route: { readonly model?: string; readonly effort?: string },
     /** The teammate the run belongs to, whose monthly limit applies to the run it hands to. */
     teammateId?: string
   ): Promise<string | undefined> {
+    const managed = policyTurnRefusal(options.organizationPolicy, { runtime, mode, model: route.model })
+    if (managed !== undefined) return managed
     const chosenModel = route.model === undefined || route.model === 'account-default' ? undefined : route.model
     if (options.freeRoutesOnly === true && !isFreeRoute(runtime, chosenModel)) return FREE_ONLY_REFUSAL
-    const overLimit = teammateId === undefined ? undefined : await spendRefusalFor(teammateId)
+    const overLimit = await spendRefusalFor(teammateId)
     if (overLimit !== undefined) return overLimit
     if (mode === 'auto' && !(await (options.autoModeAllowed ?? (async () => false))())) return AUTO_OFF_REFUSAL
     const readOnly = mode !== 'auto' && mode !== 'accept-edits' && mode !== 'approve-each'
@@ -1381,6 +1385,11 @@ export function createCodexMissionService(options: CodexMissionServiceOptions): 
       return `${runtimeDisplayName(runtime)} readiness could not be verified. Check the local runtime and try again.`
     }
     const chosen = runtimes.find((entry) => entry.id === runtime)
+    if (runtime === 'cursor') {
+      const picked = cursorChoiceFor(cursorModelsFrom(runtimes), chosenModel, route.effort)
+      const managedVariant = policyTurnRefusal(options.organizationPolicy, { runtime, mode, model: picked.model })
+      if (managedVariant !== undefined) return managedVariant
+    }
     if (chosen?.availability !== 'available' || chosen.readiness !== 'ready' || chosen.executable === undefined) {
       return notReadyRefusal(runtime, chosen)
     }
@@ -1424,6 +1433,9 @@ export function createCodexMissionService(options: CodexMissionServiceOptions): 
       leaveOut?: readonly string[],
       cloud?: { readonly setUp?: boolean }
     ): Promise<CodexMissionStartResponse> {
+      // All callers, including routines, relays, compares, resume and handoffs, cross this gate before I/O.
+      const managed = policyTurnRefusal(options.organizationPolicy, { runtime, mode, model: route.model, cloud: cloud !== undefined })
+      if (managed !== undefined) return error('POLICY_REFUSED', managed) as CodexMissionStartResponse
       // The start's phases (0.602): said to the window as they begin, and timed for the note the run's end writes.
       const sentAt = Date.now()
       const phaseAt: Partial<Record<StartPhase, number>> = {}
@@ -1484,7 +1496,7 @@ export function createCodexMissionService(options: CodexMissionServiceOptions): 
       // The teammate's monthly limit, on the same shared path, before
       // anything is recorded. Its own code: a refusal that proves nothing
       // was sent, which a routine must not hold as "dispatch not confirmed".
-      const overLimit = peer === undefined ? undefined : await spendRefusalFor(peer.self.teammateId)
+      const overLimit = await spendRefusalFor(peer?.self.teammateId)
       if (overLimit !== undefined) return error('SPEND_LIMIT_REACHED', overLimit) as CodexMissionStartResponse
       // Read-only unless the renderer explicitly asked for edits. The host
       // decides the sandbox from this one value; the renderer never passes a
@@ -1631,6 +1643,11 @@ export function createCodexMissionService(options: CodexMissionServiceOptions): 
             'CODEX_UNAVAILABLE',
             notReadyRefusal(runtime, runtimes.find((entry) => entry.id === runtime))
           ) as CodexMissionStartResponse
+        }
+        if (runtime === 'cursor') {
+          const picked = cursorChoiceFor(cursorModelsFrom(runtimes), chosenModel, route.effort)
+          const managedVariant = policyTurnRefusal(options.organizationPolicy, { runtime, mode, model: picked.model })
+          if (managedVariant !== undefined) return error('POLICY_REFUSED', managedVariant) as CodexMissionStartResponse
         }
         if (!hostReadsEventsOf(runtime)) {
           return error(

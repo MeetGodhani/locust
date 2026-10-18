@@ -49,6 +49,8 @@ import { availableCommands, matchingCommands, runtimeSlashCommands, slashQuery }
 import { atQuery, fileMatches, withoutAtQuery } from '../fileMentions.js'
 import type { SlashCommand } from '../slashCommands.js'
 import { RoutePicker } from './RoutePicker.js'
+import { policyFeatureRefusal, policyModeAllowed } from '../../../shared/organization-policy.js'
+import { ManagedPolicyNote, useOrganizationPolicy } from '../organizationPolicy.js'
 import type { ComparePicking } from './RoutePicker.js'
 import { MAX_COMPARE_SLOTS, MIN_COMPARE_SLOTS, versusLabel } from '../../../shared/compare.js'
 import type { RouteChoice } from './RoutePicker.js'
@@ -541,6 +543,8 @@ export function Composer({
   queuedElsewhere,
   draftKey
 }: ComposerProps): ReactElement {
+  const policy = useOrganizationPolicy()
+  const cloudManaged = policyFeatureRefusal(policy, 'cloud') !== undefined
   const [value, setValue] = useState('')
   const drafts = useRef(new Map<string, string>())
   const valueNow = useRef(value)
@@ -766,7 +770,7 @@ export function Composer({
   const slashMatches = slashing === undefined
     ? []
     : matchingCommands(slashing, availableCommands({
-        modes: modesFor(route.runtime, platform),
+        modes: modesFor(route.runtime, platform).filter((value) => policyModeAllowed(policy, value)),
         running,
         canSwarm: !running,
         // The runtime's own, under its name (0.426; OpenCode's 0.427; Codex's 0.428).
@@ -1278,7 +1282,7 @@ export function Composer({
      */
     if (keyEvent.key === 'Tab' && keyEvent.shiftKey) {
       const usable = MODES.filter(
-        (option) => modeUnavailableReason(option.mode, route.runtime, platform) === undefined
+        (option) => policyModeAllowed(policy, option.mode) && modeUnavailableReason(option.mode, route.runtime, platform) === undefined
       ).map((option) => option.mode)
       const next = shiftTabMode(mode, usable, autoMode === true)
       if (next !== undefined) {
@@ -1974,6 +1978,7 @@ export function Composer({
                 <span className="lc-control__anchor" ref={chatModeAnchor}>
                   {chatModeOpen && (
                     <div className="lc-menu" role="menu" aria-label="Direct or compare">
+                      {cloudManaged && <ManagedPolicyNote />}
                       {CHAT_MODES.filter((option) => (option.id !== 'cloud' || cloud !== undefined) && (option.id !== 'computer' || cloud?.computer !== undefined) && (option.id !== 'background' || background !== undefined)).map((option) => (
                         <button
                           key={option.id}
@@ -1981,6 +1986,7 @@ export function Composer({
                           role="menuitemradio"
                           aria-checked={chatMode === option.id}
                           className="lc-menu__item"
+                          disabled={cloudManaged && (option.id === 'cloud' || option.id === 'computer')}
                           {...(option.id === 'cloud' && cloud?.refusal !== undefined ? { 'aria-disabled': true, title: cloud.refusal } : {})}
                           onClick={() => {
                             setChatModeOpen(false)
@@ -2082,7 +2088,8 @@ export function Composer({
                 )}
                 {modeOpen && !comparing && (
                   <div className="lc-menu" role="menu" aria-label="Permission mode">
-                    {MODES.map((option) => {
+                    {policy?.policy.highestMode !== undefined && <ManagedPolicyNote />}
+                    {MODES.filter((option) => policyModeAllowed(policy, option.mode)).map((option) => {
                       const unavailable = modeUnavailableReason(option.mode, route.runtime, platform)
                       return (
                         <button

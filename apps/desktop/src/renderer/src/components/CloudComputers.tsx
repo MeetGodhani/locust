@@ -4,6 +4,8 @@ import type { ReactElement } from 'react'
 import { CLOUD_AGENT_ACCOUNTS, CLOUD_AGENT_MAKERS, CLOUD_AGENT_NAMES, CLOUD_FREE_HOURS, CLOUD_MACHINE_WORDS, CLOUD_PRO_HOURS, CLOUD_USAGE_PAGE, cloudHoursWords, type CloudAgent, type CloudSignInStep, type CloudUse, type PublicCloudComputer } from '../../../shared/cloud-computer.js'
 import { agoLabel } from '../teammateWork.js'
 import { Icon } from './Icon.js'
+import { policyCloudTerminalRefusal, policyFeatureRefusal } from '../../../shared/organization-policy.js'
+import { ManagedPolicyNote, useOrganizationPolicy } from '../organizationPolicy.js'
 
 /**
  * SETTINGS > CLOUD COMPUTERS (0.761). The person's cloud computers -- one for each repository a teammate has worked
@@ -54,6 +56,9 @@ const STATE_WORDS: Readonly<Record<PublicCloudComputer['state'], string>> = {
 }
 
 export function CloudComputers(): ReactElement {
+  const policy = useOrganizationPolicy()
+  const managedMessage = policyFeatureRefusal(policy, 'cloud')
+  const terminalMessage = policyCloudTerminalRefusal(policy)
   const [listing, setListing] = useState<Listing>({ phase: 'loading' })
   const [busy, setBusy] = useState<string>()
   const [confirming, setConfirming] = useState<string>()
@@ -66,11 +71,12 @@ export function CloudComputers(): ReactElement {
   }), [])
 
   const load = (): void => {
+    if (managedMessage !== undefined) { setListing({ phase: 'refused', message: managedMessage, permission: false }); return }
     void window.desktop?.cloudComputers()
       .then((answer) => setListing(answer.ok ? { phase: 'listed', computers: answer.computers, ...(answer.use === undefined ? {} : { use: answer.use }) } : { phase: 'refused', message: answer.message, permission: answer.permission === true }))
       .catch(() => setListing({ phase: 'refused', message: 'GitHub could not be reached. Try again in a moment.', permission: false }))
   }
-  useEffect(load, [])
+  useEffect(load, [managedMessage])
 
   const act = (name: string, what: 'stop' | 'remove' | 'terminal'): void => {
     const bridge = window.desktop
@@ -126,7 +132,7 @@ export function CloudComputers(): ReactElement {
           {listing.permission && (
             <button type="button" className="lc-button" onClick={() => void window.desktop?.allowCloudComputers().catch(() => undefined)}>Allow it in GitHub</button>
           )}
-          <button type="button" className="lc-button" onClick={() => { setListing({ phase: 'loading' }); load() }}>Check again</button>
+          <button type="button" className="lc-button" disabled={managedMessage !== undefined} onClick={() => { setListing({ phase: 'loading' }); load() }}>Check again</button>
         </div>
       </div>
     )
@@ -202,9 +208,10 @@ export function CloudComputers(): ReactElement {
               </div>
             ) : (
               <div className="lc-cloudcomputers__actions">
-                <button type="button" className="lc-button" disabled={busy !== undefined} onClick={() => act(computer.name, 'terminal')}>
+                <button type="button" className="lc-button" disabled={busy !== undefined || terminalMessage !== undefined} title={terminalMessage} onClick={() => act(computer.name, 'terminal')}>
                   <Icon name="terminal" size={13} /> Open a terminal there
                 </button>
+                {terminalMessage !== undefined && <ManagedPolicyNote />}
                 {computer.state === 'available' && (
                   <button type="button" className="lc-button" disabled={busy !== undefined} onClick={() => act(computer.name, 'stop')}>
                     {busy === `stop:${computer.name}` ? 'Stopping…' : 'Stop now'}

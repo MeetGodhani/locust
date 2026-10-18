@@ -508,6 +508,8 @@ export interface ProfileRestoreOutcome {
 
 /** What this build is, so a person can say which one they are running. */
 export interface AppInfo {
+  /** The main process's launch-time, machine-wide policy; never a renderer preference. */
+  readonly organizationPolicy?: import('./organization-policy.js').OrganizationPolicyState
   readonly name: string
   readonly version: string
   readonly packaged: boolean
@@ -2400,6 +2402,7 @@ export type CodexMissionErrorCode =
    * started or recorded; the message says what was spent and how to go on.
    */
   | 'SPEND_LIMIT_REACHED'
+  | 'POLICY_REFUSED'
   | 'RUN_ALREADY_ACTIVE'
   | 'CODEX_UNAVAILABLE'
   | 'RUNTIME_START_FAILED'

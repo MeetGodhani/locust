@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState, type ReactElement, type ReactNode } from 
 import qrcode from 'qrcode-generator'
 
 import type { PhoneApi, PhoneSettings as PhoneState } from '../../../shared/phone.js'
+import { policyFeatureRefusal } from '../../../shared/organization-policy.js'
+import { ManagedPolicyNote, useOrganizationPolicy } from '../organizationPolicy.js'
 
 /** The code as one SVG path of dark squares, drawn here: no HTML from the library goes into the page. */
 export function QrCode({ text, label }: { readonly text: string; readonly label: string }): ReactElement {
@@ -35,6 +37,7 @@ export function PhoneSettings({ heading, more, api = typeof window === 'undefine
   readonly api?: PhoneApi
 }): ReactElement {
   const [state, setState] = useState<PhoneState>()
+  const managed = policyFeatureRefusal(useOrganizationPolicy(), 'phone') !== undefined
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState('')
   useEffect(() => {
@@ -47,12 +50,13 @@ export function PhoneSettings({ heading, more, api = typeof window === 'undefine
     setBusy(true); setFailure('')
     try { setState(await next()) } catch { setFailure('This setting could not be changed. It is unchanged.') } finally { setBusy(false) }
   }
-  const on = state?.enabled === true
+  const on = !managed && state?.enabled === true
   return (
     <>
       <div className="lc-settingline">
         <div className="lc-settingline__text">
           {heading}
+          {managed && <ManagedPolicyNote />}
           <p className="lc-settings__lede">{on
             ? state.url === undefined
               ? 'On, but this computer is not on a network Locust can find. Connect it to your Wi-Fi, then turn this off and on again.'
@@ -61,7 +65,7 @@ export function PhoneSettings({ heading, more, api = typeof window === 'undefine
           {state?.message !== undefined && <p className="lc-settings__note" role="status">{state.message}</p>}
           {failure && <p className="lc-settings__note" role="status">{failure}</p>}
         </div>
-        <button type="button" className={`lc-switch${on ? ' is-on' : ''}`} role="switch" aria-label="Use Locust from your phone" aria-checked={on} disabled={!state || busy} onClick={() => { void change(() => api!.setEnabled(!on)) }}><span /></button>
+        <button type="button" className={`lc-switch${on ? ' is-on' : ''}`} role="switch" aria-label="Use Locust from your phone" aria-checked={on} disabled={managed || !state || busy} onClick={() => { void change(() => api!.setEnabled(!on)) }}><span /></button>
       </div>
       {on && state.url !== undefined && (
         <div className="lc-phone" data-phone-code="">

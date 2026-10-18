@@ -98,6 +98,7 @@ export function createLocustMcpHost(options: {
   readonly node: string
   readonly bridge: string
   readonly call: (name: string, args: unknown) => Promise<McpToolResult>
+  readonly refusal?: () => string | undefined
   readonly protectFile?: (path: string) => Promise<void>
 }) {
   const connection = join(options.directory, MCP_CONNECTION_FILE)
@@ -112,7 +113,7 @@ export function createLocustMcpHost(options: {
   let editorAnswers = false
   let editorSeen = false
   let queue: Promise<unknown> = Promise.resolve()
-  const state = (message?: string): LocustMcpState => ({ enabled: server !== undefined, ownMode,
+  const state = (message = options.refusal?.()): LocustMcpState => ({ enabled: server !== undefined, ownMode,
     ...(editorAnswers ? { editorAnswers } : {}), ...(editorSeen ? { editorSeen } : {}),
     ...(server === undefined ? {} : setup), ...(message === undefined ? {} : { message }) })
   const save = async (): Promise<void> => {
@@ -131,6 +132,8 @@ export function createLocustMcpHost(options: {
     await rm(connection, { force: true })
   }
   const start = async (): Promise<void> => {
+    const refused = options.refusal?.()
+    if (refused !== undefined) throw new Error(refused)
     if (server !== undefined) return
     await mkdir(options.directory, { recursive: true })
     const listener = createServer(mcpRequestHandler(() => token, options.call))
@@ -167,6 +170,7 @@ export function createLocustMcpHost(options: {
     load: () => serial(async () => {
       if (disposed || server !== undefined) return state()
       await rm(connection, { force: true }) // a crashed process's token is never reused
+      if (options.refusal?.() !== undefined) return state()
       try {
         const saved = JSON.parse(await readFile(settings, 'utf8')) as { readonly enabled?: unknown; readonly ownMode?: unknown; readonly editorAnswers?: unknown; readonly editorSeen?: unknown }
         // Only a literal true widens anything; a missing or odd value is Ask, and cards answered only here.
@@ -179,6 +183,7 @@ export function createLocustMcpHost(options: {
     }),
     setEnabled: (enabled: unknown) => serial(async () => {
       if (disposed || typeof enabled !== 'boolean') return state('That server setting was not changed.')
+      if (enabled && options.refusal?.() !== undefined) return state()
       try {
         if (enabled) await start(); else await stop()
         await save()

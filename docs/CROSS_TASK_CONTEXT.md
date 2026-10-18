@@ -177,6 +177,32 @@ continue; report exact validation results, and say what was not run.
 
 ## Handoff log
 
+### 2026-10-18 — machine-wide organization policy
+
+- Scope: `exec/org-policy`, based on `c3174add`. No version, changelog,
+  dependency, installer, site or global configuration change; no push.
+- Decision: the main process reads an administrator-owned `policy.json` once
+  at launch. No file preserves personal settings; an unreadable or invalid
+  policy blocks starts and connections and is shown in the window. Packaged
+  builds ignore `LOCUST_POLICY_FILE`; Windows resolves the OS known folder,
+  rather than trusting a process's `ProgramData` override.
+- `shared/organization-policy.ts` holds the rules, separately from Electron
+  and React. Both mission services enforce them before discovery; handoff
+  preflight checks before stopping the old run. Separate background, cloud,
+  voice and terminal paths are guarded too. MCP and phone hosts check before
+  saved opt-ins can open listeners. Renderer controls read the same snapshot.
+- Effective monthly limits are the lower of personal and organization limits,
+  overlaid without rewriting personal preferences. Unowned work uses the
+  whole month's dollar receipts. An unreadable spending record blocks a
+  managed start. Unmetered launches are refused when they cannot enforce the
+  cap; unknown model defaults are refused under a finite model allowlist.
+- `docs/ADMIN.md` records paths, schema, deployment and the limits of receipt
+  accounting, runtime capabilities and launches outside Locust.
+- Validation: pending the final gate; the focused policy and regression runs
+  have passed. Final command results are recorded before this branch commits.
+- Not run: live or paid agent turns, real policy deployment, packaged UI,
+  macOS or Linux execution. No subscription credentials were inspected.
+
 ### 2026-10-18 — OpenCode multi-turn recovery
 
 - Scope: `feat/opencode-multiturn-recovery`, based on upstream `main` at

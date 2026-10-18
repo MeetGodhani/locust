@@ -14,6 +14,8 @@ import { parsedAboutYou, parsedAboutYouSuggestions } from '../shared/about-you.j
 import { parsedPlanRunsOut } from '../shared/carry-on.js'
 import { aboutYouSecretRefusal, secretIn } from '../shared/secrets.js'
 import { replaceFile } from './replace-file.js'
+import { OrganizationPolicyError } from './organization-policy.js'
+import { policyMonthlyLimit, policyModeAllowed, policyRefusal, policyTurnRefusal, type OrganizationPolicyState } from '../shared/organization-policy.js'
 
 /**
  * Teammates are local identity plus routing defaults: a name, an avatar hue, a
@@ -646,10 +648,21 @@ function parsedFile(text: string): StoredFile {
   return { schemaVersion: SCHEMA_VERSION, teammates, missionOwners: owners, missionTitles: titles, missionPins: pins, missionSettled: settled, settings }
 }
 
-export function createTeammateStore(options: { readonly rootDirectory: string }): TeammateStore {
+export function createTeammateStore(options: { readonly rootDirectory: string; readonly organizationPolicy?: OrganizationPolicyState }): TeammateStore {
   const rootDirectory = options.rootDirectory
   if (!isAbsolute(rootDirectory)) throw new Error('Teammate store directory is invalid')
   const path = join(rootDirectory, 'teammates.json')
+  const managedTeammate = (teammate: PublicTeammate): PublicTeammate => {
+    const monthlyLimitUsd = policyMonthlyLimit(options.organizationPolicy, teammate.monthlyLimitUsd)
+    return monthlyLimitUsd === undefined ? teammate : { ...teammate, monthlyLimitUsd }
+  }
+  const managedSettings = (settings: WorkspaceSettings): WorkspaceSettings => policyModeAllowed(options.organizationPolicy, 'auto') ? settings : { ...settings, autoMode: false }
+  const checkLimit = (value: unknown): void => {
+    const state = options.organizationPolicy
+    if (state?.policy.monthlyLimitUsd !== undefined && value !== undefined && (typeof value !== 'number' || value > state.policy.monthlyLimitUsd)) {
+      throw new OrganizationPolicyError(policyRefusal(state, 'monthlyLimitUsd', `A teammate's monthly limit must be ${state.policy.monthlyLimitUsd} USD or less. It cannot be removed.`))
+    }
+  }
 
   let queue: Promise<unknown> = Promise.resolve()
   const serialize = <T>(task: () => Promise<T>): Promise<T> => {
@@ -699,7 +712,7 @@ export function createTeammateStore(options: { readonly rootDirectory: string })
 
   return {
     list(): Promise<readonly PublicTeammate[]> {
-      return serialize(async () => (await read()).teammates)
+      return serialize(async () => (await read()).teammates.map(managedTeammate))
     },
 
     create(input): Promise<PublicTeammate> {
@@ -712,6 +725,7 @@ export function createTeammateStore(options: { readonly rootDirectory: string })
         const clash = nameTaken(file.teammates, input.name)
         if (clash !== undefined) throw new TeammateNameTakenError(clash)
         if (input.avatar !== undefined && !isAvatarSpec(input.avatar)) throw new Error('Teammate avatar is invalid')
+        checkLimit(input.monthlyLimitUsd)
         if (input.monthlyLimitUsd !== undefined && !isMonthlyLimit(input.monthlyLimitUsd)) throw new Error('Teammate limit is invalid')
         if (input.starters !== undefined && parsedStarters(input.starters) === undefined) throw new Error('Teammate starters are invalid')
         const teammateId = `tm_${randomUUID().replace(/-/g, '').slice(0, 24)}`
@@ -730,7 +744,7 @@ export function createTeammateStore(options: { readonly rootDirectory: string })
           ...(isChatGptVoice(input.voice) ? { voice: input.voice } : {})
         }
         await write({ ...file, teammates: [...file.teammates, teammate] })
-        return teammate
+        return managedTeammate(teammate)
       })
     },
 
@@ -741,6 +755,7 @@ export function createTeammateStore(options: { readonly rootDirectory: string })
         if (!isHue(input.hue)) throw new Error('Teammate hue is invalid')
         if (!isRole(input.role)) throw new Error('Teammate role is invalid')
         if (!isAvatarSpec(input.avatar)) throw new Error('Teammate avatar is invalid')
+        checkLimit(input.monthlyLimitUsd)
         if (input.monthlyLimitUsd !== undefined && input.monthlyLimitUsd !== null && !isMonthlyLimit(input.monthlyLimitUsd)) {
           throw new Error('Teammate limit is invalid')
         }
@@ -798,13 +813,15 @@ export function createTeammateStore(options: { readonly rootDirectory: string })
           ...file,
           teammates: file.teammates.map((teammate) => (teammate.teammateId === updated.teammateId ? updated : teammate))
         })
-        return updated
+        return managedTeammate(updated)
       })
     },
 
     rememberRoute(teammateId, route): Promise<void> {
       return serialize(async () => {
         if (!safeId(teammateId) || !isTeammateRoute(route)) return
+        const managed = policyTurnRefusal(options.organizationPolicy, route)
+        if (managed !== undefined) throw new OrganizationPolicyError(managed)
         const file = await read()
         const existing = file.teammates.find((teammate) => teammate.teammateId === teammateId)
         if (existing === undefined) return
@@ -1014,7 +1031,7 @@ export function createTeammateStore(options: { readonly rootDirectory: string })
     },
 
     readSettings(): Promise<WorkspaceSettings> {
-      return serialize(async () => (await read()).settings)
+      return serialize(async () => managedSettings((await read()).settings))
     },
 
     writeSettings(requested: unknown): Promise<WorkspaceSettings> {
@@ -1038,7 +1055,8 @@ export function createTeammateStore(options: { readonly rootDirectory: string })
         const incoming = typeof requested === 'object' && requested !== null ? (requested as Record<string, unknown>) : {}
         const settings: Record<string, unknown> = {
           ...((stored.settings ?? {}) as unknown as Record<string, unknown>),
-          ...Object.fromEntries(Object.entries(incoming).filter(([, value]) => value !== undefined))
+          ...Object.fromEntries(Object.entries(incoming).filter(([, value]) => value !== undefined)),
+          ...(!policyModeAllowed(options.organizationPolicy, 'auto') ? { autoMode: false } : {})
         }
         // Only a literal true turns it on. Anything else -- absent, a string,
         // a truthy object -- is off, so a malformed message cannot enable a
@@ -1112,7 +1130,7 @@ export function createTeammateStore(options: { readonly rootDirectory: string })
           })()
         }
         await write({ ...stored, settings: next })
-        return next
+        return managedSettings(next)
       })
     }
   }

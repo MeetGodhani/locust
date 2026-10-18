@@ -13,6 +13,8 @@ import type { MissionRuntimeId } from '@teammate/runtime-adapters'
 import { VoiceSettings } from './VoiceSettings.js'
 import { LocustMcpSettings } from './LocustMcpSettings.js'
 import { PhoneSettings } from './PhoneSettings.js'
+import { policyFeatureRefusal, policyModeAllowed } from '../../../shared/organization-policy.js'
+import { ManagedPolicyNote, OrganizationPolicySettings, useOrganizationPolicy } from '../organizationPolicy.js'
 import { AcpAgentsSettings } from './AcpAgentsSettings.js'
 import { SETTINGS_PAGES, matchedHeadings, pageMatches } from '../settingsPages.js'
 import { agentCapabilityHeading, agentCapabilityLines } from '../agentCapabilities.js'
@@ -1786,6 +1788,8 @@ export function SettingsScreen({
   readonly onRestoreProfile: (folder: string) => Promise<ProfileRestoreResponse>
 }): ReactElement {
   const [page, setPage] = useState<SettingsPageId>(initialPage ?? 'app')
+  const policy = useOrganizationPolicy()
+  const autoManaged = !policyModeAllowed(policy, 'auto')
   const [query, setQuery] = useState('')
   // Bumped when a connector was added or taken back, so the list above reads again (0.716).
   const [connectorsRead, setConnectorsRead] = useState(0)
@@ -2386,6 +2390,7 @@ export function SettingsScreen({
         {shownPage === 'cloud' && (
           <section className="lc-settings__section">
             <h2 className="lc-settings__heading">Cloud computers</h2>
+            {policyFeatureRefusal(policy, 'cloud') !== undefined && <ManagedPolicyNote />}
             <p className="lc-settings__lede">
               Where a teammate works when you pick Cloud computer, or Cloud for a teammate whose maker has no cloud of
               its own: a GitHub Codespace on your GitHub account, one for each repository.
@@ -2675,6 +2680,7 @@ export function SettingsScreen({
           <div className="lc-settingline">
             <div className="lc-settingline__text">
               <h2 className="lc-settings__heading">Auto mode</h2>
+              {autoManaged && <ManagedPolicyNote />}
               <p className="lc-settings__lede">
                 {autoMode
                   ? 'On. A run started in Auto goes ahead without asking and is not kept to the project folder.'
@@ -2687,6 +2693,7 @@ export function SettingsScreen({
               role="switch"
               aria-checked={autoMode}
               aria-label="Auto mode"
+              disabled={autoManaged}
               onClick={() => onAutoModeChange(!autoMode)}
             >
               <span className="lc-switch__knob" />
@@ -3246,6 +3253,7 @@ export function SettingsScreen({
 
         {shownPage === 'app' && (
         <section className="lc-settings__section lc-settings__section--line" data-setting="locust-mcp">
+          <OrganizationPolicySettings heading={<h2 className="lc-settings__heading">Managed by your organization</h2>} />
           <LocustMcpSettings heading={<h2 className="lc-settings__heading">Let your other AI apps use Locust</h2>} />
         </section>
         )}

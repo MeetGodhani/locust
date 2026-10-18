@@ -1,8 +1,11 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import type { ClaudeAppConnection, LocustMcpApi, LocustMcpState } from '../../../shared/locust-mcp.js'
 import { CopyButton } from './CopyButton.js'
+import { policyFeatureRefusal } from '../../../shared/organization-policy.js'
+import { ManagedPolicyNote, useOrganizationPolicy } from '../organizationPolicy.js'
 
 export function LocustMcpSettings({ heading, api = typeof window === 'undefined' ? undefined : window.desktop?.locustMcp }: { readonly heading?: ReactNode; readonly api?: LocustMcpApi }) {
+  const managed = policyFeatureRefusal(useOrganizationPolicy(), 'otherApps') !== undefined
   const [state, setState] = useState<LocustMcpState>()
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState('')
@@ -44,11 +47,12 @@ export function LocustMcpSettings({ heading, api = typeof window === 'undefined'
     <div className="lc-settingline">
       <div className="lc-settingline__text">
         {heading}
+        {managed && <ManagedPolicyNote />}
         <p className="lc-settings__lede">{state?.enabled
           ? `On. Other apps on this computer can ask teammates, run your routines and read replies. ${state.ownMode ? "New turns use each teammate's own mode" : 'New turns are Ask mode (read only)'}, with no automatic teammate handoffs. Locust must be running; your AI account usage and monthly limits still apply.`
           : 'Off. No local server is listening.'}</p>
       </div>
-      <button type="button" className={`lc-switch${state?.enabled ? ' is-on' : ''}`} role="switch" aria-label="Let your other AI apps use Locust" aria-checked={state?.enabled === true} disabled={!state || busy} onClick={() => { void toggle() }}><span /></button>
+      <button type="button" className={`lc-switch${!managed && state?.enabled ? ' is-on' : ''}`} role="switch" aria-label="Let your other AI apps use Locust" aria-checked={!managed && state?.enabled === true} disabled={managed || !state || busy} onClick={() => { void toggle() }}><span /></button>
     </div>
     {/* A sub-setting of the switch above (0.707): spaced and indented, so it does not read as that line's last sentence. */}
     {state?.enabled && <div className="lc-settingline lc-settingline--sub">
@@ -94,8 +98,8 @@ export function LocustMcpSettings({ heading, api = typeof window === 'undefined'
         {claudeSaid && <p className="lc-settings__note" role="status">{claudeSaid}</p>}
       </div>
       <span className="lc-claudeapp__acts">
-        {claudeApp.kind === 'not-added' && <button type="button" className="lc-control lc-control--boxed" disabled={busy} onClick={() => { void pressClaude('add') }}>Add to the Claude app</button>}
-        {claudeApp.kind === 'added' && claudeApp.stale === true && <button type="button" className="lc-control lc-control--boxed" disabled={busy} onClick={() => { void pressClaude('add') }}>Update</button>}
+        {claudeApp.kind === 'not-added' && <button type="button" className="lc-control lc-control--boxed" disabled={managed || busy} onClick={() => { void pressClaude('add') }}>Add to the Claude app</button>}
+        {claudeApp.kind === 'added' && claudeApp.stale === true && <button type="button" className="lc-control lc-control--boxed" disabled={managed || busy} onClick={() => { void pressClaude('add') }}>Update</button>}
         {(claudeApp.kind === 'added' || claudeApp.kind === 'not-added') && claudeApp.restart === true && <button type="button" className="lc-control lc-control--boxed" disabled={busy} onClick={() => { void pressClaude('restart') }}>Restart Claude</button>}
         {claudeApp.kind === 'added' && <button type="button" className="lc-control" disabled={busy} onClick={() => { void pressClaude('remove') }}>Remove</button>}
       </span>

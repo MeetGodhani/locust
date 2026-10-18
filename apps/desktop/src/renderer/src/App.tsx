@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { BOT_SIZE } from './botSizes.js'
+import { OrganizationPolicyContext, OrganizationPolicyNotice } from './organizationPolicy.js'
+import { POLICY_MODE_ORDER, policyModeAllowed } from '../../shared/organization-policy.js'
 import type { ReactElement } from 'react'
 
 import type { MissionRuntimeId, NormalizedRuntimeEvent } from '@teammate/runtime-adapters'
@@ -834,7 +836,7 @@ export default function App(): ReactElement {
   const runtimes = runtimeState.phase === 'ready' ? runtimeState.runtimes : []
   // Antigravity joins a comparison through its CLI, never through its app (0.543).
   const antigravityCli = runtimes.some((status) => status.id === 'antigravity' && status.throughCli === true)
-  const [build, setBuild] = useState<{ readonly version: string; readonly packaged: boolean; readonly platform: string }>()
+  const [build, setBuild] = useState<{ readonly version: string; readonly packaged: boolean; readonly platform: string; readonly organizationPolicy?: import('../../shared/organization-policy.js').OrganizationPolicyState }>()
   const [storage, setStorage] = useState<PublicStorageReport>()
   const [update, setUpdate] = useState<AppUpdateState>()
   /*
@@ -2518,6 +2520,11 @@ export default function App(): ReactElement {
   useEffect(() => {
     if (autoModeKnown && !autoMode && mode === 'auto') setMode('accept-edits')
   }, [autoModeKnown, autoMode, mode])
+  useEffect(() => {
+    if (build?.organizationPolicy === undefined || policyModeAllowed(build.organizationPolicy, mode)) return
+    const narrowed = [...POLICY_MODE_ORDER].reverse().find((value) => policyModeAllowed(build.organizationPolicy, value) && modeRunsOn(value, route.runtime, build.platform))
+    setMode(narrowed ?? 'ask')
+  }, [build?.organizationPolicy, build?.platform, mode, route.runtime])
   const [relay, setRelay] = useState(true)
   /** The autonomy budget: automatic replies one exchange may use. */
   const [relayHopCap, setRelayHopCap] = useState(DEFAULT_RELAY_HOP_CAP)
@@ -3193,7 +3200,7 @@ export default function App(): ReactElement {
       .getAppInfo()
       .then((info) => {
         if (active) {
-          setBuild({ version: info.version, packaged: info.packaged, platform: info.platform })
+          setBuild({ version: info.version, packaged: info.packaged, platform: info.platform, organizationPolicy: info.organizationPolicy })
           setWorkspaceName(info.workspaceName)
           setWorkspacePath(info.workspacePath.length === 0 ? undefined : info.workspacePath)
           setWorkspaceMade(info.workspaceMade === true)
@@ -8336,6 +8343,7 @@ export default function App(): ReactElement {
    */
   return (
     <CallTodosContext.Provider value={callTodos}>
+    <OrganizationPolicyContext.Provider value={build?.organizationPolicy}>
     <ApprovalRuleContext.Provider value={ruleOfCard}>
     <div className={`lc-shell${layoutMode === 'compact' ? ' is-compact' : ''}${changesOpen && changesAvailable && screen === 'workroom' && viewingFile === undefined && viewerRefusal === undefined && besideRun === undefined && reviewing === undefined ? ' has-viewer has-changes' : ''}${(viewingFile !== undefined || viewerRefusal !== undefined || besideRun !== undefined || reviewing !== undefined) && screen === 'workroom' ? ' has-viewer' :inspectorOpen && liveRun !== undefined && screen === 'workroom' ? ' has-inspector' : ''}`}>
       <TitleBar
@@ -8483,6 +8491,7 @@ export default function App(): ReactElement {
           onOpenTeammates={() => setScreen(screen === 'teammates' ? 'workroom' : 'teammates')}
         />
         <main className="lc-workroom">
+          <OrganizationPolicyNotice />
           {screen === 'missions' ? (
             <MissionsScreen
               missions={missionsToList}
@@ -10468,6 +10477,7 @@ export default function App(): ReactElement {
       )}
     </div>
     </ApprovalRuleContext.Provider>
+    </OrganizationPolicyContext.Provider>
     </CallTodosContext.Provider>
   )
 }

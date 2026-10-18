@@ -145,6 +145,7 @@ export function createPhoneHost(options: {
   readonly directory: string
   readonly page: () => string
   readonly calls: PhoneCalls
+  readonly refusal?: () => string | undefined
   readonly addresses?: () => readonly string[]
   readonly port?: number
   readonly protectFile?: (path: string) => Promise<void>
@@ -157,7 +158,7 @@ export function createPhoneHost(options: {
   let queue: Promise<unknown> = Promise.resolve()
   let disposed = false
 
-  const settings = (message?: string): PhoneSettings => {
+  const settings = (message = options.refusal?.()): PhoneSettings => {
     const found = addresses()
     const url = server !== undefined && key !== undefined && port !== undefined && found[0] !== undefined
       ? `http://${found[0]}:${String(port)}/#${key}` : undefined
@@ -217,6 +218,7 @@ export function createPhoneHost(options: {
     settings: async (): Promise<PhoneSettings> => { await queue; return settings() },
     load: () => serial(async () => {
       if (disposed || server !== undefined) return settings()
+      if (options.refusal?.() !== undefined) return settings()
       try {
         const saved = JSON.parse(await readFile(file, 'utf8')) as { readonly enabled?: unknown; readonly key?: unknown }
         if (typeof saved.key === 'string' && /^[A-Za-z0-9_-]{32}$/.test(saved.key)) key = saved.key
@@ -226,6 +228,7 @@ export function createPhoneHost(options: {
     }),
     setEnabled: (enabled: unknown) => serial(async () => {
       if (disposed || typeof enabled !== 'boolean') return settings('That setting was not changed.')
+      if (enabled && options.refusal?.() !== undefined) return settings()
       try {
         if (enabled) await start()
         else {

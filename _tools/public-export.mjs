@@ -167,7 +167,9 @@ export const DOCS_PUBLISHED = [
   // Every connection Locust itself makes (0.618, the PRD's R22); Settings > Privacy links it.
   'docs/NETWORK.md',
   // What the mirror's Windows build proves and does not (2026-10-05); windows-build.yml points at it.
-  'docs/CI-WINDOWS.md'
+  'docs/CI-WINDOWS.md',
+  // The IT policy file, for the administrators who deploy it (0.791); Settings names the file it reads.
+  'docs/ADMIN.md'
 ]
 
 const EXCLUSION_PATTERNS = EXCLUSIONS.map((glob) => ({ glob, re: compileGlob(glob) }))

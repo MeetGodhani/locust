@@ -1,4 +1,5 @@
 import { workspaceIdFor } from './workspace.js'
+import { policyTurnRefusal } from '../shared/organization-policy.js'
 import { randomUUID } from 'node:crypto'
 import { readFile, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
@@ -86,6 +87,7 @@ export const ANTIGRAVITY_QUESTION_LOOKUPS = 8
 const NOBODY = ''
 
 export interface AntigravityMissionOptions {
+  readonly organizationPolicy?: import('../shared/organization-policy.js').OrganizationPolicyState
   readonly workspacePath: string
   /**
    * Refuse every run: Antigravity has no free route, and a drive's window may
@@ -746,10 +748,12 @@ export function createAntigravityMissionService(options: AntigravityMissionOptio
       [...runs.values()].find((run) => run.peer?.self.teammateId === teammateId)?.runId,
 
     async start(prompt, peer, route) {
+      const managed = policyTurnRefusal(options.organizationPolicy, { runtime: 'antigravity', mode: 'accept-edits', model: antigravityTier(route.model) })
+      if (managed !== undefined) throw new AntigravityStartError(managed)
       if (disposed) throw new AntigravityStartError('The mission service is shutting down.')
       if (options.freeRoutesOnly === true) throw new AntigravityStartError(FREE_ONLY_REFUSAL)
-      // As on the other five: a limit that cannot be checked lets the run start.
-      const overLimit = peer === undefined ? undefined : await options.spendRefusal?.(peer.self.teammateId).catch(() => undefined)
+      // Personal check failures keep their existing behavior. Managed checks return a refusal when receipts cannot be read.
+      const overLimit = await options.spendRefusal?.(peer?.self.teammateId ?? '').catch(() => undefined)
       if (overLimit !== undefined) throw new AntigravityStartError(overLimit, 'limit')
       const owner = ownerKeyOf(peer)
       if (starting.has(owner) || [...runs.values()].some((run) => ownerKeyOf(run.peer) === owner)) {
