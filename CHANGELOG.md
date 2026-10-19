@@ -11,6 +11,25 @@ Settings shows this file as What's new. An entry may group its changes under
 about when they arrive on it carries `<!-- big -->` on the line under its
 heading: the home screen then shows it once, as a splash.
 
+## 0.797.0 - 2026-10-19
+<!-- big -->
+
+### New
+
+- **More than one account per agent.** In Settings > AI agents, Claude Code and Codex have Add another account: give it a name, such as Work, and sign in with the agent's own sign-in in your browser. Pick it on a teammate or in the model menu, where it reads "Claude · Work", and that teammate's turns, comparisons, routines and handoffs use that sign-in, with its usage counted on its own. Your PC's sign-in stays as it is and is used when no account is picked. Remove deletes only the folder Locust made for that account. A company's policy file can keep added accounts off.
+- **Run a command from the chat box.** Start a message with ! and it runs in the conversation's folder, in your terminal's shell. The command and its output appear in the conversation and go along with your next message to the teammate, once. Stop ends the command and anything it started.
+- **Your own slash commands.** A Markdown file in Locust's commands folder, or in a project's `.locust/commands`, becomes a slash command in the / menu. What you type after its name fills `$ARGUMENTS`, `$1` and `$2`, and a !`command` line puts that command's output in. Choosing one fills the box; Send sends it. A project's command lines run only after you allow that folder once. Settings > Chat lists your commands, with Open folder and how to write one.
+- **Compact a conversation from its context ring.** With Claude Code, the small circle beside the model shows how full the conversation's context is. Press it for the numbers and Compact now, which summarizes the conversation so far so the turns ahead have room, and leaves what you were typing in the box. While a turn is running, it waits and compacts when the turn ends.
+
+### Improved
+
+- **The conversation's header is a row of icons, as Claude Code's is.** Activity, Terminal, Changes, Browser, the folder and the menu are icons, each named when you point at it, and the folder icon opens the folder your teammates work in. Open in terminal is in the ... menu.
+- **The model chip names your default model.** A route on an agent's own default model read just "Claude", so a turn carried on with Claude Code when another agent's plan ran out said nothing about the model it ran on. Once a turn has said which model the default is, the chip names it, for example Claude / Opus 5.5.
+
+### Fixed
+
+- **Scout no longer asks to redo work that was carried on.** A failed turn whose conversation went on, with your reply or with Locust carrying it on when a plan ran out, leaves Scout's next look, and a card already showing it goes.
+
 ## 0.796.0 - 2026-10-19
 <!-- big -->
 
