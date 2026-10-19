@@ -10,6 +10,9 @@ const BrowserPanel = lazy(() => import('./components/BrowserPanel.js'))
 import { BOT_SIZE } from './botSizes.js'
 import { OrganizationPolicyContext, OrganizationPolicyNotice } from './organizationPolicy.js'
 import { POLICY_MODE_ORDER, policyModeAllowed } from '../../shared/organization-policy.js'
+import { commandsStillToCarry, promptWithCommands } from '../../shared/own-commands.js'
+import type { ConversationCommand, ListedCommand, OwnCommandResult } from '../../shared/own-commands.js'
+import { CommandEntry } from './components/OwnCommand.js'
 import type { ReactElement } from 'react'
 
 import type { MissionRuntimeId, NormalizedRuntimeEvent } from '@teammate/runtime-adapters'
@@ -2241,6 +2244,14 @@ export default function App(): ReactElement {
   const [route, setRoute] = useState<RouteChoice>({ runtime: 'codex', model: 'account-default' })
   /** Words going back into the chat box (C9): a busy model's message, to send on another. */
   const [handBack, setHandBack] = useState<{ readonly text: string; readonly attachments: readonly string[] }>()
+  interface HeldCommand extends ConversationCommand { readonly key: string; readonly carried: boolean }
+  const [commandEntries, setCommandEntries] = useState<readonly HeldCommand[]>([])
+  const commandEntriesRef = useRef<readonly HeldCommand[]>([])
+  commandEntriesRef.current = commandEntries
+  const draftKeyRef = useRef('new')
+  const commandResults = useRef(new Map<string, OwnCommandResult>())
+  const [ownCommandMenu, setOwnCommandMenu] = useState<readonly ListedCommand[]>([])
+  const [commandAsk, setCommandAsk] = useState<{ readonly name: string; readonly source: 'global' | 'project'; readonly args: string; readonly lines: readonly string[] }>()
   // What changed about the watched pull request (0.731), shown above the box until dismissed.
   const [pullRequestNewsShown, setPullRequestNewsShown] = useState<PullRequestNews>()
   useEffect(() => window.desktop?.onPullRequestNews((news) => setPullRequestNewsShown(news)), [])
@@ -4576,7 +4587,7 @@ export default function App(): ReactElement {
       const backgroundEffort = effort !== undefined && (modelFamily(models, 'claude', composerRoute.model)?.supportedEfforts ?? []).includes(effort) ? effort : undefined
       const continuing = liveRun?.data?.runtime === 'claude' ? liveRun.data.missionId : undefined
       const sent = await bridge.startBackground({
-        prompt,
+        prompt: claimCommands(prompt, draftKeyRef.current),
         ...(composerRoute.account === undefined ? {} : { account: composerRoute.account }),
         mode,
         model: composerRoute.model,
@@ -4613,7 +4624,7 @@ export default function App(): ReactElement {
       // On the model and effort in the box (0.557): without them, every session ran on the account's default.
       const cloudEffort = effort !== undefined && (modelFamily(models, 'claude', composerRoute.model)?.supportedEfforts ?? []).includes(effort) ? effort : undefined
       const environment = cloudEnvironment.folder === workspacePath ? cloudEnvironment.value : ''
-      const sent = await bridge.startClaudeCloud(prompt, pickedTeammate?.teammateId, { model: composerRoute.model, ...(cloudEffort === undefined ? {} : { effort: cloudEffort }), ...(environment.length === 0 ? {} : { environment }) }).catch(() => undefined)
+      const sent = await bridge.startClaudeCloud(claimCommands(prompt, draftKeyRef.current), pickedTeammate?.teammateId, { model: composerRoute.model, ...(cloudEffort === undefined ? {} : { effort: cloudEffort }), ...(environment.length === 0 ? {} : { environment }) }).catch(() => undefined)
       if (sent === undefined) return 'Claude Code could not be opened. Nothing was sent.'
       if (!sent.ok) return sent.message
       setClaudeCloud((current) => [sent.session, ...current.filter((one) => one.id !== sent.session.id)])
@@ -4624,7 +4635,7 @@ export default function App(): ReactElement {
     }
     if (cloudOn && comparing === undefined) {
       if (!bridge) return 'Locust is not ready yet. Nothing was sent.'
-      const started = await bridge.startCloudTask(prompt, pickedTeammate?.teammateId).catch(() => undefined)
+      const started = await bridge.startCloudTask(claimCommands(prompt, draftKeyRef.current), pickedTeammate?.teammateId).catch(() => undefined)
       if (started === undefined) return 'The cloud task could not be started. Nothing was sent.'
       if (!started.ok) return started.message
       setCloudTasks((current) => [...current.filter((task) => task.taskId !== started.task.taskId), started.task])
@@ -4636,7 +4647,7 @@ export default function App(): ReactElement {
     }
     if (comparing !== undefined && comparing.kept === undefined) {
       if (!bridge) return 'Locust is not ready yet. Nothing was sent.'
-      const answer = await bridge.askCompare(comparing.compareId, prompt).catch(() => undefined)
+      const answer = await bridge.askCompare(comparing.compareId, claimCommands(prompt, draftKeyRef.current)).catch(() => undefined)
       if (answer === undefined) return 'The comparison could not be asked. Nothing was started.'
       if (!answer.ok) return answer.error.message
       replaceCompare(answer.data.compare)
@@ -4652,7 +4663,7 @@ export default function App(): ReactElement {
       const answer = await bridge
         .startCompare({
           ...(pickedTeammate === undefined ? {} : { teammateId: pickedTeammate.teammateId }),
-          prompt,
+          prompt: claimCommands(prompt, draftKeyRef.current),
           // Changes run in Auto where the runtime can (0.451): each column is in its own copy.
           routes: comparePicks.map((pick) => {
             // A column's own effort (0.490), turned into what the runtime takes: Cursor's is in the id.
@@ -5181,6 +5192,15 @@ export default function App(): ReactElement {
     })
     setComposerFill((current) => ({ text: words, seq: (current?.seq ?? 0) + 1 }))
   }
+  const claimCommands = (prompt: string, key: string): string => {
+    const pending = commandsStillToCarry(commandEntriesRef.current.filter((entry) => entry.key === key))
+    if (pending.length === 0) return prompt
+    const ids = new Set(pending.map((entry) => entry.id))
+    const next = commandEntriesRef.current.map((entry) => ids.has(entry.id) ? { ...entry, carried: true } : entry)
+    commandEntriesRef.current = next
+    setCommandEntries(next)
+    return promptWithCommands(prompt, pending)
+  }
   const startMission = async (
     prompt: string,
     modeOverride?: MissionMode,
@@ -5203,6 +5223,8 @@ export default function App(): ReactElement {
       readonly rewind?: { readonly tip: string; readonly before?: string; readonly earlierTurns: NonNullable<LiveRunState['earlierTurns']>; readonly putBackResult?: RewindPutBackResponse; readonly setAside?: readonly string[] }
     }
   ): Promise<boolean> => {
+    const carryKey = options?.fromComposer === true ? draftKeyRef.current : options?.requeue?.origin === 'person' ? options.requeue.key : undefined
+    if (carryKey !== undefined) prompt = claimCommands(prompt, carryKey)
     const as = options?.as
     const route = as?.route ?? composerRoute
     const runMode = as?.mode ?? mode
@@ -7699,6 +7721,101 @@ export default function App(): ReactElement {
   const shownConversation = liveRun?.data?.missionId ?? shownKey
   const shownRow = shownConversation === undefined ? undefined : sidebarMissions.find((entry) => (entry.memberIds ?? [entry.missionId]).includes(shownConversation))
   const composerDraftKey = shownConversation === undefined ? 'new' : shownRow?.rootId ?? shownRow?.missionId ?? shownConversation
+  draftKeyRef.current = composerDraftKey
+  useEffect(() => {
+    const bridge = window.desktop?.ownCommands
+    if (bridge === undefined) return undefined
+    let gone = false
+    const context = {
+      ...(liveRun?.data?.missionId === undefined ? {} : { missionId: liveRun.data.missionId }),
+      ...(pickedTeammate === undefined ? {} : { teammateId: pickedTeammate.teammateId })
+    }
+    void bridge.list(context).then((answer) => { if (!gone && answer.ok) setOwnCommandMenu(answer.commands) }).catch(() => undefined)
+    return () => { gone = true }
+  }, [workspacePath, liveRun?.data?.missionId, pickedTeammate?.teammateId])
+  useEffect(() => window.desktop?.ownCommands?.onDone((result) => {
+    setCommandEntries((current) => {
+      if (!current.some((entry) => entry.id === result.id)) {
+        commandResults.current.set(result.id, result)
+        return current
+      }
+      const next = current.map((entry) => entry.id === result.id ? {
+        ...entry,
+        output: result.output,
+        exitCode: result.exitCode,
+        stopped: result.stopped,
+        running: false,
+        ...(result.omitted === undefined ? {} : { omitted: result.omitted })
+      } : entry)
+      commandEntriesRef.current = next
+      return next
+    })
+  }), [])
+  const commandContext = (): { missionId?: string; teammateId?: string } => ({
+    ...(liveRunRef.current?.data?.missionId === undefined ? {} : { missionId: liveRunRef.current.data.missionId }),
+    ...(pickedTeammate === undefined ? {} : { teammateId: pickedTeammate.teammateId })
+  })
+  const applyOwnCommand = (answer: { readonly text: string; readonly mode?: MissionMode; readonly teammate?: string }): void => {
+    if (answer.mode !== undefined && policyModeAllowed(build?.organizationPolicy, answer.mode)) {
+      if (answer.mode === 'auto' && autoMode !== true) {
+        setAutoMode(true)
+        void window.desktop?.writeWorkspaceSettings({ swarm, relay, relayHopCap, interrupt, memoryMode, autoMode: true, askConnectors, keepATodoList, replySize, layout, tube }).then((settings) => setAutoMode(settings.autoMode === true)).catch(() => setAutoMode(false))
+      }
+      setMode(answer.mode)
+    }
+    if (answer.teammate !== undefined) {
+      const mate = teammates.find((one) => one.name.toLowerCase() === answer.teammate?.toLowerCase())
+      if (mate !== undefined) setSelectedTeammateId(mate.teammateId)
+    }
+    setCommandAsk(undefined)
+    setHandBack({ text: answer.text, attachments: [] })
+  }
+  const chooseOwnCommand = (name: string, source: 'global' | 'project', args: string): void => {
+    const bridge = window.desktop?.ownCommands
+    if (bridge === undefined) return
+    void bridge.expand({ ...commandContext(), name, source, arguments: args }).then((answer) => {
+      if (!answer.ok) return
+      if ('ask' in answer) { setCommandAsk({ name, source, args, lines: answer.ask }); return }
+      applyOwnCommand(answer)
+    }).catch(() => undefined)
+  }
+  const allowCommandAsk = (): void => {
+    const pending = commandAsk
+    const bridge = window.desktop?.ownCommands
+    if (pending === undefined || bridge === undefined) return
+    void bridge.allow(commandContext()).then(async (allowed) => {
+      if (!allowed.ok) return undefined
+      return bridge.expand({ ...commandContext(), name: pending.name, source: pending.source, arguments: pending.args })
+    }).then((answer) => {
+      if (answer === undefined || !answer.ok || 'ask' in answer) return
+      applyOwnCommand(answer)
+    }).catch(() => undefined)
+  }
+  const runOwnCommand = (command: string): void => {
+    const bridge = window.desktop?.ownCommands
+    const key = draftKeyRef.current
+    const localId = `local-${String(Date.now())}`
+    const place = (entry: HeldCommand): void => {
+      const next = commandEntriesRef.current.map((one) => one.id === localId ? entry : one)
+      commandEntriesRef.current = next
+      setCommandEntries(next)
+    }
+    const entry: HeldCommand = { id: localId, key, command, output: '', exitCode: null, stopped: false, running: true, carried: false }
+    const added = [...commandEntriesRef.current, entry]
+    commandEntriesRef.current = added
+    setCommandEntries(added)
+    if (bridge === undefined) { place({ ...entry, running: false, output: 'Locust is not ready yet. Nothing was run.', exitCode: 1 }); return }
+    void bridge.run(commandContext(), command).then((answer) => {
+      if (!answer.ok) { place({ ...entry, running: false, output: answer.message, exitCode: 1 }); return }
+      const early = commandResults.current.get(answer.id)
+      commandResults.current.delete(answer.id)
+      place({
+        ...entry,
+        id: answer.id,
+        ...(early === undefined ? {} : { output: early.output, exitCode: early.exitCode, stopped: early.stopped, running: false, ...(early.omitted === undefined ? {} : { omitted: early.omitted }) })
+      })
+    }).catch(() => place({ ...entry, running: false, output: 'That command could not be started. Nothing was run.', exitCode: 1 }))
+  }
   const besideRow = besideId === undefined ? undefined : sidebarMissions.find((entry) => (entry.memberIds ?? [entry.missionId]).includes(besideId))
   const besideRun = ((): LiveRunState | undefined => {
     if (besideId === undefined) return undefined
@@ -9794,9 +9911,20 @@ export default function App(): ReactElement {
               onDismiss={() => setPullRequestNewsShown(undefined)}
             />
           )}
+          {screen === 'workroom' && commandEntries.some((entry) => entry.key === composerDraftKey && !entry.carried) && (
+            <div className="lc-commandlog">
+              {commandEntries.filter((entry) => entry.key === composerDraftKey && !entry.carried).map((entry) => (
+                <CommandEntry key={entry.id} command={entry} onStop={(id) => { void window.desktop?.ownCommands?.stop(id) }} />
+              ))}
+            </div>
+          )}
           {screen === 'workroom' && (
           <Composer
             draftKey={composerDraftKey}
+            ownCommands={ownCommandMenu}
+            onChooseOwnCommand={chooseOwnCommand}
+            onRunCommand={runOwnCommand}
+            {...(commandAsk === undefined ? {} : { commandAsk: { lines: commandAsk.lines, onAllow: allowCommandAsk, onNotNow: () => setCommandAsk(undefined) } })}
             // Talk in a teammate's conversation is a call with them, into it (0.746).
             // With the call drawn in this conversation, a connector's question is a card in it (0.749).
             {...(talkTo === undefined ? {} : { talkTo: { ...talkTo, asksInThread: threadCalls.some((call) => 'live' in call && call.live) } })}

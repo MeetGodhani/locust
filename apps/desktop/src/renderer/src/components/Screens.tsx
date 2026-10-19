@@ -24,6 +24,7 @@ import { GitHubAccount } from './GitHubAccount.js'
 import { ConnectorHealth } from './ConnectorHealth.js'
 import type { SettingsPageId } from '../settingsPages.js'
 import { CloudComputers } from './CloudComputers.js'
+import { ChatCommands } from './ChatCommands.js'
 import type { LoginItemState, RuntimeUpdatesState, MetalMotion, MetalPreset, MetalStrength, ProfileBackupResponse, ProfileRestorePreview, ProfileRestoreResponse } from '../../../shared/ipc.js'
 import { backedUpLine, countsLine, folderName } from '../backupWords.js'
 import { SUPPORT_ADDRESS } from '../../../shared/support.js'
@@ -1929,6 +1930,28 @@ export function SettingsScreen({
           * that a setting explained itself, it was that you could not find
           * the setting.
           */}
+        {shownPage === 'chat' && (
+          <section className="lc-settings__section">
+            <h2 className="lc-settings__heading">Your commands</h2>
+            <p className="lc-settings__lede">
+              Markdown files become slash commands in the chat box, next to the agents&apos; own. Yours are on this
+              computer. A folder&apos;s are in that folder, and only there.
+            </p>
+            <ChatCommands />
+          </section>
+        )}
+        {shownPage === 'chat' && (
+          <section className="lc-settings__section">
+            <h2 className="lc-settings__heading">How to write one</h2>
+            <p className="lc-settings__note">
+              The top of the file can name a description, a teammate, and a mode. The rest is the prompt. $ARGUMENTS is
+              everything typed after the name. $1 and $2 are the words, and the last one takes the rest. With none of
+              those, what you type is added after a blank line. A line with !`command` inserts that command&apos;s output
+              when you choose it. One in this folder asks before it runs; one of yours runs at once. Choosing a command
+              fills the box. Send is what sends it.
+            </p>
+          </section>
+        )}
         {shownPage === 'workspace' && (
         <section className="lc-settings__section">
           <h2 className="lc-settings__heading">Project folder</h2>

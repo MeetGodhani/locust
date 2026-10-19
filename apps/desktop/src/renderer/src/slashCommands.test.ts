@@ -119,6 +119,7 @@ describe("a runtime's own commands (0.426)", () => {
     const offered = availableCommands({ modes: ALL_MODES, running: false, canSwarm: true, runtimeCommands: claude })
     expect(slashQuery('/security-r')).toBe('security-r')
     expect(slashQuery('/plugin:')).toBe('plugin:')
+    expect(slashQuery('/team/review')).toBe('team/review')
     expect(matchingCommands('security-r', offered).map((command) => command.name)).toEqual(['security-review'])
     expect(matchingCommands('plugin:', offered).map((command) => command.name)).toEqual(['plugin:skill'])
     expect(matchingCommands('co', offered).map((command) => command.name)).toEqual(['compact'])

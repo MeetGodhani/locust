@@ -51,6 +51,7 @@ import type { IconName } from './components/Icon.js'
  */
 export type SettingsPageId =
   | 'app'
+  | 'chat'
   | 'appearance'
   | 'privacy'
   | 'teammates'
@@ -102,6 +103,17 @@ export const SETTINGS_PAGES: readonly SettingsPage[] = [
       'Report a problem': ['bug', 'feedback', 'crash'],
       // Where to reach a person (0.593, R23): the address, the public issues page.
       Help: ['email', 'contact', 'support', 'issue']
+    }
+  },
+  {
+    id: 'chat',
+    label: 'Chat',
+    group: 'Locust',
+    icon: 'message',
+    headings: ['Your commands', 'How to write one'],
+    alsoKnownAs: {
+      'Your commands': ['custom command', 'command mode', 'markdown command'],
+      'How to write one': ['command file', 'arguments placeholder']
     }
   },
   {

@@ -48,11 +48,14 @@ import { effortScale, joinEffort, splitEffort } from '../effortScale.js'
 import { ATTACHMENT_DIR, attachmentLabel, MAX_ATTACHMENTS, withAttachments } from '../../../shared/attachments.js'
 import { diffNotesTile, withDiffNotes } from '../diffNotes.js'
 import type { DiffNote } from '../diffNotes.js'
-import { availableCommands, matchingCommands, runtimeSlashCommands, slashQuery } from '../slashCommands.js'
+import { availableCommands, matchingCommands, runtimeSlashCommands, slashQuery, SLASH_COMMANDS } from '../slashCommands.js'
+import { argumentsOfOwnCommand, bangDraft, leaveCommandMode, ownCommandChoice } from '../../../shared/own-commands.js'
+import type { ListedCommand } from '../../../shared/own-commands.js'
 import { atQuery, fileMatches, withoutAtQuery } from '../fileMentions.js'
 import type { SlashCommand } from '../slashCommands.js'
 import { RoutePicker } from './RoutePicker.js'
-import { policyFeatureRefusal, policyModeAllowed } from '../../../shared/organization-policy.js'
+import { policyFeatureRefusal, policyModeAllowed, policyTerminalRefusal } from '../../../shared/organization-policy.js'
+import { CommandAsk, CommandModeNote } from './OwnCommand.js'
 import { ManagedPolicyNote, useOrganizationPolicy } from '../organizationPolicy.js'
 import type { ComparePicking } from './RoutePicker.js'
 import { MAX_COMPARE_SLOTS, MIN_COMPARE_SLOTS, versusLabel } from '../../../shared/compare.js'
@@ -417,6 +420,14 @@ export interface ComposerProps {
    * "my message is staying in the chatbox for all chats if unsent".
    */
   readonly draftKey?: string
+  /** Markdown commands from the person's folder and this conversation's folder. */
+  readonly ownCommands?: readonly ListedCommand[]
+  /** Puts the expanded prompt in the box. Choosing does not send. */
+  readonly onChooseOwnCommand?: (name: string, source: 'global' | 'project', args: string) => void
+  /** A `!` command. The box does not send it to a teammate. */
+  readonly onRunCommand?: (command: string) => void
+  /** A project command's `!` lines, waiting for a yes. */
+  readonly commandAsk?: { readonly lines: readonly string[]; readonly onAllow: () => void; readonly onNotNow: () => void }
 }
 
 /**
@@ -544,10 +555,15 @@ export function Composer({
   onSendQueued,
   onSendQueuedNow,
   queuedElsewhere,
-  draftKey
+  draftKey,
+  ownCommands,
+  onChooseOwnCommand,
+  onRunCommand,
+  commandAsk
 }: ComposerProps): ReactElement {
   const policy = useOrganizationPolicy()
   const cloudManaged = policyFeatureRefusal(policy, 'cloud') !== undefined
+  const terminalOff = policyTerminalRefusal(policy) !== undefined
   const [value, setValue] = useState('')
   const drafts = useRef(new Map<string, string>())
   const valueNow = useRef(value)
@@ -775,23 +791,39 @@ export function Composer({
    * never be offered and then refused.
    */
   const slashing = slashQuery(value)
-  const slashMatches = slashing === undefined
+  const commandMode = !terminalOff && bangDraft(value) !== undefined
+  const ownRows: readonly SlashCommand[] = (ownCommands ?? []).map((command) => ({
+    name: command.name,
+    detail: command.description ?? (command.source === 'project' ? 'A command in this folder.' : 'A command of yours.'),
+    action: { kind: 'own', source: command.source },
+    group: command.source === 'project' ? 'This folder' : 'Your commands'
+  }))
+  const takenNames = new Set(SLASH_COMMANDS.map((command) => command.name))
+  const yours = ownRows.filter((command) => !takenNames.has(command.name.toLowerCase()))
+  const runtimeRows = !running && (route.runtime === 'claude' || route.runtime === 'opencode' || route.runtime === 'codex') && runtimeCommands?.[route.runtime] !== undefined
+    ? runtimeSlashCommands(runtimeDisplayName(route.runtime), runtimeCommands[route.runtime]!).filter((command) => !takenNames.has(command.name.toLowerCase()))
+    : []
+  // Yours sit after Locust's own and before a runtime's long list, so `/` shows them.
+  const slashMatches = commandMode || slashing === undefined
     ? []
-    : matchingCommands(slashing, availableCommands({
-        modes: modesFor(route.runtime, platform).filter((value) => policyModeAllowed(policy, value)),
-        running,
-        canSwarm: !running,
-        // The runtime's own, under its name (0.426; OpenCode's 0.427; Codex's 0.428).
-        ...((route.runtime === 'claude' || route.runtime === 'opencode' || route.runtime === 'codex') && runtimeCommands?.[route.runtime] !== undefined
-          ? { runtimeCommands: runtimeSlashCommands(runtimeDisplayName(route.runtime), runtimeCommands[route.runtime]!) }
-          : {})
-      }))
+    : matchingCommands(slashing, [
+        ...availableCommands({
+          modes: modesFor(route.runtime, platform).filter((value) => policyModeAllowed(policy, value)),
+          running,
+          canSwarm: !running
+        }),
+        ...yours,
+        ...runtimeRows
+      ])
   // A runtime's command followed by a space is complete: what comes next is
   // its arguments, and Enter sends it. Left open, the menu took that Enter
   // and wrote the same command back into the box, forever (0.426).
   const writingArguments = /\s$/.test(value) &&
     slashMatches.some((command) => command.action.kind === 'runtime' && command.name.toLowerCase() === slashing)
-  const slashChoices = writingArguments ? [] : slashMatches
+  // `/name the rest` is still that command: Enter fills the box with the rest as its arguments.
+  const typedOwn = commandMode || commandAsk !== undefined ? undefined : argumentsOfOwnCommand(value, ownRows.map((command) => command.name))
+  const ownWithArgs = typedOwn === undefined ? [] : ownRows.filter((command) => command.name.toLowerCase() === typedOwn.name.toLowerCase())
+  const slashChoices = commandAsk !== undefined || writingArguments ? [] : ownWithArgs.length > 0 ? ownWithArgs : slashMatches
   /*
    * `@` FOR A FILE OF THE PROJECT (0.436, fileMentions.ts). The folder's
    * files, asked of the host the first time `@` is typed and again at most
@@ -872,6 +904,12 @@ export function Composer({
   }
   const runSlash = (command: SlashCommand): void => {
     setSlashAt(0)
+    // The person's own command fills the box with its prompt. Nothing is sent.
+    if (command.action.kind === 'own') {
+      const choice = ownCommandChoice(command.name, command.action.source, argumentsOfOwnCommand(value, [command.name])?.args ?? '')
+      onChooseOwnCommand?.(choice.fill.name, choice.fill.source, choice.fill.args)
+      return
+    }
     // A runtime's own command is written into the box, where its arguments
     // go; sending it sends that command (0.426).
     if (command.action.kind === 'runtime') {
@@ -1058,7 +1096,13 @@ export function Composer({
   const queueing = useRef(false)
   const submit = (submitEvent: FormEvent<HTMLFormElement>): void => {
     submitEvent.preventDefault()
-    if (queueing.current) return
+    if (queueing.current || commandAsk !== undefined) return
+    const drafted = bangDraft(value)
+    if (!terminalOff && drafted !== undefined) {
+      if (drafted.command.length > 0) onRunCommand?.(drafted.command)
+      setValue('')
+      return
+    }
     const now = sendNow.current
     sendNow.current = false
     const typed = value.trim()
@@ -1239,6 +1283,32 @@ export function Composer({
     // composition, and was stopping the run. 229 is the key code an IME
     // reports where `isComposing` is not set.
     if (keyEvent.nativeEvent.isComposing || keyEvent.keyCode === 229) return
+    // The allow card is the decision. Enter must not send the command's name.
+    if (commandAsk !== undefined) {
+      if (keyEvent.key === 'Escape') {
+        keyEvent.preventDefault()
+        commandAsk.onNotNow()
+      } else if (keyEvent.key === 'Enter' && !keyEvent.shiftKey) {
+        keyEvent.preventDefault()
+      }
+      return
+    }
+    // `!` is a command of the person's. Escape leaves that mode. Enter runs it
+    // here, and does not send a message.
+    if (commandMode) {
+      if (keyEvent.key === 'Escape') {
+        keyEvent.preventDefault()
+        setValue(leaveCommandMode(value))
+        return
+      }
+      if (keyEvent.key === 'Enter' && !keyEvent.shiftKey) {
+        keyEvent.preventDefault()
+        const drafted = bangDraft(value)
+        if (drafted !== undefined && drafted.command.length > 0) onRunCommand?.(drafted.command)
+        setValue('')
+        return
+      }
+    }
     // While the slash menu is open the arrows and Enter belong to it. Enter
     // must NOT fall through to submit: sending "/plan" as a message to a
     // teammate is the one outcome this feature exists to prevent.
@@ -1948,16 +2018,18 @@ export function Composer({
           </div>
         )}
         <form ref={formRef} className="command-dock lc-composer__form" onSubmit={submit}>
+          {commandAsk !== undefined && <CommandAsk lines={commandAsk.lines} onAllow={commandAsk.onAllow} onNotNow={commandAsk.onNotNow} />}
           {cloud?.on === true && cloud.where === 'claude' && cloud.environment !== undefined && <CloudEnvironmentField {...cloud.environment} />}
           <VoiceBeam className={`lc-composerbeam${voice === 'listening' ? ' is-listening' : ''}`} active={voice === 'listening'} level={glowLevel} theme="auto" colorVariant="colorful" reach={1.5}>
           <div className="lc-composer__box" onMouseDown={pressBox}>
+            {commandMode && <CommandModeNote />}
             <textarea
               ref={field}
               value={value}
               onChange={(changeEvent) => type(changeEvent.target.value)}
               onKeyDown={keyDown}
               onPaste={paste}
-              placeholder={placeholder}
+              placeholder={commandMode ? 'A command in this folder…' : placeholder}
               aria-label="Message"
               rows={1}
               maxLength={MAX_PROMPT_LENGTH}

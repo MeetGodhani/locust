@@ -3681,6 +3681,8 @@ export interface DesktopApi {
   readonly phone?: import('./phone.js').PhoneApi
   /** Your own agents (0.777): any Agent Client Protocol agent, by its command line. */
   readonly acpAgents?: import('./acp-agents.js').AcpAgentsApi
+  /** A `!` in the chat box, and Markdown files that become slash commands. */
+  readonly ownCommands?: import('./own-commands.js').OwnCommandsApi
   readQueuedMessages(): Promise<QueuedMessagesResponse>
   writeQueuedMessages(rows: readonly SavedQueuedMessage[]): Promise<QueuedMessagesResponse>
   readonly platform: string

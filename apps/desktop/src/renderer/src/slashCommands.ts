@@ -28,6 +28,8 @@ export type SlashAction =
   | { readonly kind: 'swarm' }
   /** One of the runtime's own commands (0.426): written into the box, to be sent as the message. */
   | { readonly kind: 'runtime' }
+  /** One of the person's own commands: the expanded prompt is written into the box, and nothing is sent. */
+  | { readonly kind: 'own'; readonly source: 'global' | 'project' }
 
 export interface SlashCommand {
   /** Typed after the slash, lowercase. */
@@ -80,9 +82,9 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = [
  * never addressed to it.
  */
 export function slashQuery(text: string): string | undefined {
-  // Letters, digits and the marks a runtime's command names carry --
-  // `security-review`, `plugin:skill` (0.426).
-  const match = /^\/([A-Za-z0-9:._-]*)$/.exec(text.trim())
+  // Letters, digits and the marks a command name carries --
+  // `security-review`, `plugin:skill` (0.426), and a nested file `team/review`.
+  const match = /^\/([A-Za-z0-9:._/-]*)$/.exec(text.trim())
   return match === null ? undefined : (match[1] ?? '').toLowerCase()
 }
 

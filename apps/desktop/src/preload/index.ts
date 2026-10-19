@@ -1,6 +1,7 @@
 import { AGENT_ACCOUNTS_CHANNEL, type AccountAction, type AgentAccountsState } from '../shared/agent-accounts.js'
 import { contextBridge, ipcRenderer } from 'electron'
 import { TERMINAL_SHELLS, TERMINAL_CREATE, TERMINAL_INPUT, TERMINAL_RESIZE, TERMINAL_CLOSE, TERMINAL_EVENT, TERMINAL_LINK, TERMINAL_COPY, type TerminalApi } from '../shared/terminal.js'
+import { OWN_COMMAND_ALLOW, OWN_COMMAND_DONE, OWN_COMMAND_EXPAND, OWN_COMMAND_LIST, OWN_COMMAND_OPEN, OWN_COMMAND_RUN, OWN_COMMAND_STOP, type OwnCommandResult, type OwnCommandsApi } from '../shared/own-commands.js'
 import {
   BROWSER_BACK_CHANNEL,
   BROWSER_BOUNDS_CHANNEL,
@@ -497,6 +498,19 @@ const desktopApi: DesktopApi = {
     save: (name, commandLine) => ipcRenderer.invoke(ACP_AGENTS_SAVE_CHANNEL, name, commandLine),
     remove: (id) => ipcRenderer.invoke(ACP_AGENTS_REMOVE_CHANNEL, id)
   },
+  ownCommands: {
+    list: (context) => ipcRenderer.invoke(OWN_COMMAND_LIST, context),
+    expand: (request) => ipcRenderer.invoke(OWN_COMMAND_EXPAND, request),
+    allow: (context) => ipcRenderer.invoke(OWN_COMMAND_ALLOW, context),
+    openFolder: (which, context) => ipcRenderer.invoke(OWN_COMMAND_OPEN, { which, ...context }),
+    run: (context, command) => ipcRenderer.invoke(OWN_COMMAND_RUN, { ...context, command }),
+    stop: (id) => ipcRenderer.invoke(OWN_COMMAND_STOP, id),
+    onDone: (listener) => {
+      const receive = (_event: Electron.IpcRendererEvent, result: OwnCommandResult): void => { listener(result) }
+      ipcRenderer.on(OWN_COMMAND_DONE, receive)
+      return () => { ipcRenderer.removeListener(OWN_COMMAND_DONE, receive) }
+    }
+  } satisfies OwnCommandsApi,
   phone: {
     settings: () => ipcRenderer.invoke(PHONE_SETTINGS_CHANNEL),
     setEnabled: (enabled) => ipcRenderer.invoke(PHONE_SET_ENABLED_CHANNEL, enabled),

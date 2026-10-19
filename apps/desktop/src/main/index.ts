@@ -115,8 +115,10 @@ import { chosenLeaveOut, howTurnEnded } from './handoff.js'
 import { officeWordsSection } from './office-words.js'
 import { createRoutineCopies } from './routine-copy.js'
 import { openInTerminal, openProgramInTerminal, terminalRequestFor } from './open-in-terminal.js'
-import { createTerminalHost } from './terminal-host.js'
+import { createTerminalHost, terminalShells } from './terminal-host.js'
 import { registerTerminalIpc } from './terminal-ipc.js'
+import { createOwnCommandHost } from './own-command-host.js'
+import { registerOwnCommandIpc } from './own-command-ipc.js'
 import { terminalFolder } from './terminal-folder.js'
 import { TERMINAL_EVENT } from '../shared/terminal.js'
 import { policyBrowserRefusal, policyTerminalRefusal } from '../shared/organization-policy.js'
@@ -1157,6 +1159,7 @@ if (ownsSingleInstanceLock) void clearClaudeSkillCopies(claudeSkillCopies)
 let missionServiceForShutdown: CodexMissionService | undefined
 let remoteControlForShutdown: ReturnType<typeof createRemoteControl> | undefined
 let terminalForShutdown: ReturnType<typeof createTerminalHost> | undefined
+let ownCommandsForShutdown: ReturnType<typeof createOwnCommandHost> | undefined
 let browserForShutdown: ReturnType<typeof createBrowserHost> | undefined
 let queuedMessagesForShutdown: ReturnType<typeof createQueuedMessageStore> | undefined
 /** Antigravity's watches too: never disposed, they polled and wrote on through the flush (B4 lead). */
@@ -4781,6 +4784,20 @@ if (!ownsSingleInstanceLock) {
     })
     terminalForShutdown = terminalHost
     registerTerminalIpc(terminalHost, fromOwnWindow)
+    const ownCommands = createOwnCommandHost({
+      root: app.getPath('userData'),
+      refusal: () => policyTerminalRefusal(organizationPolicy),
+      shells: () => terminalShells(),
+      folder: context => terminalFolder(context, {
+        current: () => workspaceChosen ? workspacePath : undefined,
+        mission: async id => (await missionLedger.getMission(id))?.metadata,
+        folderOf: workableFolderOf,
+        ownerOf: async id => (await teammates.missionOwners())[id],
+        teammates: () => teammates.list()
+      })
+    })
+    ownCommandsForShutdown = ownCommands
+    registerOwnCommandIpc(ownCommands, fromOwnWindow)
     registerBrowserIpc(browserHost, fromOwnWindow)
 
     ipcMain.handle(OPEN_IN_TERMINAL_CHANNEL, async (event, requested: unknown) => {
@@ -9586,6 +9603,7 @@ if (ownsSingleInstanceLock) {
       deadlineMs: SHUTDOWN_DEADLINE_MS,
       work: async () => {
         await terminalForShutdown?.dispose()
+        ownCommandsForShutdown?.stopAll()
         await browserForShutdown?.dispose()
         await mcpForShutdown?.dispose()
         await voiceForShutdown?.dispose()
