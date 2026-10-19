@@ -950,7 +950,9 @@ export function Composer({
   // Compact now, from the ring (0.797, compactNow.ts): named for the conversation's runtime, not the chip's.
   const compactName = runtimeDisplayName(activeRoute?.runtime ?? route.runtime)
   const compact = context === undefined ? undefined : compactOffer({
-    runtime: activeRoute?.runtime,
+    // A turn that is still starting has no route of its own yet, and it is on the route chip's (the compact drive
+    // pressed the ring two seconds into "Starting Claude Code..." and nothing opened).
+    runtime: activeRoute?.runtime ?? (workingNow ? route.runtime : undefined),
     nextRuntime: route.runtime,
     runtimeName: compactName,
     commands: runtimeCommands,

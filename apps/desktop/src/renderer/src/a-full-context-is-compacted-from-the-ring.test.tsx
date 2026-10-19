@@ -120,6 +120,12 @@ describe('the ring in the box', () => {
     expect(html).toContain('Context: 164k of 200k used, 82%')
   })
 
+  it('is a button while a turn is still starting, before it has a route of its own', () => {
+    // The compact drive pressed the ring two seconds into "Starting Claude Code..." and nothing opened.
+    const html = renderToStaticMarkup(<Composer {...props} running activeRoute={undefined} runtimeCommands={claudeCommands} />)
+    expect(html).toContain('lc-contextring__button')
+  })
+
   it('stays a picture where it cannot', () => {
     const html = renderToStaticMarkup(<Composer {...props} runtimeCommands={{}} />)
     expect(html).toContain('lc-contextring')
