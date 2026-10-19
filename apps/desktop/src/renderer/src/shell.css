@@ -8510,7 +8510,7 @@ textarea {
    * (`.lc-sr`'s rule), and the chip keeps its icon. A missing folder keeps
    * its words: that is a warning, not a label.
    */
-  .lc-composer__controls .lc-control--folder:not(.is-missing):not(.is-caution) .lc-control__folder {
+  .lc-composer__controls .lc-control--folder:not(.is-missing) .lc-control__folder {
     position: absolute;
     width: 1px;
     height: 1px;
@@ -8623,7 +8623,7 @@ textarea {
   flex-shrink: 0;
 }
 
-.lc-composer__controls:has(.lc-compare-slots) .lc-control--folder:not(.is-missing):not(.is-caution) .lc-control__folder {
+.lc-composer__controls:has(.lc-compare-slots) .lc-control--folder:not(.is-missing) .lc-control__folder {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -20904,16 +20904,6 @@ textarea.lc-compare__judgecriteria {
 .lc-composer__controls .lc-control--folder:hover:not(:disabled) {
   background: transparent;
   color: var(--lc-text-secondary);
-}
-
-/*
- * A FOLDER LIKE HOME OR .claude (0.790): the name in amber, kept even where the row hides it, since it is a
- * warning rather than a label. The chip's own hover says why (Composer.tsx); the question comes once, at the first
- * conversation there (main/workspace.ts startHereCaution).
- */
-.lc-composer__controls .lc-control--folder.is-caution,
-.lc-composer__controls .lc-control--folder.is-caution:hover:not(:disabled) {
-  color: var(--lc-amber-text);
 }
 
 /*

@@ -2414,14 +2414,16 @@ export function Composer({
                 )}
               <button
                 type="button"
-                className={`lc-control lc-control--folder${workspacePath === undefined ? ' is-missing' : workspaceCaution !== undefined ? ' is-caution' : ''}`}
+                className={`lc-control lc-control--folder${workspacePath === undefined ? ' is-missing' : ''}`}
                 aria-haspopup="menu"
                 aria-expanded={folderOpen}
                 title={
                   workspacePath === undefined
                     ? 'No folder chosen. Every teammate works inside one project folder.'
                     : workspaceCaution !== undefined
-                      // Amber, and said (0.790): three handoffs started in .claude on 2026-10-18 with nobody noticing.
+                      // Said in the hover (0.790), in the chip's own grey since 0.803: a folder kept for its old conversations is not
+                      // a standing alarm (Colin: "having the .claude folder in yellow is triggering me a bit"). The question before
+                      // its first conversation stays.
                       ? `New conversations work in ${workspacePath}. This is ${workspaceCaution}: a teammate here reads it as its project, sign-in files included. A project folder of its own is the safer place.`
                       : workspaceMade
                         ? `Teammates work in ${workspacePath}. Locust made this folder; pick any other to work there instead.`

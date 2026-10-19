@@ -18,7 +18,7 @@ const css = readFileSync(new URL('../renderer/src/shell.css', import.meta.url), 
 const OPEN = String.fromCharCode(123)
 const CLOSE = String.fromCharCode(125)
 const query = css.indexOf(`@container (max-width: 720px) ${OPEN}`)
-const selector = '.lc-composer__controls .lc-control--folder:not(.is-missing):not(.is-caution) .lc-control__folder'
+const selector = '.lc-composer__controls .lc-control--folder:not(.is-missing) .lc-control__folder'
 const at = css.indexOf(selector, query)
 const rule = at < 0 ? '' : css.slice(at, css.indexOf(CLOSE, at))
 

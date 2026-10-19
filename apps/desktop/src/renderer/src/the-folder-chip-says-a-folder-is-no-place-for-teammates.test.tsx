@@ -4,18 +4,21 @@ import { Composer, type ComposerProps } from './components/Composer.js'
 
 /*
  * THE FOLDER CHIP SAYS A FOLDER IS NO PLACE FOR TEAMMATES, AND THE BOX ASKS BEFORE THE FIRST CONVERSATION (0.790).
- * Asked once per folder, the question is gone by the second conversation; the chip keeps saying it, in amber, with
- * why in its hover -- on 2026-10-18 three handoffs started in `.claude` while the chip read ".claude" in the same gray
- * as any project. The question is the box's own card, not a Windows dialog (Colin: "maybe make it part of the app?").
+ * Asked once per folder, the question is gone by the second conversation; the chip keeps saying why in its hover --
+ * on 2026-10-18 three handoffs started in `.claude` with nobody noticing. The question is the box's own card, not a
+ * Windows dialog (Colin: "maybe make it part of the app?"). The chip itself stays the chip's own grey (0.803): it was
+ * amber, and a person who keeps old conversations there met the warning on every one (Colin: "having the .claude
+ * folder in yellow is triggering me a bit ... please make it the normal color").
  */
 
 const props = { runtimes: [], limitedRuntimes: new Map(), discoveryPhase: 'ready', models: [], resolvedModels: new Map(), route: { runtime: 'opencode', model: 'free' }, mode: 'ask', onModeChange: () => undefined, onRouteChange: () => undefined, running: false, platform: 'win32', onChooseFolder: () => undefined } as unknown as ComposerProps
 const WHY = '.claude, where the agents keep their own settings'
 
 describe('the folder chip', () => {
-  it('turns amber for a folder like .claude and says why', () => {
+  it('says why in its hover for a folder like .claude, in the chip\'s own colour', () => {
     const html = renderToStaticMarkup(<Composer {...props} workspaceName=".claude" workspacePath="C:\Users\person\.claude" workspaceCaution={WHY} />)
-    expect(html).toMatch(/class="lc-control lc-control--folder is-caution"/)
+    expect(html).toMatch(/class="lc-control lc-control--folder"/)
+    expect(html).not.toContain('is-caution')
     expect(html).toContain('This is .claude, where the agents keep their own settings: a teammate here reads it as its project, sign-in files included.')
     // No question until a send asks it.
     expect(html).not.toContain('lc-folderask')

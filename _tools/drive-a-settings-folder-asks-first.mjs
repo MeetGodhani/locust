@@ -4,7 +4,7 @@
 //
 // The window's folder is a new, empty folder inside ~/.config: one of the folders where agents keep their own
 // settings, so Locust treats it as one, and nothing of anyone's is in it. Then:
-//   1. The folder chip is amber, and its hover says why.
+//   1. The folder chip is in its own grey (amber until 0.803), and its hover says why.
 //   2. A message sent in a new conversation does not start: the box asks, in a card over itself, and the words wait
 //      in the box. (The question was a Windows dialog for one afternoon; Colin: "maybe make it part of the app?")
 //   3. Start here: the folder is kept, and the same words go, as Send would send them.
@@ -53,7 +53,7 @@ const MESSAGE = 'Reply with the single word ready.'
 try {
   await drive.capture('the folder chip in a settings folder', async () => {
     const chip = JSON.parse(String(await drive.evaluate(`JSON.stringify({ className: document.querySelector('.lc-control--folder')?.className ?? '', title: document.querySelector('.lc-control--folder')?.title ?? '' })`)))
-    check('the folder chip is amber', chip.className.includes('is-caution'), chip.className)
+    check('the folder chip stays its own grey (0.803)', !chip.className.includes('is-caution'), chip.className)
     check('its hover says why', chip.title.includes('This is .config, where the agents keep their own settings'), chip.title.slice(0, 160))
     return JSON.stringify(chip).slice(0, 300)
   })
