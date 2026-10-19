@@ -25,6 +25,8 @@ import { folderName, ranOnLine } from '../ranOn.js'
 import { useFollowBottom } from '../useFollowBottom.js'
 import { JumpToBottom } from './JumpToBottom.js'
 import { ThreadFind } from './ThreadFind.js'
+import { PromptRail } from './PromptRail.js'
+import { promptRailLine } from '../promptRail.js'
 import { CopyButton } from './CopyButton.js'
 import { PublishedCards } from './PublishedCards.js'
 import { TurnUndo } from './TurnUndo.js'
@@ -1418,9 +1420,15 @@ onResume,
             <Icon name="pencil" size={13} />
           </button>
         )
+    const marked = words === undefined ? '' : promptRailLine(words)
     return (
       <>
-        {words !== undefined && <div className="lc-bubble"><LinkedWords text={words} />{edit}</div>}
+        {words !== undefined && (
+          <div className="lc-bubble" {...(marked.length > 0 ? { 'data-prompt-mark': marked } : {})}>
+            <LinkedWords text={words} />
+            {edit}
+          </div>
+        )}
         {notes.length > 0 && <SentNotes notes={notes} edited={edited?.()} workspacePath={workspacePath} />}
         {attached.length > 0 && (
           <div className="lc-sentfiles">
@@ -1587,6 +1595,7 @@ onResume,
 
   return (
     <div className="lc-thread" ref={follow.ref} onScroll={follow.onScroll}>
+      <PromptRail scroller={follow.ref} column={column} />
       {findRequest !== undefined && <ThreadFind request={findRequest} root={column} scroller={follow.ref} earlier={{ count: firstShown, onShowAll: showAllEarlier }} />}
       <div className="lc-thread__column" ref={column}>
         {/*

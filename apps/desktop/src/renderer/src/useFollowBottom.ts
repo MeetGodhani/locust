@@ -121,7 +121,9 @@ export function useFollowBottom(): FollowBottom {
   const watched = useRef<{ readonly node: Element; readonly observer: ResizeObserver } | undefined>(undefined)
   useLayoutEffect(() => {
     const box = ref.current
-    const content = box?.firstElementChild ?? null
+    // The prompt rail is a sticky strip ahead of the column. Watching that
+    // strip would follow a box of height zero and stop noticing the thread grow.
+    const content = box?.querySelector(':scope > .lc-thread__column') ?? box?.firstElementChild ?? null
     if (watched.current?.node === content) return
     watched.current?.observer.disconnect()
     watched.current = undefined

@@ -43,7 +43,7 @@ describe('a sent message', () => {
   it('offers Edit on every message the person typed, inside its bubble', () => {
     const html = thread({ onEditMessage: () => undefined })
     expect(edits(html)).toBe(2)
-    expect(html).toMatch(/<div class="lc-bubble">The first thing<button type="button" class="lc-bubble__edit" aria-label="Edit this message"/)
+    expect(html).toMatch(/<div class="lc-bubble"[^>]*>The first thing<button type="button" class="lc-bubble__edit" aria-label="Edit this message"/)
   })
 
   it('offers nothing while a turn runs, or where editing is not offered', () => {

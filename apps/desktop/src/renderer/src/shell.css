@@ -682,6 +682,8 @@ textarea {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  /* The prompt rail's track is this tall: the view, set again when the thread is measured. */
+  --lc-rail-view: 0px;
   /* Less the 10px gutter kept on each side, below. */
   padding: var(--lc-space-7) calc(var(--lc-space-6) - 10px);
   /*
@@ -711,6 +713,103 @@ textarea {
 
 .lc-thread__column > .lc-bubble:first-child {
   margin-top: 0;
+}
+
+/*
+ * Your own messages, as a strip at the thread's right edge. Height zero so
+ * the column does not move down to make room; the track is the view, stuck
+ * while the thread scrolls. It is hidden, in script, when that edge has no
+ * room beside the words.
+ */
+.lc-promptrail {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  flex: 0 0 auto;
+  align-self: stretch;
+  width: 100%;
+  height: 0;
+  min-height: 0;
+  pointer-events: none;
+}
+
+.lc-promptrail__track {
+  position: absolute;
+  top: var(--lc-space-7);
+  right: 2px;
+  width: 14px;
+  height: calc(var(--lc-rail-view) - 2 * var(--lc-space-7));
+  pointer-events: none;
+}
+
+.lc-promptrail__mark {
+  position: absolute;
+  left: 0;
+  width: 14px;
+  height: 14px;
+  margin: -7px 0 0;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  appearance: none;
+  color: inherit;
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.lc-promptrail__mark::before {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 4px;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--lc-text-muted);
+}
+
+.lc-promptrail__mark.is-current::before,
+.lc-promptrail__mark:hover::before,
+.lc-promptrail__mark:focus-visible::before {
+  left: 3px;
+  top: 3px;
+  width: 8px;
+  height: 8px;
+  background: var(--lc-text-primary);
+}
+
+.lc-promptrail__tip {
+  position: absolute;
+  right: calc(100% + 8px);
+  top: 50%;
+  transform: translateY(-50%);
+  width: max-content;
+  max-width: 240px;
+  padding: 6px 10px;
+  border: 1px solid var(--lc-border-card);
+  border-radius: var(--lc-radius-card);
+  background: var(--lc-bg-raised);
+  box-shadow: var(--lc-shadow-menu);
+  text-align: left;
+}
+
+.lc-promptrail__line {
+  display: block;
+  font-size: var(--lc-text-description);
+  line-height: 1.35;
+  color: var(--lc-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 220px;
+}
+
+.lc-promptrail__keys {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--lc-text-description);
+  color: var(--lc-text-muted);
 }
 
 /* A QUIET NOTE ABOUT THE TURN BESIDE IT -- not a boundary between turns.
@@ -6691,6 +6790,8 @@ textarea {
 .lc-threadfind__earlier:hover { color: var(--lc-text-primary); }
 ::highlight(lc-find) { background-color: var(--lc-find-hit); }
 ::highlight(lc-find-now) { background-color: var(--lc-find-now); color: var(--lc-find-now-text); }
+::highlight(lc-promptrail) { background-color: var(--lc-find-now); color: var(--lc-find-now-text); }
+.lc-bubble.is-railhit { box-shadow: inset 3px 0 0 var(--lc-find-now); }
 /* Keeping watch with nothing to say (0.768): the heading, when it last looked, and Look now, on one quiet line. */
 .lc-scout--watching .lc-scout__heading { flex: 0 0 auto; }
 .lc-scout__looked { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--lc-text-mono-caption); color: var(--lc-text-muted); }
