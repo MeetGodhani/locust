@@ -11,6 +11,17 @@ Settings shows this file as What's new. An entry may group its changes under
 about when they arrive on it carries `<!-- big -->` on the line under its
 heading: the home screen then shows it once, as a splash.
 
+## 0.802.0 - 2026-10-19
+
+### Improved
+
+- **A shared team brings what it knows and does.** Share team's image now carries each teammate's instructions and the first messages they offer, and their routines in this folder, as well as their names, looks and models. Routines arrive paused: on no schedule, read-only, and running only when started; a path on your computer becomes something the other person fills in. After adding, Locust says who came with instructions so you can read them first.
+- **Build a landing page is for anything.** The Home row no longer builds a coffee shop's page: it asks for a page with a headline, what it offers and a way to get in touch, and leaves the box open for you to say what it is for.
+
+### Fixed
+
+- **Add team from image follows your organization's policy.** A teammate whose model the policy does not allow comes without that model, and picks one it may use.
+
 ## 0.801.0 - 2026-10-19
 
 ### Improved
