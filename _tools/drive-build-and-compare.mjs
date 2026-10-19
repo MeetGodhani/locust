@@ -53,21 +53,23 @@ try {
   await drive.resize(1440, 900)
   await sleep(4000)
   const home = JSON.parse(String(await drive.capture('Home: Build and compare, under the agents', () => drive.evaluate(`(async () => {
-    for (let i = 0; i < 40 && !document.querySelector('.lc-buildhead'); i += 1) await new Promise((r) => setTimeout(r, 500))
+    for (let i = 0; i < 40 && !document.querySelector('.lc-homestarts'); i += 1) await new Promise((r) => setTimeout(r, 500))
     return JSON.stringify({
-      // One row of chips since 0.609 (cards before 0.607, a line of links in 0.607 and 0.608).
-      starters: [...document.querySelectorAll('.lc-buildchip .lc-buildchip__name')].map((b) => b.textContent.trim()),
+      // A row each with its own Compare since 2026-10-19 (chips 0.609, cards before 0.607, links in 0.607 and 0.608).
+      starters: [...document.querySelectorAll('.lc-homestart .lc-homestart__name')].map((b) => b.textContent.trim()),
+      compares: document.querySelectorAll('.lc-homestart .lc-homestart__compare').length,
       fits: document.scrollingElement.scrollHeight <= window.innerHeight + 1,
       overflow: [...document.querySelectorAll('*')].filter((el) => el.scrollHeight > el.clientHeight + 1 && getComputedStyle(el).overflowY === 'auto').map((el) => el.className.toString().split(' ')[0] + ':' + (el.scrollHeight - el.clientHeight)).slice(0, 4)
     })
   })()`))))
   say(`  home: ${JSON.stringify(home)}`)
-  check('Home offers three things to build and compare, in one row', home.starters?.join('|') === 'Landing page|Sales dashboard|Arcade game', JSON.stringify(home))
+  check('Home offers four starters, each with its own Compare', home.starters?.join('|') === 'Plan before building|Debug an issue|Review my changes|Build a landing page' && home.compares === 4, JSON.stringify(home))
+  check('Home still fits a 1440x900 window', home.fits === true, JSON.stringify(home))
 
   // 0.460, as Arena: the card puts the words in the box and TWO models beside
   // them, each its own dropdown; each is set to a free model from its own.
   const started = JSON.parse(String(await drive.capture('A landing page: its words in the box, Edit, two model dropdowns', () => drive.evaluate(`(async () => {
-    ;[...document.querySelectorAll('.lc-buildchip')].find((b) => b.querySelector('.lc-buildchip__name')?.textContent.trim() === 'Landing page')?.click()
+    ;[...document.querySelectorAll('.lc-homestart')].find((row) => row.querySelector('.lc-homestart__name')?.textContent.trim() === 'Build a landing page')?.querySelector('.lc-homestart__compare')?.click()
     await new Promise((r) => setTimeout(r, 900))
     // Direct, Compare or Blind lives in the chat mode chip since 0.451.
     const on = document.querySelector('.lc-control--chatmode')?.getAttribute('aria-label')?.replace('Chat mode: ', '') ?? ''

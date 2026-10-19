@@ -72,7 +72,7 @@ const check = (what, ok, detail) => {
 const read = async () => JSON.parse(String(await drive.evaluate(`(() => {
   const head = document.querySelector('.lc-agenthead')
   const box = (el) => { if (!el) return null; const r = el.getBoundingClientRect(); return { w: Math.round(r.width), h: Math.round(r.height), top: Math.round(r.top) } }
-  const starters = document.querySelector('.lc-buildhead')
+  const starters = document.querySelector('.lc-homestarts')
   return JSON.stringify({
     label: head?.querySelector('.lc-agenthead__label')?.innerText.trim() ?? null,
     note: head?.querySelector('.lc-agenthead__note')?.innerText.trim() ?? null,
@@ -82,9 +82,11 @@ const read = async () => JSON.parse(String(await drive.evaluate(`(() => {
     // the control's record on the 0.606 package is the before.
     line: starters ? starters.innerText.replace(/\\s+/g, ' ').trim() : null,
     lineBox: box(starters),
-    links: starters ? [...starters.querySelectorAll('.lc-buildchip')].map((b) => b.innerText.replace(/\\s+/g, ' ').trim()) : [],
+    links: starters ? [...starters.querySelectorAll('.lc-homestart__name')].map((b) => b.innerText.replace(/\\s+/g, ' ').trim()) : [],
+    compares: starters ? starters.querySelectorAll('.lc-homestart__compare').length : 0,
+    fits: document.scrollingElement.scrollHeight <= window.innerHeight + 1,
     // 0.610, Colin's mockup: Compare once, at the starters' end; the accounts a quiet unboxed line; one left edge.
-    compareInRow: starters?.querySelector('.lc-buildhead__compare')?.innerText.trim() ?? null,
+    compareInRow: starters?.querySelector('.lc-homestarts__anything')?.innerText.trim() ?? null,
     boxed: head ? (() => { const s = getComputedStyle(head); return s.backgroundColor !== 'rgba(0, 0, 0, 0)' || s.borderLeftWidth !== '0px' })() : null,
     edges: [document.querySelector('.lc-hometeam__head'), head?.querySelector('.lc-agenthead__label'), starters?.querySelector('.lc-agenthead__label')].map((el) => el ? Math.round(el.getBoundingClientRect().left) : null),
     intro: document.querySelector('.lc-intro') !== null,
@@ -114,18 +116,28 @@ try {
     check(`at ${String(w)} every label starts at one left edge`, seen.edges.every((x) => x !== null && Math.abs(x - seen.edges[0]) <= 1), JSON.stringify(seen.edges))
     check(`at ${String(w)} the first-run sentence is not on a team's Home`, seen.intro === false, String(seen.intro))
     check(`at ${String(w)} the team's heading counts the team`, /^your team\s*4$/i.test(seen.teamHead ?? ''), JSON.stringify(seen.teamHead))
-    check(`at ${String(w)} the starters are one row of three chips`, seen.links.length === 3 && seen.lineBox !== null && seen.lineBox.h < 44, JSON.stringify([seen.links, seen.lineBox]))
-    check(`at ${String(w)} the chips name what each makes`, JSON.stringify(seen.links) === JSON.stringify(['Landing page', 'Sales dashboard', 'Arcade game']), JSON.stringify(seen.links))
+    check(`at ${String(w)} the starters are four rows, each with its own Compare`, seen.links.length === 4 && seen.compares === 4, JSON.stringify([seen.links, seen.compares, seen.lineBox]))
+    check(`at ${String(w)} the rows say what each starts`, JSON.stringify(seen.links) === JSON.stringify(['Plan before building', 'Debug an issue', 'Review my changes', 'Build a landing page']), JSON.stringify(seen.links))
+    // A menu's height a row: the four and their heading stay under 180 px (the 0.609 chips were one line).
+    check(`at ${String(w)} the rows are compact`, seen.lineBox !== null && seen.lineBox.h <= 180, JSON.stringify(seen.lineBox))
   }
-  // Pressing the first link fills the box with the landing-page ask, Compare on.
-  await drive.evaluate(`document.querySelector('.lc-buildchip')?.click()`)
+  // Pressing the landing page's row fills the box with its ask for the teammate (its Compare is the other button).
+  await drive.evaluate(`[...document.querySelectorAll('.lc-homestart')].find((row) => row.querySelector('.lc-homestart__name')?.textContent.trim() === 'Build a landing page')?.querySelector('.lc-homestart__start')?.click()`)
   await sleep(1200)
   const after = await read()
-  await drive.capture('after pressing the Landing page chip', async () => JSON.stringify({ composer: after.composer.slice(0, 120) }))
-  check('pressing the Landing page chip fills the box with that ask', /coffee shop/.test(after.composer), after.composer.slice(0, 120))
+  await drive.capture('after pressing the landing page row', async () => JSON.stringify({ composer: after.composer.slice(0, 120) }))
+  check('pressing the landing page row fills the box with that ask', /coffee shop/.test(after.composer), after.composer.slice(0, 120))
   // Direct, Compare or Blind lives in the chat mode chip (0.451), as drive-build-and-compare reads it.
-  const mode = String(await drive.evaluate(`document.querySelector('.lc-control--chatmode')?.getAttribute('aria-label')?.replace('Chat mode: ', '') ?? ''`))
-  check('and turns Compare on, as the card did', /compare/i.test(mode), `chat mode: ${mode}`)
+  const chatMode = async () => String(await drive.evaluate(`document.querySelector('.lc-control--chatmode')?.getAttribute('aria-label')?.replace('Chat mode: ', '') ?? ''`))
+  const direct = await chatMode()
+  check('and leaves it for the teammate: Compare stays off', !/compare|blind/i.test(direct), `chat mode: ${direct}`)
+  // The row's own Compare puts the same ask in a comparison of two models.
+  await drive.evaluate(`[...document.querySelectorAll('.lc-homestart')].find((row) => row.querySelector('.lc-homestart__name')?.textContent.trim() === 'Build a landing page')?.querySelector('.lc-homestart__compare')?.click()`)
+  await sleep(1200)
+  const compared = await read()
+  const compareMode = await chatMode()
+  await drive.capture('after pressing the landing page row\'s Compare', async () => JSON.stringify({ composer: compared.composer.slice(0, 120), mode: compareMode }))
+  check('its Compare turns Compare on, with the same ask in the box', /compare|blind/i.test(compareMode) && /coffee shop/.test(compared.composer), `chat mode: ${compareMode}`)
   say(failures === 0 ? '\nHOME SAYS CONNECTED ACCOUNTS PASSED' : `\nHOME SAYS CONNECTED ACCOUNTS: ${String(failures)} FAILED`)
 } catch (error) {
   failures += 1

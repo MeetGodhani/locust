@@ -6177,20 +6177,118 @@ textarea {
 
 /* The list folded to one line when nothing on it needs the person
    (FirstLaunch, `folded`): what is ready, by name, and the way to the rest. */
-/* Build and compare (0.448): one quiet line under the agents, its starters as small pills. */
-/* The Compare starters as one row of chips (0.609). The three cards of 0.460
-   took a row of Home; the one line of links of 0.607 read as a footnote
-   (Colin, 2026-10-04: "looks trashy compared to what we had"). A chip each
-   -- the drawn thing on its tile (BuildIcon), the name -- is one line tall
-   and still an object to press. */
-.lc-buildhead {
+/* The starters on Home (2026-10-19, StarterList.tsx): a row each -- an icon, what it does, a line about it -- and a
+   quiet Compare beside it. They replace the "Try two models on" chips (0.609). One left edge with the team and the
+   accounts, as the chips had (0.610), and rows no taller than a menu's, so Home still fits a 1440x900 window. */
+.lc-homestarts {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.lc-homestarts__head {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
+  justify-content: space-between;
   gap: 8px;
-  /* One left edge with the team and the accounts (0.610): 14px in, as the
-     boxed line had it, put three labels at three edges. */
+}
+
+.lc-homestarts__list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
   padding: 0;
+  list-style: none;
+}
+
+.lc-homestart {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px solid var(--lc-border-hairline);
+}
+
+.lc-homestart:last-child {
+  border-bottom: 0;
+}
+
+.lc-homestart__start {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: var(--lc-radius-control);
+  background: transparent;
+  color: var(--lc-text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--lc-motion-hover) var(--lc-ease);
+}
+
+.lc-homestart__start:hover,
+.lc-homestart__start:focus-visible {
+  background: var(--lc-hover-surface-strong);
+}
+
+.lc-homestart__icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  color: var(--lc-text-secondary);
+}
+
+.lc-homestart__name {
+  flex: none;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.lc-homestart__line {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--lc-text-muted);
+  font-size: var(--lc-text-description);
+}
+
+/* Visible on every row, a touch on a phone included, and quiet until its row is pointed at. */
+.lc-homestart__compare {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--lc-text-muted);
+  font: inherit;
+  font-size: var(--lc-text-description);
+  cursor: pointer;
+  transition: color var(--lc-motion-hover) var(--lc-ease), border-color var(--lc-motion-hover) var(--lc-ease), background var(--lc-motion-hover) var(--lc-ease);
+}
+
+.lc-homestart:hover .lc-homestart__compare,
+.lc-homestart__compare:focus-visible {
+  color: var(--lc-text-secondary);
+  border-color: var(--lc-border-card);
+}
+
+.lc-homestart__compare:hover {
+  color: var(--lc-text-primary);
+  border-color: var(--lc-border-strong);
+  background: var(--lc-hover-surface-strong);
+}
+
+.lc-homestarts__anything {
+  margin-left: auto;
 }
 
 .lc-buildhead__compare {
@@ -6212,58 +6310,6 @@ textarea {
   color: var(--lc-text-primary);
 }
 
-.lc-buildhead .lc-agenthead__label {
-  margin-right: 4px;
-}
-
-.lc-buildhead__chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  min-width: 0;
-}
-
-.lc-buildchip {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 3px 12px 3px 4px;
-  border: 1px solid var(--lc-border-card);
-  border-radius: 999px;
-  background: var(--lc-bg-raised);
-  color: var(--lc-text-secondary);
-  font: inherit;
-  font-size: var(--lc-text-description);
-  cursor: pointer;
-  transition: background var(--lc-motion-hover) var(--lc-ease), border-color var(--lc-motion-hover) var(--lc-ease);
-}
-
-.lc-buildchip:hover,
-.lc-buildchip:focus-visible {
-  background: var(--lc-hover-surface-strong);
-  border-color: var(--lc-border-strong);
-  color: var(--lc-text-primary);
-}
-
-.lc-buildchip__icon {
-  flex: none;
-  display: grid;
-  place-items: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 999px;
-  background: var(--lc-hover-surface-strong);
-  color: var(--lc-text-primary);
-}
-
-.lc-buildchip__icon svg {
-  width: 15px;
-  height: 15px;
-}
-
-.lc-buildchip__name {
-  white-space: nowrap;
-}
 
 /* The composer's chip per compared model (0.460): the route chip's own look,
    capped so two or three and the + fit the row. */

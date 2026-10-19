@@ -15,6 +15,8 @@ import type { HomeTeammate } from './HomeTeam.js'
 import { TeamTemplates } from './TeamTemplates.js'
 import type { TeamTemplate } from '../../../shared/team-templates.js'
 import { Icon } from './Icon.js'
+import { StarterList } from './StarterList.js'
+import type { Starter } from './StarterList.js'
 import { SignInButton } from './SignInButton.js'
 import { UsageChip, UsageLine, useUsageSummary } from './UsageLine.js'
 import type { UsageReadResponse } from '../../../shared/ipc.js'
@@ -68,61 +70,6 @@ function vendorUrl(runtime: string): string | undefined {
   return facts !== undefined && facts.install.kind === 'vendor' ? facts.install.url : undefined
 }
 
-/**
- * What Build and compare offers on Home: one file each, so every column can
- * show it running -- and each something two models make VISIBLY differently,
- * which is the point of putting them side by side (0.461: Colin, "get a bit
- * more creative with the options/icons? this is a bit lazy/sloppy no?").
- */
-/** The three things to try two models on: the chip's name, a line about it, the drawn thing (BuildIcon), and the ask. */
-export const COMPARE_STARTERS: readonly { readonly label: string; readonly line: string; readonly icon: BuildIconName; readonly prompt: string }[] = [
-  { label: 'Landing page', line: 'For a coffee shop', icon: 'page', prompt: 'Make index.html: a one-page landing page for a small coffee shop, with a headline, three menu items with prices, and opening hours. One file, all CSS inside it.' },
-  { label: 'Sales dashboard', line: 'Live numbers, charts', icon: 'chart', prompt: 'Make dashboard.html: a one-page sales dashboard with four headline numbers and a bar chart of the last six months, drawn with plain HTML and CSS. One file, made-up numbers, no libraries.' },
-  { label: 'Arcade game', line: 'Snake, in neon', icon: 'game', prompt: 'Make game.html: a neon-styled Snake game played with the arrow keys, with a score, a best score, and a way to restart. One file, all CSS and JavaScript inside it, no libraries.' }
-]
-
-type BuildIconName = 'page' | 'chart' | 'game'
-
-/**
- * Each starter drawn as the thing it makes (0.461): a browser window with a
- * headline, a chart with a trend over its bars, a gamepad. The app's general
- * icons (a file, a grid, a play mark) said nothing about what would come back.
- */
-function BuildIcon({ name }: { readonly name: BuildIconName }): ReactElement {
-  const common = { width: 18, height: 18, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.6, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, 'aria-hidden': true }
-  if (name === 'page') {
-    return (
-      <svg {...common}>
-        <rect x="3" y="4" width="18" height="16" rx="2.5" />
-        <path d="M3 8.5h18" />
-        <circle cx="6" cy="6.3" r="0.4" fill="currentColor" />
-        <circle cx="8" cy="6.3" r="0.4" fill="currentColor" />
-        <path d="M7 12.5h10" />
-        <path d="M7 15.5h6" />
-      </svg>
-    )
-  }
-  if (name === 'chart') {
-    return (
-      <svg {...common}>
-        <path d="M4 4v16h16" />
-        <path d="M8 16v-3" />
-        <path d="M12 16v-6" />
-        <path d="M16 16v-4" />
-        <path d="M7 10l4-3.5 3 2L19 5" />
-      </svg>
-    )
-  }
-  return (
-    <svg {...common}>
-      <path d="M7.5 7h9a4.5 4.5 0 0 1 4.3 5.8l-1.2 4a2.3 2.3 0 0 1-3.9 1l-2-2.3h-3.4l-2 2.3a2.3 2.3 0 0 1-3.9-1l-1.2-4A4.5 4.5 0 0 1 7.5 7z" />
-      <path d="M8 10v3" />
-      <path d="M6.5 11.5h3" />
-      <circle cx="15.5" cy="10.8" r="0.5" fill="currentColor" />
-      <circle cx="17" cy="12.8" r="0.5" fill="currentColor" />
-    </svg>
-  )
-}
 
 
 export function FirstLaunch({
@@ -157,6 +104,7 @@ export function FirstLaunch({
   checkingGaveUp = false,
   onCheckAgain,
   onCompare,
+  onStarter,
   onCompareStarter,
   workspaceMade = false,
   team = [],
@@ -273,8 +221,10 @@ export function FirstLaunch({
    * users to be able to try that out" -- so it is on Home, by the agents.
    */
   readonly onCompare?: () => void
-  /** Build and compare (0.448): a starter's words in the box, two or three models to tick, each building in its own copy. */
-  readonly onCompareStarter?: (prompt: string) => void
+  /** A starter's words in the box for the teammate on screen, in the mode it suits (2026-10-19, StarterList.tsx). */
+  readonly onStarter?: (starter: Starter) => void
+  /** The same words in a comparison of two models: of the work, each in its own copy, or of the answers. */
+  readonly onCompareStarter?: (starter: Starter) => void
   /**
    * Locust INVENTED the folder it is about to work in, because the one it was
    * launched from was refused. The screen has to say so; see the card below.
@@ -807,58 +757,13 @@ export function FirstLaunch({
               {usageLine}
               </div>
               {/*
-                * BUILD AND COMPARE (0.448; Arena's starters, PLAN-2026-09-28-NEXT
-                * item 4). Two or three models make the same thing, each in its
-                * own copy, and each shows it running; the one kept comes into
-                * the folder. One line, so Home still fits a 1440x900 window.
+                * STARTERS, ONE ROW EACH, COMPARE ON EVERY ONE (2026-10-19, StarterList.tsx). They were one row of
+                * "Try two models on" chips (0.609: "Landing page", "Sales dashboard", "Arcade game"), which only
+                * ever compared and held a noun each. Now a row says what a conversation can begin with, pressing
+                * it fills the box for the teammate, and its Compare fills the same words for two models.
                 */}
-              {onCompareStarter !== undefined && (
-                <div className="lc-buildhead">
-                  {/*
-                    * What happens, not what the feature is called (0.461).
-                    * Colin: "for 'build and compare' i feel like theres
-                    * something better to let the user know whats happening".
-                    * The row reads as one sentence: try two models on a
-                    * landing page.
-                    *
-                    * ONE ROW OF CHIPS (0.609). The three cards of 0.460 took
-                    * a row of Home; the one line of links of 0.607 read as a
-                    * footnote (Colin, 2026-10-04: "looks trashy compared to
-                    * what we had"). A chip each -- the drawn thing on its
-                    * tile, the name -- is one line tall and still an object
-                    * to press: it puts the words in the box and two models
-                    * beside them, each its own dropdown; Send starts both.
-                    */}
-                  <span className="lc-agenthead__label">Try two models on</span>
-                  <div className="lc-buildhead__chips">
-                    {COMPARE_STARTERS.map((starter) => (
-                      <button
-                        key={starter.label}
-                        type="button"
-                        className="lc-buildchip"
-                        title={`Two models build this side by side, each in its own copy; you keep the one you like. ${starter.line}. The ask: ${starter.prompt}`}
-                        onClick={() => onCompareStarter(starter.prompt)}
-                      >
-                        <span className="lc-buildchip__icon" aria-hidden="true">
-                          <BuildIcon name={starter.icon} />
-                        </span>
-                        <span className="lc-buildchip__name">{starter.label}</span>
-                      </button>
-                    ))}
-                  </div>
-                  {/*
-                    * COMPARE, ONCE, BESIDE ITS STARTERS (0.610). It was a button
-                    * in the accounts line and the starters under it -- Compare
-                    * offered twice (Colin's mockup, 2026-10-04). The name stays
-                    * "Compare models": six drives and the composer say it so.
-                    */}
-                  {onCompare !== undefined && (
-                    <button type="button" className="lc-buildhead__compare" title="Ask two or three models the same thing and see the answers side by side" onClick={onCompare}>
-                      Compare models
-                      <Icon name="chevron-right" size={12} />
-                    </button>
-                  )}
-                </div>
+              {onStarter !== undefined && onCompareStarter !== undefined && (
+                <StarterList onStart={onStarter} onCompareStart={onCompareStarter} {...(onCompare === undefined ? {} : { onCompare })} />
               )}
               </>
             )

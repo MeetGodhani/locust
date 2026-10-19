@@ -9103,10 +9103,17 @@ export default function App(): ReactElement {
                   setCompareOn(true)
                   setPickerRequest((count) => count + 1)
                 }}
-                onCompareStarter={(prompt) => {
+                onStarter={(starter) => {
+                  // The teammate on screen, in the mode the starter suits; the words wait in the box (StarterList.tsx).
+                  setCompareOn(false)
+                  if (starter.mode !== undefined) setMode(starter.mode)
+                  setComposerFill((current) => ({ text: starter.prompt, seq: (current?.seq ?? 0) + 1 }))
+                }}
+                onCompareStarter={(starter) => {
                   setCompareOn(true)
-                  setCompareChanges(true)
-                  setComposerFill((current) => ({ text: prompt, seq: (current?.seq ?? 0) + 1 }))
+                  // The work (each model in its own copy) or the answers, as the starter asks.
+                  setCompareChanges(starter.compareChanges)
+                  setComposerFill((current) => ({ text: starter.prompt, seq: (current?.seq ?? 0) + 1 }))
                   // Two models already chosen, each its own dropdown (0.460, as
                   // Arena): the words and the models are in the box, and Send
                   // is the next press. Only with fewer than two to offer does
