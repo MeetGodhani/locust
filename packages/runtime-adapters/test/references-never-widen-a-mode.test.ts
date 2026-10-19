@@ -13,14 +13,18 @@ describe('references never widen a mode', () => {
       expect(command.args).not.toContain(folder)
     }
   })
-  it('Claude adds a reference only when its existing tools cannot edit or run commands', () => {
+  it('Claude adds references without changing its tools, with scoped Edit protection', () => {
     const args = createClaudePrintCommand(executable, { ...options, sandbox: 'read-only' }).args
     expect(args.slice(args.indexOf('--add-dir'), args.indexOf('--add-dir') + 2)).toEqual(['--add-dir', folder])
     expect(args[args.indexOf('--tools') + 1]).not.toMatch(/\b(?:Edit|Write|Bash)\b/)
-    for (const sandbox of ['workspace-write', 'full-access'] as const) {
-      const before = createClaudePrintCommand(executable, { workspacePath: options.workspacePath, sandbox }).args
-      expect(createClaudePrintCommand(executable, { ...options, sandbox }).args).toEqual(before)
-    }
+    expect(args).not.toContain('--disallowedTools')
+    const editing = createClaudePrintCommand(executable, { ...options, sandbox: 'workspace-write' }).args
+    expect(editing).toContain('--add-dir')
+    expect(editing).toContain('Edit(//c/references/design kit/**)')
+    const beforeEdit = createClaudePrintCommand(executable, { workspacePath: options.workspacePath, sandbox: 'workspace-write' }).args
+    expect(editing[editing.indexOf('--tools') + 1]).toBe(beforeEdit[beforeEdit.indexOf('--tools') + 1])
+    const before = createClaudePrintCommand(executable, { workspacePath: options.workspacePath, sandbox: 'full-access' }).args
+    expect(createClaudePrintCommand(executable, { ...options, sandbox: 'full-access' }).args).toEqual(before)
   })
   it('OpenCode adds only named reference reads while every write denial and bash rule stays intact', () => {
     const before = JSON.parse(openCodeModeEnv({ sandbox: 'read-only' }).OPENCODE_CONFIG_CONTENT!)

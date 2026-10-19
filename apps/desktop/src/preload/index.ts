@@ -935,6 +935,7 @@ const desktopApi: DesktopApi = {
     ipcRenderer.invoke(TEAMMATE_FOLDER_CHANNEL, { teammateId, clear: clear === true }) as Promise<TeammateFolderResponse>,
   listWorktrees: () => ipcRenderer.invoke(WORKTREE_LIST_CHANNEL) as Promise<WorktreeListResponse>,
   readMission: (missionId: string) => ipcRenderer.invoke(MISSION_READ_CHANNEL, missionId) as Promise<MissionReadResponse>,
+  readContextBreakdown: (missionId) => ipcRenderer.invoke('mission:claude-context', missionId),
   references: (request) => ipcRenderer.invoke('conversation:references', request),
   carryOn: (missionId: string, route: CarryOnRoute) => ipcRenderer.invoke(CARRY_ON_CHANNEL, missionId, route) as Promise<CarryOnResponse>,
   removeWorktree: (teammateId: string, discard?: readonly string[]) => ipcRenderer.invoke(WORKTREE_REMOVE_CHANNEL, teammateId, discard) as Promise<WorktreeListResponse>,

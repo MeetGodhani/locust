@@ -1,4 +1,5 @@
 import type { ReactElement } from 'react'
+import { contextAdvice, contextCategories, contextTokens, type ClaudeContextBreakdown } from '../../../shared/context-breakdown.js'
 
 import { compactAfterTurn, compactConsequence } from '../compactNow.js'
 import type { CompactOffer } from '../compactNow.js'
@@ -99,12 +100,14 @@ export function ContextRingMenu({
   conversationCost,
   offer,
   runtimeName,
+  breakdown,
   onCompact
 }: {
   readonly reading: ContextReading
   readonly conversationCost?: string
   readonly offer: CompactOffer
   readonly runtimeName: string
+  readonly breakdown?: ClaudeContextBreakdown
   readonly onCompact: () => void
 }): ReactElement {
   return (
@@ -113,6 +116,14 @@ export function ContextRingMenu({
         <span>{contextSentence(reading)}</span>
         {conversationCost !== undefined && <span className="lc-menu__headnote">This conversation: {conversationCost}</span>}
       </p>
+      {breakdown !== undefined && <div className="lc-contextbreakdown" role="group" aria-label="Context by category">
+        <p className="lc-menu__headnote">Estimated by Claude Code</p>
+        <ul>{contextCategories(breakdown).map((row) => <li key={row.name} className={`lc-contextbreakdown__row${row.name.toLowerCase() === 'free space' ? ' is-free' : ''}`}>
+          <span className="lc-contextbreakdown__label"><span>{row.name}</span><span>{contextTokens(row.tokens)}</span></span>
+          <span className="lc-contextbreakdown__track" aria-hidden="true"><span style={{ width: `${Math.min(100, row.tokens / breakdown.window * 100)}%` }} /></span>
+        </li>)}</ul>
+        {contextAdvice(breakdown) !== undefined && <p className="lc-contextbreakdown__advice">{contextAdvice(breakdown)}</p>}
+      </div>}
       <button
         type="button"
         role="menuitem"

@@ -150,17 +150,22 @@ describe('a reference never changes the selected mode', () => {
     }
   })
   it('a restricted runtime omits a grant that would make the reference writable and says why', () => {
-    for (const runtime of ['claude', 'opencode', 'copilot', 'antigravity']) {
+    for (const runtime of ['opencode', 'copilot', 'antigravity']) {
       expect(referenceAccess(runtime, 'ask', '/reference').include).toBe(true)
       expect(referenceAccess(runtime, 'accept-edits', '/reference').include).toBe(false)
       expect(referenceAccess(runtime, 'accept-edits', '/reference').note).toContain('also grant write access')
     }
   })
   it('does not pretend a folder already writable in the workspace is read-only', () => {
-    expect(referenceAccess('claude', 'accept-edits', 'C:\\project\\design', 'C:/project').note).toContain('This mode can change it')
-    expect(referenceAccess('claude', 'accept-edits', '/Project/design', '/project').include).toBe(false)
-    expect(referenceAccess('claude', 'accept-edits', '/project-other', '/project').include).toBe(false)
+    expect(referenceAccess('opencode', 'accept-edits', 'C:\\project\\design', 'C:/project').note).toContain('This mode can change it')
+    expect(referenceAccess('opencode', 'accept-edits', '/Project/design', '/project').include).toBe(false)
+    expect(referenceAccess('opencode', 'accept-edits', '/project-other', '/project').include).toBe(false)
     expect(referenceAccess('codex', 'auto', '/reference', '/project', true).include).toBe(false)
+  })
+  it('Claude Edit and Approve each keep references with their scoped read-only promise, but Auto keeps its warning', () => {
+    for (const mode of ['accept-edits', 'approve-each']) expect(referenceAccess('claude', mode, 'C:/reference')).toEqual({ include: true, note: 'For reading, not changing.' })
+    expect(referenceAccess('claude', 'accept-edits', 'C:/project/reference', 'C:/project').note).toBe('For reading, not changing.')
+    expect(referenceAccess('claude', 'auto', 'C:/reference').note).toContain('This mode can change it')
   })
   it('the every-turn brief names only attached folders and explicitly withdraws old references', () => {
     expect(referencesSection(['/reference one', '/reference two'])).toContain('for reading, not changing: "/reference one", "/reference two"')

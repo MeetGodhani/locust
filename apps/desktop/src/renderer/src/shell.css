@@ -24017,3 +24017,14 @@ textarea.lc-compare__judgecriteria {
 .lc-referencepicker__github label { display: flex; flex-direction: column; gap: var(--lc-space-2); }
 .lc-referencepicker__github input { min-width: 0; width: 100%; box-sizing: border-box; padding: var(--lc-space-2); border: 1px solid var(--lc-border-control); border-radius: var(--lc-radius-control); background: transparent; color: var(--lc-text-primary); font: inherit; }
 
+/* Estimates are quiet information inside the existing context menu, not another permission or action. */
+.lc-contextbreakdown { padding: var(--lc-space-3) var(--lc-space-5); border-bottom: 1px solid var(--lc-border-control); }
+.lc-contextbreakdown > p { margin: 0; }
+.lc-contextbreakdown ul { list-style: none; margin: var(--lc-space-3) 0; padding: 0; display: grid; gap: var(--lc-space-3); }
+.lc-contextbreakdown__label { display: flex; justify-content: space-between; gap: var(--lc-space-3); font-size: var(--lc-text-mono-label); color: var(--lc-text-primary); }
+.lc-contextbreakdown__label > span:last-child { font-family: var(--lc-font-mono); color: var(--lc-text-muted); }
+.lc-contextbreakdown__track { display: block; height: 3px; margin-top: var(--lc-space-2); border-radius: var(--lc-radius-control); background: var(--lc-hover-surface); overflow: hidden; }
+.lc-contextbreakdown__track > span { display: block; height: 100%; background: var(--lc-contextring-fill); }
+.lc-contextbreakdown__row.is-free .lc-contextbreakdown__track > span { background: var(--lc-text-muted); opacity: .4; }
+.lc-contextbreakdown__advice { font-size: var(--lc-text-mono-label); color: var(--lc-text-muted); line-height: 1.5; }
+

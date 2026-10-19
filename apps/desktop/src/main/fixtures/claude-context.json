@@ -1,0 +1,8 @@
+{
+  "type": "result",
+  "subtype": "success",
+  "is_error": false,
+  "num_turns": 0,
+  "total_cost_usd": 0,
+  "result": "## Context Usage\n\n**Model:** claude-sonnet-4-6\n**Tokens:** 45.2k / 200k (23%)\n\n### Estimated usage by category\n\n| Category | Tokens | Percentage |\n|----------|--------|------------|\n| System prompt | 3.5k | 1.8% |\n| System tools | 4.2k | 2.1% |\n| MCP tools | 1k | 0.5% |\n| MCP server instructions | 400 | 0.2% |\n| MCP tools (deferred) | 120.4k | 60.2% |\n| System tools (deferred) | 13.7k | 6.9% |\n| Custom agents | 1.6k | 0.8% |\n| Memory files | 0 | 0.0% |\n| Skills | 10k | 5.0% |\n| Messages | 24.5k | 12.3% |\n| Free space | 121.8k | 60.9% |\n| Autocompact buffer | 33k | 16.5% |\n\n### MCP Tools\n\n| Tool | Server | Tokens |\n|------|--------|--------|\n| fixture_tool | fixture | 1k |\n"
+}

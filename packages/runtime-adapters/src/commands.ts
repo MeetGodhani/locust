@@ -841,6 +841,17 @@ export function createCodexExecCommand(
   return baseSpec("codex", executable, options.workspacePath, args, { sandbox: sandboxArgument(options.sandbox) });
 }
 
+/** Claude's file permissions use Edit for Edit, Write and NotebookEdit, and // for an absolute path. */
+export function claudeReferenceDenyRule(folder: string): string {
+  let path = requireText(folder, "Reference folder").replace(/\\/g, "/").replace(/\/+$/, "");
+  if (/^[A-Za-z]:\//.test(path)) path = `/${path[0]!.toLowerCase()}${path.slice(2)}`;
+  // A rule must name one literal folder, not a glob or a second tool. Never grant an unprotected reference.
+  if (!path.startsWith("/") || path.startsWith("//") || /[\r\n,()*?\[\]]/.test(path)) {
+    throw new Error("This reference path cannot be protected by Claude Code's file rules. Nothing was sent; remove it or choose a local folder without pattern characters.");
+  }
+  return `Edit(/${path}/**)`;
+}
+
 export function createClaudePrintCommand(
   executable: ExecutableLaunch,
   options: RuntimeCommandOptions,
@@ -1014,7 +1025,12 @@ export function createClaudePrintCommand(
     const folder = requireText(dir, "Skill folder");
     args.push("--plugin-dir", folder, ...(auto ? [] : ["--add-dir", folder]));
   }
-  if (!editing) for (const folder of options.referenceFolders ?? []) args.push("--add-dir", requireText(folder, "Reference folder"));
+  if (!auto) {
+    for (const folder of options.referenceFolders ?? []) args.push("--add-dir", requireText(folder, "Reference folder"));
+    if (editing && (options.referenceFolders?.length ?? 0) > 0) {
+      args.push("--disallowedTools", ...options.referenceFolders!.map(claudeReferenceDenyRule));
+    }
+  }
   if (options.model !== undefined) {
     args.push("--model", requireText(options.model, "Model"));
   }
@@ -1030,6 +1046,21 @@ export function createClaudePrintCommand(
     sandbox: sandboxArgument(options.sandbox),
     oversizedStandIns: true,
   });
+}
+
+/** Reuse the turn's complete argv. Only transport and session persistence differ for the free built-in command. */
+export function createClaudeContextCommand(turn: RuntimeCommandSpec, sessionId: string): RuntimeCommandSpec {
+  if (turn.runtime !== "claude" || !turn.args.includes("--print") || turn.args.includes("--disable-slash-commands") || turn.args.some((arg) => arg.includes("…"))) throw new Error("The Claude launch flags are unavailable.");
+  if (!/^[A-Za-z0-9_-]{1,128}$/.test(sessionId)) throw new Error("The Claude session is unavailable.");
+  const args: string[] = [];
+  for (let index = 0; index < turn.args.length; index++) {
+    const arg = turn.args[index]!;
+    if (["--input-format", "--output-format", "--resume"].includes(arg)) { index++; continue; }
+    if (["--verbose", "--include-partial-messages", "--fork-session", "--no-session-persistence"].includes(arg)) continue;
+    args.push(arg);
+  }
+  args.push("--output-format", "json", "--no-session-persistence", "--resume", sessionId, "--", "/context");
+  return { ...turn, args, stdin: "none" };
 }
 
 /**

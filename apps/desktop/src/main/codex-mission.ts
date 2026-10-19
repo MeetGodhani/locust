@@ -85,6 +85,7 @@ import type { MissionPeerContext } from './workroom-briefing.js'
 import { openCodeReadOnlySection, planSection, referencesSection } from './workroom-briefing.js'
 import { referenceAccess } from '../shared/references.js'
 import type { ReferenceStore } from './conversation-references.js'
+import type { ClaudeContextReader } from './claude-context.js'
 import { undoneNote } from './undone-note.js'
 import { briefHeld, briefPlan, compactedDuring } from './brief-sessions.js'
 import type { BriefSessions } from './brief-sessions.js'
@@ -362,6 +363,8 @@ export interface CodexMissionService {
   accountInUse(account: string): boolean
   /** Whether this transport owns a live run of that mission. */
   hasMission(missionId: string): boolean
+  /** Includes a continued turn still being prepared, before it has a ledger row or process. */
+  contextBusy(missionIds: readonly string[]): boolean
   /** The missions this transport is running right now. */
   liveMissionIds(): readonly string[]
   /**
@@ -479,6 +482,7 @@ interface CodexMissionServiceOptions {
   ) => AppServerRunProcess
   readonly ledger: MissionLedger
   readonly references?: ReferenceStore
+  readonly claudeContext?: Pick<ClaudeContextReader, 'remember' | 'beforeStart'>
   /**
    * A3.3: the person's check, after a turn that changed files -- in the
    * folder the run changed. Its answer goes to that run's thread; nothing
@@ -910,6 +914,7 @@ export function createCodexMissionService(options: CodexMissionServiceOptions): 
   const active = new Map<string, ActiveCodexMission>()
   /** Owners with a start in flight, between the guard and activation. */
   const starting = new Set<string>()
+  const contextStarting = new Map<string, string>()
   let freshClaims = 0
   /** Each live mission's consume loop, so a handoff can wait for ITS run alone. */
   const settling = new Map<string, Promise<void>>()
@@ -1628,6 +1633,8 @@ export function createCodexMissionService(options: CodexMissionServiceOptions): 
         const startLifecycleVersion = lifecycleVersion
         starting.add(claimKey)
         claimed = true
+        if (continues !== undefined) contextStarting.set(claimKey, continues)
+        if (runtime === 'claude') await options.claudeContext?.beforeStart()
         let runtimes: readonly RuntimeDiscovery[] = []
         say('looking')
         /** An agent the person added (0.777): found by its own command line, never by discovery. */
@@ -2635,6 +2642,12 @@ ${sentPrompt.trim()}`
             command: recordableCommand(command, prompt)
           })
           if (references.length > 0 || referenceIds !== undefined) await options.references?.bind(missionId, continues, references.map((item) => item.id), runCwd)
+          if (runtime === 'claude' && cloud === undefined) await options.claudeContext?.remember(missionId, {
+            cwd: runCwd, executablePath: command.executablePath, args: command.args, sandbox: effectiveSandbox,
+            ...(permissionBridge === undefined ? {} : { permission: permissionBridge.configPath }),
+            ...(browserMcp === undefined ? {} : { browser: browserMcp.configPath }),
+            plugins: skills?.plugins.map((plugin) => ({ name: plugin.name, dir: plugin.dir })) ?? []
+          }).catch(() => undefined)
         } catch {
           return error(
             'PERSISTENCE_FAILED',
@@ -3040,6 +3053,7 @@ ${sentPrompt.trim()}`
       } finally {
         if (referenceRun !== undefined && !active.has(referenceRun)) await options.references?.release(referenceRun).catch(() => undefined)
         if (claimed) starting.delete(claimKey)
+        contextStarting.delete(claimKey)
         startOperations.delete(startOperation)
         resolveStartOperation()
       }
@@ -3334,6 +3348,9 @@ ${sentPrompt.trim()}`
     accountInUse(account: string): boolean { return starting.size > 0 || [...active.values()].some(mission => mission.account === account) },
     hasMission(missionId: string): boolean {
       return [...active.values()].some((mission) => mission.missionId === missionId)
+    },
+    contextBusy(missionIds: readonly string[]): boolean {
+      return [...contextStarting.values()].some((id) => missionIds.includes(id)) || [...active.values()].some((mission) => missionIds.includes(mission.missionId))
     },
 
     async steer(runId: string, text: string): Promise<boolean> {

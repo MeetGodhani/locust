@@ -37,6 +37,7 @@ import { MetalSend } from './MetalSend.js'
 import type { MetalMotion, MetalPreset, MetalStrength } from '../../../shared/ipc.js'
 import { isImagePath } from '../../../shared/image-files.js'
 import { ContextRing, ContextRingMenu } from './ContextRing.js'
+import type { ClaudeContextBreakdown } from '../../../shared/context-breakdown.js'
 import { compactOffer } from '../compactNow.js'
 import { connectorMentioned, connectorsOffHint } from '../connectorsOff.js'
 import { ArrowUpGlyph, ChevronGlyph } from './ChatGlyphs.js'
@@ -713,6 +714,7 @@ export function Composer({
   const [referencesSent, setReferencesSent] = useState(0)
   // The context ring's menu (0.797): what it says, and Compact now.
   const [contextOpen, setContextOpen] = useState(false)
+  const [contextBreakdown, setContextBreakdown] = useState<ClaudeContextBreakdown>()
   /** Which comparison column's picker is open, or the + for a third (0.460). */
   const [slotPicker, setSlotPicker] = useState<number | 'add' | undefined>(undefined)
   /** Which comparison column's effort panel is open (0.490). */
@@ -1049,6 +1051,14 @@ export function Composer({
     queued: queued !== undefined,
     elsewhere: comparing || cloud?.on === true || cloud?.computer?.on === true || background?.on === true || editingEarlier !== undefined
   })
+  // The ring menu's breakdown (0.806): Claude Code's own /context for the last finished turn, read when the menu opens.
+  useEffect(() => {
+    let live = true
+    setContextBreakdown(undefined)
+    if (!contextOpen || workingNow || activeRoute?.runtime !== 'claude' || referenceMissionId === undefined) return
+    void window.desktop?.readContextBreakdown?.(referenceMissionId).then((result) => { if (live) setContextBreakdown(result) }).catch(() => undefined)
+    return () => { live = false }
+  }, [contextOpen, workingNow, activeRoute?.runtime, referenceMissionId])
   /** Setting up a comparison (not asking one on screen): a chip per model, as Arena (0.460). */
   /*
    * Not while the picker is open on fewer than two (0.678): the chips took its place at the first tick, the
@@ -2466,6 +2476,7 @@ export function Composer({
                       {...(conversationCost === undefined ? {} : { conversationCost })}
                       offer={compact}
                       runtimeName={compactName}
+                      {...(contextBreakdown === undefined ? {} : { breakdown: contextBreakdown })}
                       onCompact={() => {
                         setContextOpen(false)
                         // As typing it would send it, with the box left as it is; in line behind a running turn.

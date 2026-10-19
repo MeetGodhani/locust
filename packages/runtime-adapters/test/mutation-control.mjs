@@ -38,9 +38,9 @@ const ANTIGRAVITY_EVENTS = join(ROOT, 'src', 'antigravity-events.ts')
 const MUTATIONS = [
   {
     file: COMMANDS, name: 'references: Claude cannot read the selected reference',
-    from: 'if (!editing) for (const folder of options.referenceFolders ?? [])',
-    to: 'if (false) for (const folder of options.referenceFolders ?? [])',
-    expect: 'Claude adds a reference only when its existing tools cannot edit or run commands'
+    from: 'if (!auto) {\n    for (const folder of options.referenceFolders ?? [])',
+    to: 'if (false) {\n    for (const folder of options.referenceFolders ?? [])',
+    expect: 'Claude adds references without changing its tools, with scoped Edit protection'
   },
   {
     file: COMMANDS, name: 'references: OpenCode refuses every reference read',

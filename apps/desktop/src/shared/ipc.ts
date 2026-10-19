@@ -4112,6 +4112,7 @@ export interface DesktopApi {
    * it here.
    */
   readMission(missionId: string): Promise<MissionReadResponse>
+  readContextBreakdown?(missionId: string): Promise<import('./context-breakdown.js').ClaudeContextBreakdown | undefined>
   references?(request: import('./references.js').ReferenceRequest): Promise<import('./references.js').ReferencesReply>
   /** A turn that ran out of its agent's plan, carried on with `route` (0.774, shared/carry-on.ts): the card's one press. */
   carryOn(missionId: string, route: CarryOnRoute): Promise<CarryOnResponse>

@@ -22,6 +22,7 @@ export type ReferenceRequest =
 export function referenceAccess(runtime: string, mode: string, path: string, cwd?: string, cloud = false): { readonly include: boolean; readonly note: string } {
   if (cloud) return { include: false, note: 'Not shared: this reference is on this computer, not your cloud computer.' }
   if (mode === 'auto') return { include: true, note: 'This mode can change it. The brief asks for reading, not changing.' }
+  if (runtime === 'claude') return { include: true, note: 'For reading, not changing.' }
   const normalize = (value: string): string => {
     const path = value.replace(/\\/g, '/').replace(/\/+$/, '')
     return /^[A-Za-z]:\//.test(path) ? path.toLowerCase() : path

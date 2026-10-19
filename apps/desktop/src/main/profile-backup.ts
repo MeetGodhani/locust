@@ -80,6 +80,7 @@ const NEVER_COPIED = new Set(['.writable'])
  * that rebuilds itself.
  */
 export const LEFT_OUT: Readonly<Record<string, string>> = {
+  'claude-context-launches.json': 'machine-local flags for context inspection: recorded again by the next Claude turn',
   'conversation-references.json': 'reference folders belong to this machine: choose them again after a restore',
   'reference-repositories': 'shallow reference copies: downloaded again after choosing a repository',
   'reference-trash': 'recoverable old reference copies on this machine, never permanently deleted by reference cleanup',

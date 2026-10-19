@@ -200,6 +200,7 @@ export type {
 } from "./opencode-events.js";
 export { createAgyPrintCommand, parseAgyModelList } from "./commands.js";
 export { agyUserLine } from "./process-runner.js";
+export { createClaudeContextCommand, claudeReferenceDenyRule } from "./commands.js";
 export { agyDeniedSentence, agyToolTarget, createAgyEventNormalizer } from "./agy-events.js";
 export type { AgyEventNormalizer, AgyInvocationContext } from "./agy-events.js";
 export {

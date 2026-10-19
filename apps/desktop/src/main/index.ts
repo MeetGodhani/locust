@@ -1,5 +1,7 @@
 // H1: first, before any import can spawn -- no bare name is found in its working folder.
 import './no-planted-executables.js'
+import { createClaudeContextReader, prepareClaudeContextLaunch, recordedClaudeContextLaunch, type ClaudeContextReader } from './claude-context.js'
+import { CONTEXT_BREAKDOWN_CHANNEL } from '../shared/context-breakdown.js'
 import { AGENT_ACCOUNTS_CHANNEL, accountFromRoute, supportsAccounts, type AccountAction } from '../shared/agent-accounts.js'
 import { createAgentAccounts } from './agent-accounts.js'
 import { startAccountLogin } from './agent-account-login.js'
@@ -2604,7 +2606,12 @@ if (!ownsSingleInstanceLock) {
         return { ok: false, message: error instanceof Error ? error.message : 'The reference could not be added. Your conversation is unchanged.' }
       }
     })
+    let claudeContextReader: ClaudeContextReader | undefined
     const codexMissions = createCodexMissionService({
+      claudeContext: {
+        beforeStart: async () => { await claudeContextReader?.beforeStart() },
+        remember: async (id, launch) => { await claudeContextReader?.remember(id, launch) }
+      },
       references,
       organizationPolicy,
       workspacePath,
@@ -8157,6 +8164,53 @@ if (!ownsSingleInstanceLock) {
       } catch {
         return memoryRejected('Memory could not be cleared.')
       }
+    })
+
+    claudeContextReader = createClaudeContextReader({
+      file: join(app.getPath('userData'), 'claude-context-launches.json'),
+      resolve: async (id) => {
+        const newest = await newestTurnOf(missionLedger, id)
+        const mission = await missionLedger.getMission(newest)
+        if (mission?.metadata.runtime !== 'claude' || (await cloudTurns.of(newest)) !== undefined) return undefined
+        const sessionId = runtimeThreadIdOf(mission)
+        if (sessionId === undefined) return undefined
+        const ancestors = [newest]
+        let prior = mission.metadata.continuesFrom?.missionId
+        while (prior !== undefined && !ancestors.includes(prior) && ancestors.length < 512) {
+          ancestors.push(prior)
+          prior = (await missionLedger.getMission(prior))?.metadata.continuesFrom?.missionId
+        }
+        const cwd = await references.cwd(newest) ?? await terminalFolder({ missionId: newest }, {
+          current: () => workspacePath,
+          mission: async (missionId) => (await missionLedger.getMission(missionId))?.metadata,
+          folderOf: workableFolderOf,
+          ownerOf: async (missionId) => (await teammates.missionOwners())[missionId],
+          teammates: () => teammates.list()
+        })
+        return { missionId: newest, sessionId, busy: codexMissions.contextBusy(ancestors),
+          ...(accountFromRoute(mission.metadata.resolvedRouteId) === undefined ? {} : { account: accountFromRoute(mission.metadata.resolvedRouteId) }),
+          fallback: recordedClaudeContextLaunch(mission.metadata.command, cwd, mission.metadata.sandbox)
+        }
+      },
+      prepare: async (launch, turn) => {
+        const found = (await discoverForAccount('claude', turn.account)).find((entry) => entry.id === 'claude')?.executable
+        if (found === undefined) throw new Error('Claude is unavailable.')
+        return prepareClaudeContextLaunch(launch, turn, {
+          ...(found.env === undefined ? {} : { env: found.env }),
+          permission: async (runId, missionId, cwd) => (await permissionHost.register({ runId, missionId, cwd })).configPath,
+          browser: async (runId, missionId, cwd) => (await browserHost.registerRun({ runId, missionId, teammateLabel: 'Context inspection', cwd, askApproval: async () => ({ approved: false }) })).configPath,
+          skills: async (profile) => prepareClaudeSkills({ scratchRoot: claudeSkillCopies, workspacePath: launch.cwd, ownSkills: profile.ownSkills, libraryFolder: skillLibrary.skillsFolder, auto: profile.auto }),
+          release: async (runId) => { await Promise.all([permissionHost.release(runId), browserHost.releaseRun(runId)]) }
+        })
+      },
+      ...(!app.isPackaged && process.env.LOCUST_CONTEXT_FIXTURE_PATH ? { run: async () => {
+        const { readFile } = await import('node:fs/promises')
+        return readFile(process.env.LOCUST_CONTEXT_FIXTURE_PATH!, 'utf8')
+      } } : {})
+    })
+    ipcMain.handle(CONTEXT_BREAKDOWN_CHANNEL, async (event, missionId: unknown) => {
+      if (!fromOwnWindow(event) || typeof missionId !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(missionId)) return undefined
+      return claudeContextReader?.read(missionId)
     })
 
     // H3: one mission whole, for a conversation history listed as a row.
