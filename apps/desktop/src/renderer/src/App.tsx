@@ -224,6 +224,7 @@ import { splitAttachments, withAttachments } from '../../shared/attachments.js'
 // Only `heldFor`: this file has its own `ownerOf` for live runs, which is a
 // different question from who owns a recorded mission.
 import { conversationKeys, heldFor, liveRunLastAt, routineOf } from './conversationList.js'
+import { stepConversation } from './conversationSteps.js'
 import { snoozeChoices } from './settled.js'
 import { PullRequestNewsBanner } from './components/PullRequestNewsBanner.js'
 import { ChangesPanel } from './components/ChangesPanel.js'
@@ -2391,6 +2392,9 @@ export default function App(): ReactElement {
       .catch(() => setCliArtifacts([]))
   }, [runtimeState.phase, usableKey])
   const [approvals, setApprovals] = useState<readonly MissionApprovalRequest[]>([])
+  // The keyboard's Alt+Shift+Down reads which conversations wait for you from here (conversationSteps.ts).
+  const approvalsRef = useRef(approvals)
+  approvalsRef.current = approvals
   /**
    * Notes on a teammate's diff (diffNotes.ts, 0.376), by conversation, until
    * they go with a message: moving to another conversation and back keeps
@@ -3774,6 +3778,24 @@ export default function App(): ReactElement {
       if (accel && event.key.toLowerCase() === 'i') {
         event.preventDefault()
         setInspectorOpen((open) => !open)
+        return
+      }
+      // The next or previous conversation (2026-10-19, conversationSteps.ts); with Shift, one waiting for you.
+      // An unsent message stays with its own conversation: the composer keeps one draft per conversation.
+      if (event.altKey && !accel && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) {
+        const rows = [...document.querySelectorAll<HTMLElement>('.lc-conv[data-mission-id]')]
+        const drawn = rows.map((row) => row.dataset.missionId ?? '').filter((id) => id.length > 0)
+        const shown = rows.find((row) => row.getAttribute('aria-current') === 'true')?.dataset.missionId
+        const asking = new Set(approvalsRef.current.map((request) => request.missionId))
+        const keysOf = (id: string): readonly string[] => {
+          const row = sidebarMissionsRef.current.find((entry) => entry.missionId === id)
+          return row === undefined ? [id] : conversationKeys(row)
+        }
+        const next = stepConversation(drawn, shown, event.key === 'ArrowDown' ? 1 : -1, event.shiftKey ? (id) => keysOf(id).some((key) => asking.has(key)) : undefined)
+        if (next !== undefined) {
+          event.preventDefault()
+          openMissionRef.current(next)
+        }
         return
       }
       if (!accel) return

@@ -902,6 +902,8 @@ export function Sidebar({
                     type="button"
                     className={`lc-conv${isShown(mission, selectedMissionId) ? ' is-active' : ''}`}
                     title={hover}
+                    // Alt+Down / Alt+Up walk the rows in the order they are drawn (conversationSteps.ts).
+                    data-mission-id={mission.missionId}
                     aria-current={isShown(mission, selectedMissionId) ? 'true' : undefined}
                     onContextMenu={(event) => {
                       event.preventDefault()
