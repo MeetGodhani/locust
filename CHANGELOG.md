@@ -11,6 +11,17 @@ Settings shows this file as What's new. An entry may group its changes under
 about when they arrive on it carries `<!-- big -->` on the line under its
 heading: the home screen then shows it once, as a splash.
 
+## 0.798.0 - 2026-10-19
+<!-- big -->
+
+### New
+
+- **Point at a part of a page.** In the browser beside the conversation, the pointer in its toolbar (or Ctrl+Shift+C) lets you click any part of the page. It lands in the chat box as a card with its picture, its HTML, the styles that shape it and, when the page names it, the file and line it comes from. Add a note, point at more, and Send when ready. What is typed into a form never comes along, and a password or card field is never pictured.
+
+### Improved
+
+- **Turns are about ten times lighter: a teammate's connectors are off until you tick one.** Claude Code sends every tool of every connector on your account with each message, about 170,000 tokens a turn on an account with ten of them. A teammate now carries your connectors only once one is ticked in its settings, under Connectors, and a message that names a connector it has off says so before you send it. Ticked ones work without asking, and the rest ask first.
+
 ## 0.797.0 - 2026-10-19
 <!-- big -->
 
