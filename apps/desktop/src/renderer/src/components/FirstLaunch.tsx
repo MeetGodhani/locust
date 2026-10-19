@@ -11,7 +11,7 @@ import type { AwaySummary } from '../../../shared/away.js'
 import type { PublicTeammate } from '../../../shared/ipc.js'
 import { RuntimeMark } from './RuntimeMark.js'
 import { AgentMark } from './AgentMark.js'
-import type { HomeTeammate } from './HomeTeam.js'
+import type { HomeTeammate, HomeTeamWatch } from './HomeTeam.js'
 import { TeamTemplates } from './TeamTemplates.js'
 import type { TeamTemplate } from '../../../shared/team-templates.js'
 import { Icon } from './Icon.js'
@@ -74,6 +74,7 @@ function vendorUrl(runtime: string): string | undefined {
 
 export function FirstLaunch({
   scout,
+  teamWatch,
   runtimes,
   limitedRuntimes,
   usageWindows,
@@ -154,6 +155,8 @@ export function FirstLaunch({
   readonly onMessageTeammate?: (teammateId: string) => void
   /** What Scout noticed, or the invitation to turn it on (0.756, ScoutCards.tsx): first on Home when there is any. */
   readonly scout?: ReactNode
+  /** Scout keeping watch with nothing to say (0.799): its line and Look now on its own team card (HomeTeam). */
+  readonly teamWatch?: HomeTeamWatch
   /** Since you were away (0.590): what ended while nobody was here, when there is something to say. */
   readonly away?: AwaySummary
   readonly awayTeammates?: readonly PublicTeammate[]
@@ -478,6 +481,355 @@ export function FirstLaunch({
     </>
   )
 
+  /*
+   * THE ACCOUNTS, THEN THE TEAM (0.799). Colin, 2026-10-19, Home at 1205x803 scrolled: "maybe if we move connected
+   * accounts and usage in between the teammates and crt?" With a team, the accounts and usage sit under the cover
+   * and the starters under the team, so a person reads what is connected, who is on the team, and what to begin.
+   * Before a team exists the order is the one it was: the templates first, the accounts after.
+   */
+  let startersShown = false
+  const accountsBlock = discoveryPhase !== 'ready' ? null : (() => {
+    /*
+     * Five rows reading CHECKING were five rows saying nothing at the
+     * moment a person is deciding what to click, and the transient
+     * state at that. The dot carries checking; the head note says it
+     * once with a count; words in the rows are for results -- and the
+     * result a person is choosing between is what each one costs.
+     */
+    const isChecking = (row: (typeof shown)[number]): boolean =>
+      row.runtime.installed && row.status.tag === 'CHECKING' && !checkingGaveUp && !row.connected
+    const checkingAny = shown.some(isChecking)
+    const stuckAny = shown.some((row) => row.runtime.installed && row.status.tag === 'CHECKING' && checkingGaveUp && !row.connected)
+    // One thing happening, said once at the head: while an install
+    // runs, the other rows' actions step out rather than sit dimmed
+    // with no reason (Colin, 2026-09-19, with the frame: "some of the
+    // installs were bugged").
+    const installingName = installing === undefined ? undefined : shown.find((row) => row.runtime.id === installing)?.runtime.displayName ?? installing
+    /*
+     * "ON THIS MACHINE" HAS TO MEAN ON THIS MACHINE.
+     *
+     * Both of these counted `shown.length`, which is the CATALOGUE --
+     * every agent Locust can drive, installed or not. So a box with
+     * five hung CLIs and no Antigravity read *6 on this machine · none
+     * answering*, and Antigravity is not on this machine (Grok, pass
+     * 16). The arithmetic of rows-plus-deferred came to six and the
+     * words did not.
+     *
+     * `known` is right for the other branch and stays: a machine with
+     * nothing installed genuinely has six KNOWN and none installed.
+     * The word is what changes with the claim.
+     */
+    const onThisMachine = shown.filter((row) => row.runtime.installed).length
+    const headNote = installingName !== undefined
+      ? `installing ${installingName}…`
+      : checkingAny
+      ? `checking ${String(onThisMachine)} on this machine`
+      : connected > 0
+        ? `${String(connected)} ready`
+        : stuckAny
+          ? `${String(onThisMachine)} on this machine · none answering`
+          : `${String(shown.length)} known · none installed yet`
+    /*
+     * ONE STEP FIRST, AND THE CATALOGUE WHEN IT IS ASKED FOR.
+     *
+     * Colin, 2026-09-19: "i really want a new user without tech
+     * savvyness to be able to just use the software off rip, maybe even
+     * ask them how to get the other agents working." The other agents
+     * come AFTER, in his own sentence.
+     *
+     * Measured on the first frame anybody has taken of this screen on a
+     * machine with nothing installed (`_tools/bare-machine-frame.mjs`,
+     * 2026-09-19): six rows, of which five name a product attached to
+     * an account or a subscription the person does not have -- a
+     * ChatGPT account, an Anthropic account, a Cursor account, a GitHub
+     * Copilot subscription. Every one of those five is a reason not to
+     * press anything, on a screen whose sentence one line above has
+     * already said which one to press.
+     *
+     * The on-ramp emphasis was already right and is untouched. What
+     * changes is only that the five are BEHIND A PRESS while none of
+     * them can help, and the count stays visible in the head note, so
+     * nothing is hidden -- it is deferred, and says so.
+     *
+     * The instant anything is connected this stops applying and the
+     * list is the list again: by then the question "what else can this
+     * drive" is a real question, which is the one the catalogue
+     * answers well.
+     */
+    /*
+     * A ROW THAT IS ON THIS MACHINE IS NEVER DEFERRED, whatever state
+     * it is in.
+     *
+     * The rule above is about products a person does not have and
+     * cannot use yet. An installed CLI is the opposite of that case: it
+     * is theirs, it has a state, and the state may be the one thing on
+     * the screen they need.
+     *
+     * Fable found this on 0.198.0, the day the deferral shipped, on a
+     * Linux box with four CLIs installed and hung. The screen drew ONE
+     * row while the head note read *6 on this machine · none
+     * answering*, the composer said *A coding agent is installed but
+     * not answering — Check again above*, and the four that were
+     * installed and hanging sat behind the sentence *5 others Locust
+     * can drive — they each need their own account*. Every word of that
+     * was wrong about them: they need no account, they are here, and
+     * their Check again was a press away behind a control that gave no
+     * reason to press it.
+     *
+     * My own measurement could not have caught it: the frame I designed
+     * this against was taken on a machine with nothing installed, where
+     * "not connected" and "not installed" are the same rows. They are
+     * not the same rows.
+     *
+     * `installed` and not `connected`: a signed-out Codex is installed,
+     * and the command that signs it in is on its row.
+     */
+    // How much has been done, across every agent (0.714): under the accounts, once there is anything to count.
+    const usageLine = onOpenUsage === undefined ? null : <UsageLine summary={usageSummary} onOpen={onOpenUsage} />
+    const usageChip = onOpenUsage === undefined ? null : <UsageChip summary={usageSummary} onOpen={onOpenUsage} />
+    const deferOthers = connected === 0 && !checkingAny && installing === undefined && !othersOpen
+    const drawn = deferOthers
+      ? shown.filter((row) => row.runtime.id === FREE_START_RUNTIME || row.runtime.installed)
+      : shown
+    const deferred = shown.length - drawn.length
+    /*
+     * FOLDED TO ONE LINE when it has nothing to ask of the person: a team
+     * exists (Home leads with it), something is connected, and every
+     * agent on this machine is ready -- nothing checking, stuck,
+     * installing or signed out. Then seven rows of names and versions
+     * are a status panel on the first screen (first-impressions drive,
+     * packaged 0.349), and one line says the same. The moment any of
+     * that changes the list is the list again, rows and buttons and
+     * all, because then it is the thing to act on; and Show all opens
+     * it any time.
+     *
+     * With nobody on the team, only when EVERY agent is ready (0.360).
+     * Then there is nothing to add and nothing to fix, and the seven
+     * rows beside the team templates pushed the page past a 1440x900
+     * window -- 25px over, 157px at 1366x768, the cover's middle bot
+     * cut at the top (probe-home-fits, packaged 0.359). While any
+     * agent could still be added, the rows stay: before a team exists
+     * the list is how a new person learns what else Locust can drive
+     * (Colin, 2026-09-19: "maybe even ask them how to get the other
+     * agents working").
+     */
+    const everyInstalledReady = shown.every((row) => !row.runtime.installed || row.connected)
+    const everyAgentReady = shown.every((row) => row.connected)
+    const folded =
+      !agentsOpen && connected > 0 && !checkingAny && !stuckAny && installingName === undefined && everyInstalledReady && (team.length > 0 || everyAgentReady)
+    if (folded) {
+      startersShown = true
+      const ready = shown.filter((row) => row.connected)
+      return (
+        <>
+        {/* The accounts and their usage, one block: the line costs no gap of Home's (0.714). */}
+        <div className="lc-accountsblock">
+        <div className="lc-agenthead is-folded">
+          <span className="lc-agenthead__label">Connected accounts</span>
+          <span className="lc-agenthead__note is-green">{headNote}</span>
+          {/*
+            * THEIR MARKS, NOT A LIST OF NAMES (0.383). "Codex CLI ·
+            * Claude Code · Cursor Agent · ..." was a sentence to read
+            * on a line that says nothing needs you; five marks are
+            * seen at once, as Orca shows its agents (Colin,
+            * 2026-09-26: logos "to signify which model is being used
+            * by what"). Each mark is named for a screen reader and on
+            * hover, and the line's title lists them all.
+            */}
+          {/*
+            * THE MARKS, AND ON HOVER WHAT EACH KNOWS (AgentMark, 0.389):
+            * the row is as calm as it was before usage rings (0.388),
+            * and pointing at a mark opens its name, state and usage.
+            */}
+          <span className="lc-agenthead__marks">
+            {ready.map((row) => {
+              const usage = usageWindows?.get(row.runtime.id)
+              return (
+                <AgentMark
+                  key={row.runtime.id}
+                  runtime={row.runtime.id}
+                  name={row.runtime.displayName}
+                  state={row.runtime.version === undefined || row.runtime.version === null ? 'Ready' : `Ready · ${shortVersion(row.runtime.version)}`}
+                  {...(usage === undefined ? {} : { usage })}
+                />
+              )
+            })}
+          </span>
+          {usageChip}
+          <button type="button" className="lc-agenthead__more" onClick={() => setAgentsOpen(true)}>
+            Show all
+          </button>
+        </div>
+        {usageLine}
+        </div>
+        </>
+      )
+    }
+    return (
+      <>
+        <div className="lc-agenthead">
+          <span className="lc-agenthead__label">Connected accounts</span>
+          <span className={`lc-agenthead__note${connected > 0 && !checkingAny ? ' is-green' : ''}`}>{headNote}</span>
+        </div>
+        <div className="lc-runtimepanel">
+          {drawn.map((row) => {
+            const { runtime, status, connected: usable } = row
+            const facts = runtimeInstallFacts(runtime.id)
+            const checking = isChecking(row)
+            const stuck = runtime.installed && status.tag === 'CHECKING' && checkingGaveUp && !usable
+            const signIn = !usable && status.tag === 'SIGN IN'
+            // The recommendation, carried by the row's own emphasis while
+            // nothing is connected: a lit dot, the name at full weight,
+            // the fact in green, the one filled button.
+            const onRamp = !usable && !checking && !stuck && connected === 0 && runtime.id === FREE_START_RUNTIME
+            /*
+             * THE STATE FIRST: installed or not, signed in or not.
+             *
+             * Colin, 2026-09-22: "can that beginning screen know the
+             * difference if the user needs to install or sign in?" It
+             * did, but only in the BUTTON -- the words beside it were
+             * "needs a Cursor account" on a runtime that was not on the
+             * machine and on one that was installed and signed out
+             * alike. The sentence now leads with which it is, and the
+             * account it will want comes after, where truncation in a
+             * narrow cell takes it rather than the state.
+             */
+            const need: { readonly state?: string; readonly detail?: string; readonly free?: boolean } | undefined =
+              usable || checking
+                ? undefined
+                : stuck
+                  ? { detail: 'did not answer its version check' }
+                  : signIn
+                    ? { state: 'not signed in', detail: facts?.account !== undefined ? `installed; signs in with ${facts.account}` : 'installed' }
+                    : runtime.installed
+                      ? facts?.account !== undefined
+                        ? { detail: `needs ${facts.account}` }
+                        : undefined
+                      : facts?.account !== undefined
+                        ? { state: 'not installed', detail: `needs ${facts.account}` }
+                        : facts?.install.kind === 'vendor'
+                          ? { state: 'not installed', detail: `from ${new URL(facts.install.url).host}` }
+                          : { state: 'not installed', detail: 'no account needed', free: true }
+            const needSaid = need === undefined ? undefined : [need.state, need.detail].filter((part) => part !== undefined).join(' · ')
+            const dot = usable ? ' is-green' : checking ? ' is-checking' : signIn ? ' is-red' : onRamp ? ' is-lime' : ' is-muted'
+            const waiting = installing !== undefined
+            return (
+              <div className={`lc-runtimecell${usable ? ' is-ready' : ''}${onRamp ? ' is-onramp' : ''}`} key={runtime.id}>
+                <span className={`lc-runtimecell__dot${dot}`} />
+                <span className="lc-runtimecell__name" title={status.detail}>
+                  <RuntimeMark runtime={runtime.id} size={13} muted={!usable} className="is-inline" />
+                  {runtime.displayName}
+                </span>
+                {need !== undefined && (
+                  /*
+                    * The STATE alone in the cell, the rest on hover. Two
+                    * columns leave the text about twenty characters, and
+                    * "installed · not signe…" cut off exactly the half
+                    * that told the two cases apart (frame, 2026-09-22).
+                    * "not installed" / "not signed in" is parallel, fits,
+                    * and is what decides the button beside it.
+                    */
+                  <span className="lc-runtimecell__need" title={needSaid}>
+                    {need.state !== undefined ? (
+                      <>
+                        <span className="lc-runtimecell__state">{need.state}</span>
+                        {/* The one detail worth its width: why this row is the recommendation. */}
+                        {need.free === true && <span className="lc-runtimecell__free"> · {need.detail}</span>}
+                      </>
+                    ) : (
+                      need.detail
+                    )}
+                  </span>
+                )}
+                {usable ? (
+                  <span className="lc-runtimecell__version">
+                    {runtime.version === undefined || runtime.version === null ? 'Ready' : `Ready · ${shortVersion(runtime.version)}`}
+                  </span>
+                ) : installing === runtime.id ? (
+                  <span className="lc-runtimecell__tag">Installing…</span>
+                ) : checking ? null : signIn && signInCommand(runtime.id) !== undefined ? (
+                  <SignInButton runtime={runtime.id} />
+                ) : stuck ? (
+                  /*
+                   * "Check again", not "Install again" (design agent,
+                   * 2026-09-18): that CLI is installed, so installing it
+                   * again is not the repair. Asking again is the one the
+                   * app can perform; the title says what was tried.
+                   */
+                  <button
+                    type="button"
+                    className="lc-runtimecell__quiet"
+                    title={`${runtime.displayName} is on this machine but did not answer its version check in 5 seconds, four times. Check again asks once more.`}
+                    onClick={() => onCheckAgain?.()}
+                  >
+                    Check again
+                  </button>
+                ) : waiting ? null : !runtime.installed && installCommand(runtime.id) !== undefined && onInstall !== undefined ? (
+                  <button
+                    type="button"
+                    className={runtime.id === FREE_START_RUNTIME ? 'lc-runtimecell__install is-primary' : 'lc-runtimecell__quiet'}
+                    disabled={waiting || npmMissing}
+                    title={
+                      npmMissing
+                        ? 'Node.js is not on this machine, and this installs through npm.'
+                        : waiting
+                          ? `Waiting for the ${installing ?? ''} install to finish`
+                          : installSentence(runtime.id, runtime.displayName)
+                    }
+                    onClick={() => onInstall(runtime.id)}
+                  >
+                    Install
+                  </button>
+                ) : !runtime.installed && vendorUrl(runtime.id) !== undefined ? (
+                  // A vendor download is quiet text: it is not the
+                  // recommendation, and it was the only boxed button on
+                  // the shipped screen.
+                  <button
+                    type="button"
+                    className="lc-runtimecell__quiet"
+                    onClick={() => {
+                      setLinkRefusal(undefined)
+                      openLink(vendorUrl(runtime.id) ?? '', setLinkRefusal)
+                    }}
+                    title={`Open ${vendorUrl(runtime.id) ?? ''} in your browser`}
+                  >
+                    Get it ↗
+                  </button>
+                ) : (
+                  <span className="lc-runtimecell__tag">{status.tag}</span>
+                )}
+              </div>
+            )
+          })}
+        </div>
+        {/*
+          * Deferred, and saying so. Not a chevron on its own: the
+          * sentence is the affordance, and it names what pressing it
+          * gets you rather than making that a guess.
+          */}
+        {deferred > 0 && (
+          <button type="button" className="lc-agentmore" onClick={() => setOthersOpen(true)}>
+            {/*
+              * Derived from the rows it is hiding. See
+              * `deferredOthersSentence` -- this sentence has now been
+              * wrong about them twice, both times by being fixed.
+              */}
+            {deferredOthersSentence(
+              shown
+                .filter((row) => !drawn.includes(row))
+                .map((row) => ({ installsFromHere: installCommand(row.runtime.id) !== undefined }))
+            )}
+          </button>
+        )}
+        {usageLine}
+      </>
+    )
+  })()
+  const startersBlock = startersShown && onStarter !== undefined && onCompareStarter !== undefined
+    ? <StarterList onStart={onStarter} onCompareStart={onCompareStarter} {...(onCompare === undefined ? {} : { onCompare })} />
+    : null
+  const accountsAbove = team.length > 0
+
   return (
     <div className={`lc-empty${scrolled ? ' is-scrolled' : ''}${tight ? ' is-tight' : ''}`} ref={pane}>
       <div className="lc-empty__inner" ref={inner}>
@@ -562,6 +914,8 @@ export function FirstLaunch({
           </p>
         )}
 
+        {accountsAbove && accountsBlock}
+
         {/* What Scout noticed (0.756): what needs the person now leads, before what ended while they were away. */}
         {scout}
 
@@ -571,7 +925,7 @@ export function FirstLaunch({
         )}
 
         {discoveryPhase === 'ready' && team.length > 0 && onMessageTeammate !== undefined && (
-          <HomeTeam team={team} onMessage={onMessageTeammate} {...(onNewTeammate === undefined ? {} : { onNewTeammate })} />
+          <HomeTeam team={team} onMessage={onMessageTeammate} {...(onNewTeammate === undefined ? {} : { onNewTeammate })} {...(teamWatch === undefined ? {} : { watch: teamWatch })} />
         )}
 
         {rosterUnreadable && (
@@ -583,351 +937,13 @@ export function FirstLaunch({
 
         {!accountsLead && teamAndFolder}
 
-        {discoveryPhase === 'ready' && (() => {
-          /*
-           * Five rows reading CHECKING were five rows saying nothing at the
-           * moment a person is deciding what to click, and the transient
-           * state at that. The dot carries checking; the head note says it
-           * once with a count; words in the rows are for results -- and the
-           * result a person is choosing between is what each one costs.
-           */
-          const isChecking = (row: (typeof shown)[number]): boolean =>
-            row.runtime.installed && row.status.tag === 'CHECKING' && !checkingGaveUp && !row.connected
-          const checkingAny = shown.some(isChecking)
-          const stuckAny = shown.some((row) => row.runtime.installed && row.status.tag === 'CHECKING' && checkingGaveUp && !row.connected)
-          // One thing happening, said once at the head: while an install
-          // runs, the other rows' actions step out rather than sit dimmed
-          // with no reason (Colin, 2026-09-19, with the frame: "some of the
-          // installs were bugged").
-          const installingName = installing === undefined ? undefined : shown.find((row) => row.runtime.id === installing)?.runtime.displayName ?? installing
-          /*
-           * "ON THIS MACHINE" HAS TO MEAN ON THIS MACHINE.
-           *
-           * Both of these counted `shown.length`, which is the CATALOGUE --
-           * every agent Locust can drive, installed or not. So a box with
-           * five hung CLIs and no Antigravity read *6 on this machine · none
-           * answering*, and Antigravity is not on this machine (Grok, pass
-           * 16). The arithmetic of rows-plus-deferred came to six and the
-           * words did not.
-           *
-           * `known` is right for the other branch and stays: a machine with
-           * nothing installed genuinely has six KNOWN and none installed.
-           * The word is what changes with the claim.
-           */
-          const onThisMachine = shown.filter((row) => row.runtime.installed).length
-          const headNote = installingName !== undefined
-            ? `installing ${installingName}…`
-            : checkingAny
-            ? `checking ${String(onThisMachine)} on this machine`
-            : connected > 0
-              ? `${String(connected)} ready`
-              : stuckAny
-                ? `${String(onThisMachine)} on this machine · none answering`
-                : `${String(shown.length)} known · none installed yet`
-          /*
-           * ONE STEP FIRST, AND THE CATALOGUE WHEN IT IS ASKED FOR.
-           *
-           * Colin, 2026-09-19: "i really want a new user without tech
-           * savvyness to be able to just use the software off rip, maybe even
-           * ask them how to get the other agents working." The other agents
-           * come AFTER, in his own sentence.
-           *
-           * Measured on the first frame anybody has taken of this screen on a
-           * machine with nothing installed (`_tools/bare-machine-frame.mjs`,
-           * 2026-09-19): six rows, of which five name a product attached to
-           * an account or a subscription the person does not have -- a
-           * ChatGPT account, an Anthropic account, a Cursor account, a GitHub
-           * Copilot subscription. Every one of those five is a reason not to
-           * press anything, on a screen whose sentence one line above has
-           * already said which one to press.
-           *
-           * The on-ramp emphasis was already right and is untouched. What
-           * changes is only that the five are BEHIND A PRESS while none of
-           * them can help, and the count stays visible in the head note, so
-           * nothing is hidden -- it is deferred, and says so.
-           *
-           * The instant anything is connected this stops applying and the
-           * list is the list again: by then the question "what else can this
-           * drive" is a real question, which is the one the catalogue
-           * answers well.
-           */
-          /*
-           * A ROW THAT IS ON THIS MACHINE IS NEVER DEFERRED, whatever state
-           * it is in.
-           *
-           * The rule above is about products a person does not have and
-           * cannot use yet. An installed CLI is the opposite of that case: it
-           * is theirs, it has a state, and the state may be the one thing on
-           * the screen they need.
-           *
-           * Fable found this on 0.198.0, the day the deferral shipped, on a
-           * Linux box with four CLIs installed and hung. The screen drew ONE
-           * row while the head note read *6 on this machine · none
-           * answering*, the composer said *A coding agent is installed but
-           * not answering — Check again above*, and the four that were
-           * installed and hanging sat behind the sentence *5 others Locust
-           * can drive — they each need their own account*. Every word of that
-           * was wrong about them: they need no account, they are here, and
-           * their Check again was a press away behind a control that gave no
-           * reason to press it.
-           *
-           * My own measurement could not have caught it: the frame I designed
-           * this against was taken on a machine with nothing installed, where
-           * "not connected" and "not installed" are the same rows. They are
-           * not the same rows.
-           *
-           * `installed` and not `connected`: a signed-out Codex is installed,
-           * and the command that signs it in is on its row.
-           */
-          // How much has been done, across every agent (0.714): under the accounts, once there is anything to count.
-          const usageLine = onOpenUsage === undefined ? null : <UsageLine summary={usageSummary} onOpen={onOpenUsage} />
-          const usageChip = onOpenUsage === undefined ? null : <UsageChip summary={usageSummary} onOpen={onOpenUsage} />
-          const deferOthers = connected === 0 && !checkingAny && installing === undefined && !othersOpen
-          const drawn = deferOthers
-            ? shown.filter((row) => row.runtime.id === FREE_START_RUNTIME || row.runtime.installed)
-            : shown
-          const deferred = shown.length - drawn.length
-          /*
-           * FOLDED TO ONE LINE when it has nothing to ask of the person: a team
-           * exists (Home leads with it), something is connected, and every
-           * agent on this machine is ready -- nothing checking, stuck,
-           * installing or signed out. Then seven rows of names and versions
-           * are a status panel on the first screen (first-impressions drive,
-           * packaged 0.349), and one line says the same. The moment any of
-           * that changes the list is the list again, rows and buttons and
-           * all, because then it is the thing to act on; and Show all opens
-           * it any time.
-           *
-           * With nobody on the team, only when EVERY agent is ready (0.360).
-           * Then there is nothing to add and nothing to fix, and the seven
-           * rows beside the team templates pushed the page past a 1440x900
-           * window -- 25px over, 157px at 1366x768, the cover's middle bot
-           * cut at the top (probe-home-fits, packaged 0.359). While any
-           * agent could still be added, the rows stay: before a team exists
-           * the list is how a new person learns what else Locust can drive
-           * (Colin, 2026-09-19: "maybe even ask them how to get the other
-           * agents working").
-           */
-          const everyInstalledReady = shown.every((row) => !row.runtime.installed || row.connected)
-          const everyAgentReady = shown.every((row) => row.connected)
-          const folded =
-            !agentsOpen && connected > 0 && !checkingAny && !stuckAny && installingName === undefined && everyInstalledReady && (team.length > 0 || everyAgentReady)
-          if (folded) {
-            const ready = shown.filter((row) => row.connected)
-            return (
-              <>
-              {/* The accounts and their usage, one block: the line costs no gap of Home's (0.714). */}
-              <div className="lc-accountsblock">
-              <div className="lc-agenthead is-folded">
-                <span className="lc-agenthead__label">Connected accounts</span>
-                <span className="lc-agenthead__note is-green">{headNote}</span>
-                {/*
-                  * THEIR MARKS, NOT A LIST OF NAMES (0.383). "Codex CLI ·
-                  * Claude Code · Cursor Agent · ..." was a sentence to read
-                  * on a line that says nothing needs you; five marks are
-                  * seen at once, as Orca shows its agents (Colin,
-                  * 2026-09-26: logos "to signify which model is being used
-                  * by what"). Each mark is named for a screen reader and on
-                  * hover, and the line's title lists them all.
-                  */}
-                {/*
-                  * THE MARKS, AND ON HOVER WHAT EACH KNOWS (AgentMark, 0.389):
-                  * the row is as calm as it was before usage rings (0.388),
-                  * and pointing at a mark opens its name, state and usage.
-                  */}
-                <span className="lc-agenthead__marks">
-                  {ready.map((row) => {
-                    const usage = usageWindows?.get(row.runtime.id)
-                    return (
-                      <AgentMark
-                        key={row.runtime.id}
-                        runtime={row.runtime.id}
-                        name={row.runtime.displayName}
-                        state={row.runtime.version === undefined || row.runtime.version === null ? 'Ready' : `Ready · ${shortVersion(row.runtime.version)}`}
-                        {...(usage === undefined ? {} : { usage })}
-                      />
-                    )
-                  })}
-                </span>
-                {usageChip}
-                <button type="button" className="lc-agenthead__more" onClick={() => setAgentsOpen(true)}>
-                  Show all
-                </button>
-              </div>
-              {usageLine}
-              </div>
-              {/*
-                * STARTERS, ONE ROW EACH, COMPARE ON EVERY ONE (2026-10-19, StarterList.tsx). They were one row of
-                * "Try two models on" chips (0.609: "Landing page", "Sales dashboard", "Arcade game"), which only
-                * ever compared and held a noun each. Now a row says what a conversation can begin with, pressing
-                * it fills the box for the teammate, and its Compare fills the same words for two models.
-                */}
-              {onStarter !== undefined && onCompareStarter !== undefined && (
-                <StarterList onStart={onStarter} onCompareStart={onCompareStarter} {...(onCompare === undefined ? {} : { onCompare })} />
-              )}
-              </>
-            )
-          }
-          return (
-            <>
-              <div className="lc-agenthead">
-                <span className="lc-agenthead__label">Connected accounts</span>
-                <span className={`lc-agenthead__note${connected > 0 && !checkingAny ? ' is-green' : ''}`}>{headNote}</span>
-              </div>
-              <div className="lc-runtimepanel">
-                {drawn.map((row) => {
-                  const { runtime, status, connected: usable } = row
-                  const facts = runtimeInstallFacts(runtime.id)
-                  const checking = isChecking(row)
-                  const stuck = runtime.installed && status.tag === 'CHECKING' && checkingGaveUp && !usable
-                  const signIn = !usable && status.tag === 'SIGN IN'
-                  // The recommendation, carried by the row's own emphasis while
-                  // nothing is connected: a lit dot, the name at full weight,
-                  // the fact in green, the one filled button.
-                  const onRamp = !usable && !checking && !stuck && connected === 0 && runtime.id === FREE_START_RUNTIME
-                  /*
-                   * THE STATE FIRST: installed or not, signed in or not.
-                   *
-                   * Colin, 2026-09-22: "can that beginning screen know the
-                   * difference if the user needs to install or sign in?" It
-                   * did, but only in the BUTTON -- the words beside it were
-                   * "needs a Cursor account" on a runtime that was not on the
-                   * machine and on one that was installed and signed out
-                   * alike. The sentence now leads with which it is, and the
-                   * account it will want comes after, where truncation in a
-                   * narrow cell takes it rather than the state.
-                   */
-                  const need: { readonly state?: string; readonly detail?: string; readonly free?: boolean } | undefined =
-                    usable || checking
-                      ? undefined
-                      : stuck
-                        ? { detail: 'did not answer its version check' }
-                        : signIn
-                          ? { state: 'not signed in', detail: facts?.account !== undefined ? `installed; signs in with ${facts.account}` : 'installed' }
-                          : runtime.installed
-                            ? facts?.account !== undefined
-                              ? { detail: `needs ${facts.account}` }
-                              : undefined
-                            : facts?.account !== undefined
-                              ? { state: 'not installed', detail: `needs ${facts.account}` }
-                              : facts?.install.kind === 'vendor'
-                                ? { state: 'not installed', detail: `from ${new URL(facts.install.url).host}` }
-                                : { state: 'not installed', detail: 'no account needed', free: true }
-                  const needSaid = need === undefined ? undefined : [need.state, need.detail].filter((part) => part !== undefined).join(' · ')
-                  const dot = usable ? ' is-green' : checking ? ' is-checking' : signIn ? ' is-red' : onRamp ? ' is-lime' : ' is-muted'
-                  const waiting = installing !== undefined
-                  return (
-                    <div className={`lc-runtimecell${usable ? ' is-ready' : ''}${onRamp ? ' is-onramp' : ''}`} key={runtime.id}>
-                      <span className={`lc-runtimecell__dot${dot}`} />
-                      <span className="lc-runtimecell__name" title={status.detail}>
-                        <RuntimeMark runtime={runtime.id} size={13} muted={!usable} className="is-inline" />
-                        {runtime.displayName}
-                      </span>
-                      {need !== undefined && (
-                        /*
-                          * The STATE alone in the cell, the rest on hover. Two
-                          * columns leave the text about twenty characters, and
-                          * "installed · not signe…" cut off exactly the half
-                          * that told the two cases apart (frame, 2026-09-22).
-                          * "not installed" / "not signed in" is parallel, fits,
-                          * and is what decides the button beside it.
-                          */
-                        <span className="lc-runtimecell__need" title={needSaid}>
-                          {need.state !== undefined ? (
-                            <>
-                              <span className="lc-runtimecell__state">{need.state}</span>
-                              {/* The one detail worth its width: why this row is the recommendation. */}
-                              {need.free === true && <span className="lc-runtimecell__free"> · {need.detail}</span>}
-                            </>
-                          ) : (
-                            need.detail
-                          )}
-                        </span>
-                      )}
-                      {usable ? (
-                        <span className="lc-runtimecell__version">
-                          {runtime.version === undefined || runtime.version === null ? 'Ready' : `Ready · ${shortVersion(runtime.version)}`}
-                        </span>
-                      ) : installing === runtime.id ? (
-                        <span className="lc-runtimecell__tag">Installing…</span>
-                      ) : checking ? null : signIn && signInCommand(runtime.id) !== undefined ? (
-                        <SignInButton runtime={runtime.id} />
-                      ) : stuck ? (
-                        /*
-                         * "Check again", not "Install again" (design agent,
-                         * 2026-09-18): that CLI is installed, so installing it
-                         * again is not the repair. Asking again is the one the
-                         * app can perform; the title says what was tried.
-                         */
-                        <button
-                          type="button"
-                          className="lc-runtimecell__quiet"
-                          title={`${runtime.displayName} is on this machine but did not answer its version check in 5 seconds, four times. Check again asks once more.`}
-                          onClick={() => onCheckAgain?.()}
-                        >
-                          Check again
-                        </button>
-                      ) : waiting ? null : !runtime.installed && installCommand(runtime.id) !== undefined && onInstall !== undefined ? (
-                        <button
-                          type="button"
-                          className={runtime.id === FREE_START_RUNTIME ? 'lc-runtimecell__install is-primary' : 'lc-runtimecell__quiet'}
-                          disabled={waiting || npmMissing}
-                          title={
-                            npmMissing
-                              ? 'Node.js is not on this machine, and this installs through npm.'
-                              : waiting
-                                ? `Waiting for the ${installing ?? ''} install to finish`
-                                : installSentence(runtime.id, runtime.displayName)
-                          }
-                          onClick={() => onInstall(runtime.id)}
-                        >
-                          Install
-                        </button>
-                      ) : !runtime.installed && vendorUrl(runtime.id) !== undefined ? (
-                        // A vendor download is quiet text: it is not the
-                        // recommendation, and it was the only boxed button on
-                        // the shipped screen.
-                        <button
-                          type="button"
-                          className="lc-runtimecell__quiet"
-                          onClick={() => {
-                            setLinkRefusal(undefined)
-                            openLink(vendorUrl(runtime.id) ?? '', setLinkRefusal)
-                          }}
-                          title={`Open ${vendorUrl(runtime.id) ?? ''} in your browser`}
-                        >
-                          Get it ↗
-                        </button>
-                      ) : (
-                        <span className="lc-runtimecell__tag">{status.tag}</span>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
-              {/*
-                * Deferred, and saying so. Not a chevron on its own: the
-                * sentence is the affordance, and it names what pressing it
-                * gets you rather than making that a guess.
-                */}
-              {deferred > 0 && (
-                <button type="button" className="lc-agentmore" onClick={() => setOthersOpen(true)}>
-                  {/*
-                    * Derived from the rows it is hiding. See
-                    * `deferredOthersSentence` -- this sentence has now been
-                    * wrong about them twice, both times by being fixed.
-                    */}
-                  {deferredOthersSentence(
-                    shown
-                      .filter((row) => !drawn.includes(row))
-                      .map((row) => ({ installsFromHere: installCommand(row.runtime.id) !== undefined }))
-                  )}
-                </button>
-              )}
-              {usageLine}
-            </>
-          )
-        })()}
+        {!accountsAbove && accountsBlock}
+
+        {/*
+          * STARTERS, ONE ROW EACH, COMPARE ON EVERY ONE (2026-10-19, StarterList.tsx): what a conversation can begin
+          * with, pressing one fills the box for the teammate, and its Compare fills the same words for two models.
+          */}
+        {startersBlock}
 
         {/*
           * ONE line under the panel, because only one install ever runs.

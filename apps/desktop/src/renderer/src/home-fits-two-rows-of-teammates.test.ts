@@ -38,8 +38,9 @@ describe('home at the height Colin uses', () => {
 
   it("counts the bots' reach above the cover, which the old measure left out", () => {
     // Without the reach the same page read as fitting at normal spacing, and ran 35px over.
+    // 630, not 650, since the smallest cover became one size (0.799, `coverFloor`): its floor is 203px either way.
     const boxOnly = COVER_HEIGHT * (816 / 960)
-    expect(homeIsShort(SECTIONS, 5, boxOnly, 650)).toBe(false)
-    expect(homeIsShort(SECTIONS, 5, FOOTPRINT, 650)).toBe(true)
+    expect(homeIsShort(SECTIONS, 5, boxOnly, 630)).toBe(false)
+    expect(homeIsShort(SECTIONS, 5, FOOTPRINT, 630)).toBe(true)
   })
 })

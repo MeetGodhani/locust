@@ -2811,7 +2811,7 @@ textarea {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: baseline;
-  column-gap: var(--lc-space-4);
+  column-gap: var(--lc-space-7);
   row-gap: 2px;
   width: 100%;
   padding: var(--lc-space-3) var(--lc-space-4);
@@ -6193,9 +6193,12 @@ textarea {
   gap: 8px;
 }
 
+/* Two to a row (0.799): four rows of one were the last thing between Home and one screen at 1205x803 (Colin,
+   2026-10-19: "is there a way to fit all this in one screen with no scrolling"). Under 760px wide, one a row again. */
 .lc-homestarts__list {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: var(--lc-space-7);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -6205,11 +6208,36 @@ textarea {
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
   border-bottom: 1px solid var(--lc-border-hairline);
 }
 
-.lc-homestart:last-child {
+.lc-homestart:nth-last-child(-n + 2):nth-child(odd),
+.lc-homestart:nth-last-child(-n + 2):nth-child(odd) ~ .lc-homestart {
   border-bottom: 0;
+}
+
+/* Two to a row, a row's line was cut to "Agree on the approa..."; it is the row's hover then, and shown again one a row. */
+.lc-homestarts__list .lc-homestart__line {
+  display: none;
+}
+
+@media (max-width: 760px) {
+  .lc-homestarts__list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .lc-homestarts__list .lc-homestart__line {
+    display: inline;
+  }
+
+  .lc-homestart:nth-last-child(-n + 2):nth-child(odd) {
+    border-bottom: 1px solid var(--lc-border-hairline);
+  }
+
+  .lc-homestart:last-child {
+    border-bottom: 0;
+  }
 }
 
 .lc-homestart__start {
@@ -6888,6 +6916,44 @@ textarea {
   text-align: left;
   cursor: pointer;
   transition: border-color var(--lc-motion-hover) var(--lc-ease), background var(--lc-motion-hover) var(--lc-ease);
+}
+
+/* A teammate keeping watch (0.799, Scout): its card, and Look now as the eye in its corner. */
+.lc-hometeam__slot {
+  position: relative;
+  display: grid;
+}
+
+.lc-hometeam__look {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--lc-text-muted);
+  cursor: pointer;
+  transition: background var(--lc-motion-hover) var(--lc-ease), color var(--lc-motion-hover) var(--lc-ease);
+}
+
+.lc-hometeam__look:hover:not(:disabled) {
+  background: var(--lc-hover-surface);
+  color: var(--lc-text-primary);
+}
+
+.lc-hometeam__look:focus-visible {
+  outline: 2px solid var(--lc-lime-border-strong);
+  outline-offset: 1px;
+}
+
+.lc-hometeam__look:disabled {
+  cursor: default;
+  opacity: 0.5;
 }
 
 .lc-hometeam__card:hover {
@@ -8909,7 +8975,7 @@ textarea {
 .lc-permissions__rows {
   display: grid;
   grid-template-columns: max-content minmax(0, 1fr);
-  column-gap: var(--lc-space-4);
+  column-gap: var(--lc-space-7);
   row-gap: 7px;
   font-size: var(--lc-text-description);
 }
@@ -11144,7 +11210,7 @@ textarea {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   grid-template-rows: auto auto;
-  column-gap: var(--lc-space-4);
+  column-gap: var(--lc-space-7);
   row-gap: var(--lc-space-2);
   align-items: center;
   padding: var(--lc-space-5) var(--lc-space-6);
@@ -22649,6 +22715,19 @@ textarea.lc-compare__judgecriteria {
 
 .lc-empty.is-tight .lc-accountsblock > .lc-agenthead.is-folded {
   padding-top: 8px;
+}
+
+/* Short of height (0.799): the team's cards and the starters' rows give a little each, so two rows of teammates
+   and the starters fit 1366x768 (drive-home-on-one-screen.mjs measures it). Three lines still fit a card. */
+.lc-empty.is-tight .lc-hometeam__card {
+  min-height: 66px;
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+
+.lc-empty.is-tight .lc-homestart__start {
+  padding-top: 4px;
+  padding-bottom: 4px;
 }
 
 .lc-usageline__open {

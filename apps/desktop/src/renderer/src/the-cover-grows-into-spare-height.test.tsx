@@ -92,3 +92,20 @@ describe('the grown drawing', () => {
     expect(width).toBeGreaterThan(COVER_MACHINE.width * (cardWidth / COVER_WIDTH))
   }, 10_000)
 })
+
+/*
+ * THE SMALLEST COVER IS ONE SIZE (0.799). Colin, 2026-10-19: "is there a way to fit all this in one screen with no
+ * scrolling". Home at 1366x768 scrolled 41px while 1205x803 fitted, because a wider column's cover had a bigger floor.
+ */
+describe('how small the cover gets', () => {
+  it("is the narrowest column's floor at every width, and never more than 0.85x", async () => {
+    const { COVER_REACH, coverFloor } = await import('./components/HomeCover.js')
+    const footprint = (width: number): number => (COVER_HEIGHT + COVER_REACH) * (width / COVER_WIDTH)
+    const smallest = footprint(760) * COVER_MIN_GROW
+    expect(coverFloor(footprint(760))).toBe(0.85)
+    expect(Math.round(footprint(840) * coverFloor(footprint(840)))).toBe(Math.round(smallest))
+    expect(coverFloor(footprint(840))).toBeLessThan(0.85)
+    expect(coverFloor(footprint(600))).toBe(0.85)
+    expect(coverFloor(Number.NaN)).toBe(0.85)
+  }, 10_000)
+})

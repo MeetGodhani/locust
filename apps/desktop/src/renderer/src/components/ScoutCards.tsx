@@ -116,6 +116,27 @@ export function ScoutWatching({ state, scout, onLookNow, looking, now: fixed }: 
 }
 
 /*
+ * SCOUT'S WATCH, ON ITS OWN CARD (0.799). Colin, 2026-10-19: "find a way to fold away the scout watch in a more clean
+ * way, like on the team bar". Scout is a teammate, so when nothing needs the person its line is the line under its
+ * name on Home's team card, in the role's place, and Look now is the eye on that card. A line of its own above the team
+ * cost Home a row. The time moves on by itself, once a minute.
+ */
+export function ScoutLooked({ state, looking, now: fixed }: {
+  readonly state: ScoutState
+  readonly looking: boolean
+  readonly now?: Date
+}): ReactElement {
+  const [ticked, setTicked] = useState(() => new Date())
+  useEffect(() => {
+    if (fixed !== undefined) return undefined
+    const timer = setInterval(() => { setTicked(new Date()) }, 60_000)
+    return () => { clearInterval(timer) }
+  }, [fixed])
+  const now = fixed ?? ticked
+  return <>{looking ? 'Looking…' : state.lastLookAt === undefined ? 'First look on its way' : `Looked ${ago(state.lastLookAt, now)} · all clear`}</>
+}
+
+/*
  * MEET SCOUT (0.756): the one press that adds it to the team, on the best free model, for a person with a team and a
  * folder. It says what Scout reads, what it sends and to whom, before it is on -- and that it never acts by itself.
  */

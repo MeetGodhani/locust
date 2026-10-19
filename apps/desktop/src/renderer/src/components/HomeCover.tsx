@@ -136,13 +136,26 @@ export const HOME_GAP = 12
  */
 export function homeIsShort(sections: number, count: number, footprint: number, paneHeight: number): boolean {
   if (![sections, count, footprint, paneHeight].every(Number.isFinite) || paneHeight <= 0) return false
-  return sections + footprint * COVER_MIN_GROW + HOME_GAP * Math.max(0, count - 1) + HOME_PAD * 2 > paneHeight + 0.5
+  return sections + footprint * coverFloor(footprint) + HOME_GAP * Math.max(0, count - 1) + HOME_PAD * 2 > paneHeight + 0.5
+}
+
+/**
+ * THE SMALLEST COVER IS ONE SIZE (0.799), whatever the column's width: the drawing COVER_MIN_GROW makes of the
+ * narrowest column's card. The floor was 0.85 of the cover at ITS width, so a wider window kept a bigger smallest
+ * cover than a narrow one, and Home at 1366x768 with six teammates scrolled 41px while 1205x803 fitted (Colin,
+ * 2026-10-19: "is there a way to fit all this in one screen with no scrolling"). The claim's floor is the same
+ * drawing at the same size, so it reads as it does on the narrowest column. Never above COVER_MIN_GROW.
+ */
+export function coverFloor(footprint: number): number {
+  const smallest = (COVER_HEIGHT + COVER_REACH) * FIRST_SCALE * COVER_MIN_GROW
+  if (!Number.isFinite(footprint) || footprint <= 0) return COVER_MIN_GROW
+  return Math.round(Math.min(COVER_MIN_GROW, smallest / footprint) * 1000) / 1000
 }
 
 /** The grow factor for this much spare height above a cover of this height; short of room, below 1. */
 export function coverGrowFor(room: number, baseHeight: number): number {
   if (!Number.isFinite(room) || !Number.isFinite(baseHeight) || baseHeight <= 0 || room === 0) return 1
-  if (room < 0) return Math.round(Math.max(COVER_MIN_GROW, 1 + room / baseHeight) * 1000) / 1000
+  if (room < 0) return Math.round(Math.max(coverFloor(baseHeight), 1 + room / baseHeight) * 1000) / 1000
   return Math.round(Math.min(COVER_MAX_GROW, coverWidthGrow(), 1 + room / baseHeight) * 1000) / 1000
 }
 
@@ -542,7 +555,7 @@ export function HomeCover({
   // the page gives (`grow`), about the canvas's centre -- so `left` is offset
   // by half of what the canvas outgrew, and the drawing stays centred on a
   // card that did not move.
-  const drawn = Math.round(scale * Math.min(Math.max(COVER_MIN_GROW, grow), COVER_MAX_GROW, coverWidthGrow()) * 1000) / 1000
+  const drawn = Math.round(scale * Math.min(Math.max(coverFloor((COVER_HEIGHT + COVER_REACH) * scale), grow), COVER_MAX_GROW, coverWidthGrow()) * 1000) / 1000
   const originX = Math.round((scale - drawn) * COVER_WIDTH / 2)
   const at = (value: number): number => Math.round(value * drawn)
   const atX = (value: number): number => originX + at(value)

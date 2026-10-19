@@ -1,5 +1,5 @@
 import type { MissionRuntimeId } from '@teammate/runtime-adapters'
-import type { CSSProperties, ReactElement } from 'react'
+import type { CSSProperties, ReactElement, ReactNode } from 'react'
 
 import type { AvatarSpec } from '../../../shared/avatar.js'
 import type { TeammateHue } from '../../../shared/ipc.js'
@@ -43,14 +43,27 @@ export interface HomeTeammate {
   readonly doing?: string
 }
 
+/**
+ * A teammate keeping watch (0.799, Scout): its line in the role's place, and Look now as the eye on its card.
+ * Colin, 2026-10-19: "fold away the scout watch in a more clean way, like on the team bar".
+ */
+export interface HomeTeamWatch {
+  readonly teammateId: string
+  readonly line: ReactNode
+  readonly looking: boolean
+  readonly onLookNow: () => void
+}
+
 export function HomeTeam({
   team,
   onMessage,
-  onNewTeammate
+  onNewTeammate,
+  watch
 }: {
   readonly team: readonly HomeTeammate[]
   readonly onMessage: (teammateId: string) => void
   readonly onNewTeammate?: () => void
+  readonly watch?: HomeTeamWatch
 }): ReactElement {
   return (
     <section className="lc-hometeam" aria-label="Your team">
@@ -75,7 +88,8 @@ export function HomeTeam({
         {team.map((mate) => {
           // While they work or wait, the line under the name says what on (0.610); otherwise it is the role.
           const doing = mate.state !== undefined && mate.state.tone !== 'red' ? mate.doing : undefined
-          return (
+          const watching = watch !== undefined && watch.teammateId === mate.teammateId ? watch : undefined
+          const card = (
           <button
             type="button"
             key={mate.teammateId}
@@ -106,7 +120,9 @@ export function HomeTeam({
                   ? <span className={`lc-hometeam__state is-${mate.state.tone}`}>{mate.state.word}</span>
                   : mate.working && <span className="lc-hometeam__state is-live">working</span>}
               </span>
-              <span className={`lc-hometeam__role${doing === undefined ? '' : ' is-doing'}`} {...(doing === undefined ? {} : { title: doing })}>{doing ?? mate.role}</span>
+              {doing === undefined && watching !== undefined
+                ? <span className="lc-hometeam__role is-watch" title={mate.role}>{watching.line}</span>
+                : <span className={`lc-hometeam__role${doing === undefined ? '' : ' is-doing'}`} {...(doing === undefined ? {} : { title: doing })}>{doing ?? mate.role}</span>}
               {/*
                 * THE MARK SAYS THE RUNTIME; THE WORDS SAY THE MODEL (0.384).
                 *
@@ -135,6 +151,17 @@ export function HomeTeam({
               <Icon name="chevron-right" size={13} />
             </span>
           </button>
+          )
+          if (watching === undefined) return card
+          // A button beside the card, not in it: a button inside a button is not a control a screen reader can reach.
+          return (
+            <div key={mate.teammateId} className="lc-hometeam__slot">
+              {card}
+              <button type="button" className="lc-hometeam__look" disabled={watching.looking} onClick={watching.onLookNow}
+                aria-label={`${mate.name}: look now`} title={watching.looking ? 'Looking…' : 'Look now'}>
+                <Icon name="eye" size={13} />
+              </button>
+            </div>
           )
         })}
       </div>

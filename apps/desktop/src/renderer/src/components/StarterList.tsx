@@ -65,7 +65,7 @@ export function StarterList({ onStart, onCompareStart, onCompare }: {
       <ul className="lc-homestarts__list">
         {STARTERS.map((starter) => (
           <li key={starter.id} className="lc-homestart">
-            <button type="button" className="lc-homestart__start" title={`Puts the words in the box for your teammate${starter.mode === undefined ? '' : `, in ${starter.mode === 'plan' ? 'Plan' : 'Ask'} mode`}. Nothing is sent until you press Send.`} onClick={() => onStart(starter)}>
+            <button type="button" className="lc-homestart__start" title={`${starter.line}. Puts the words in the box for your teammate${starter.mode === undefined ? '' : `, in ${starter.mode === 'plan' ? 'Plan' : 'Ask'} mode`}. Nothing is sent until you press Send.`} onClick={() => onStart(starter)}>
               <span className="lc-homestart__icon" aria-hidden="true">{starter.icon === 'page' ? <PageIcon /> : <Icon name={starter.icon} size={16} />}</span>
               <span className="lc-homestart__name">{starter.label}</span>
               <span className="lc-homestart__line">{starter.line}</span>
