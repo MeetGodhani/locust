@@ -72,6 +72,13 @@ export interface AcpPermissionRequest {
 /** The person's answer, as the KIND of option it is. */
 export type AcpPermissionAnswer = "allow_once" | "allow_always" | "reject_once";
 
+export interface AcpMcpServer {
+  readonly name: string;
+  readonly command: string;
+  readonly args: readonly string[];
+  readonly env: readonly { readonly name: string; readonly value: string }[];
+}
+
 export interface AcpRunOptions {
   /** Started IN the folder as well as told it: the process's own folder and the session's are the same. */
   readonly spawn: (
@@ -84,6 +91,8 @@ export interface AcpRunOptions {
   readonly prompt: string;
   /** An earlier session to continue. */
   readonly resumeSessionId?: string;
+  /** Per-run stdio MCP servers passed in session/new and session/load. */
+  readonly mcpServers?: readonly AcpMcpServer[];
   /**
    * The mode the session must be in, by the agent's own id. A session loaded
    * in another mode is switched; an agent that does not offer it is not run.
@@ -367,15 +376,21 @@ export function startAcpRun(options: AcpRunOptions): AcpRun {
       // What it can do is shown in Settings; a listener's failure never stops the turn.
     }
     const cwd = options.command.cwd;
+    const mcpServers: JsonValue[] = (options.mcpServers ?? []).map((server) => ({
+      name: server.name,
+      command: server.command,
+      args: [...server.args],
+      env: server.env.map((entry) => ({ name: entry.name, value: entry.value })),
+    }));
     let session: JsonObject;
     if (options.resumeSessionId === undefined) {
-      session = objectOf(await client.request("session/new", { cwd, mcpServers: [] }));
+      session = objectOf(await client.request("session/new", { cwd, mcpServers }));
       sessionId = text(session.sessionId);
       if (sessionId === undefined) throw new Error("The agent did not start a session.");
     } else {
       if (objectOf(init.agentCapabilities).loadSession !== true) throw new Error("The agent cannot continue an earlier session.");
       sessionId = options.resumeSessionId;
-      session = objectOf(await client.request("session/load", { sessionId, cwd, mcpServers: [] }));
+      session = objectOf(await client.request("session/load", { sessionId, cwd, mcpServers }));
     }
     push(ACP_SESSION, { sessionId });
 

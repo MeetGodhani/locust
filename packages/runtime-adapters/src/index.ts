@@ -42,7 +42,7 @@ export type { OpenCodeCommandsOptions } from "./opencode-commands.js";
 export { ACP_DECLINED, ACP_PROMPT_RESULT, ACP_SESSION, acpToolNaming, createAcpEventNormalizer } from "./acp-events.js";
 export type { AcpEventNormalizer, AcpInvocationContext } from "./acp-events.js";
 export { ACP_PROTOCOL_VERSION, acpCapabilitiesOf, acpPermissionRequestOf, startAcpRun } from "./acp-run.js";
-export type { AcpCapabilities, AcpPermissionAnswer, AcpPermissionOption, AcpPermissionRequest, AcpRun, AcpRunOptions } from "./acp-run.js";
+export type { AcpCapabilities, AcpMcpServer, AcpPermissionAnswer, AcpPermissionOption, AcpPermissionRequest, AcpRun, AcpRunOptions } from "./acp-run.js";
 export { unifiedDiffOf } from "./line-diff.js";
 export type { OpenCodePermission, OpenCodePermissionAnswer, OpenCodePermissionReply, OpenCodeServeRunOptions } from "./opencode-serve-run.js";
 export type {
@@ -72,6 +72,7 @@ export {
 } from "./process-runner.js";
 export { parseRuntimeVersion } from "./version.js";
 export type {
+  BrowserMcpSpec,
   MissionSandbox,
   RuntimeCommandOptions,
 } from "./commands.js";
@@ -176,6 +177,7 @@ export {
   withOpenCodeProviders,
   withoutOpenCodeQuestionTool,
   withOpenCodeGuard,
+  withOpenCodeBrowserMcp,
   OPENCODE_READ_ONLY_CONFIG,
   MUSE_REQUIRED_FEATURES,
   OPENCODE_REQUIRED_FEATURES,

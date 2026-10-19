@@ -116,7 +116,10 @@ import { createTerminalHost } from './terminal-host.js'
 import { registerTerminalIpc } from './terminal-ipc.js'
 import { terminalFolder } from './terminal-folder.js'
 import { TERMINAL_EVENT } from '../shared/terminal.js'
-import { policyTerminalRefusal } from '../shared/organization-policy.js'
+import { policyBrowserRefusal, policyTerminalRefusal } from '../shared/organization-policy.js'
+import { createBrowserHost } from './browser-host.js'
+import { registerBrowserIpc } from './browser-ipc.js'
+import { BROWSER_EVENT_CHANNEL } from '../shared/browser.js'
 import { catchUpTerminal, createTerminalCatchUp, createTerminalImports, createTranscriptReader, transcriptPathFor } from './terminal-catch-up.js'
 import type { CatchUpFacts } from './terminal-catch-up.js'
 import { importSession, listImportableSessions } from './session-import.js'
@@ -1150,6 +1153,7 @@ if (ownsSingleInstanceLock) void clearClaudeSkillCopies(claudeSkillCopies)
 let missionServiceForShutdown: CodexMissionService | undefined
 let remoteControlForShutdown: ReturnType<typeof createRemoteControl> | undefined
 let terminalForShutdown: ReturnType<typeof createTerminalHost> | undefined
+let browserForShutdown: ReturnType<typeof createBrowserHost> | undefined
 let queuedMessagesForShutdown: ReturnType<typeof createQueuedMessageStore> | undefined
 /** Antigravity's watches too: never disposed, they polled and wrote on through the flush (B4 lead). */
 let antigravityServiceForShutdown: { dispose(): Promise<void> } | undefined
@@ -2322,6 +2326,20 @@ if (!ownsSingleInstanceLock) {
       emitApproval: raiseApproval
     })
     permissionHostForShutdown = permissionHost
+    const browserHost = createBrowserHost({
+      bridgePath: app.isPackaged
+        ? join(process.resourcesPath, 'locust-browser-bridge.mjs')
+        : join(__dirname, '../../resources/locust-browser-bridge.mjs'),
+      node: process.execPath,
+      getWorkspaceRoot: () => (workspaceChosen ? workspacePath : undefined),
+      policyRefusal: () => policyBrowserRefusal(organizationPolicy),
+      emitState: (state) => {
+        if (approvalWindow !== undefined && !approvalWindow.isDestroyed() && !approvalWindow.webContents.isDestroyed()) {
+          approvalWindow.webContents.send(BROWSER_EVENT_CHANNEL, state)
+        }
+      }
+    })
+    browserForShutdown = browserHost
     // No teammate ends your browser (0.717): the hook every Claude Code run is given. Beside app.asar, as the bridge is.
     const commandGuardWritten = writeCommandGuard(app.getPath('userData'), {
       node: process.execPath,
@@ -2493,6 +2511,7 @@ if (!ownsSingleInstanceLock) {
       spendRefusal,
       ownProvider: (model) => ownModels.providerFor(model),
       permissionHost,
+      browserHost,
       commandGuard: () => commandGuardWritten,
       copilotCommandGuard: () => copilotGuardWritten,
       openCodeCommandGuard: () => openCodeGuardWritten,
@@ -4100,7 +4119,7 @@ if (!ownsSingleInstanceLock) {
     // channels do: a top-level frame of a window this process owns, never a
     // subframe. The roster is local data, but it is still a write surface.
     const fromOwnWindow = (event: Electron.IpcMainInvokeEvent): boolean =>
-      BrowserWindow.fromWebContents(event.sender) !== null
+      BrowserWindow.fromWebContents(event.sender)?.webContents === event.sender
       && event.senderFrame !== null
       && event.senderFrame.parent === null
 
@@ -4691,6 +4710,7 @@ if (!ownsSingleInstanceLock) {
     })
     terminalForShutdown = terminalHost
     registerTerminalIpc(terminalHost, fromOwnWindow)
+    registerBrowserIpc(browserHost, fromOwnWindow)
 
     ipcMain.handle(OPEN_IN_TERMINAL_CHANNEL, async (event, requested: unknown) => {
       if (!fromOwnWindow(event) || typeof requested !== 'string' || requested.length === 0 || requested.length > 128) {
@@ -9069,7 +9089,7 @@ if (!ownsSingleInstanceLock) {
 
     const windowFromValidSender = (event: Electron.IpcMainEvent): BrowserWindow | undefined => {
       const window = BrowserWindow.fromWebContents(event.sender)
-      if (!window || !event.senderFrame || event.senderFrame.parent !== null) return undefined
+      if (!window || window.webContents !== event.sender || !event.senderFrame || event.senderFrame.parent !== null) return undefined
       return window
     }
     ipcMain.on('window:minimize', (event) => {
@@ -9367,6 +9387,7 @@ if (!ownsSingleInstanceLock) {
     const openMain = (beginSweep: boolean): void => {
       createWindow(codexMissions, (window) => {
         approvalWindow = window
+        browserHost.attachWindow(window)
         guardClose(window)
         attendWindow(window)
         window.webContents.once('did-finish-load', () => setTimeout(() => void backgroundForShutdown?.resume().catch(() => undefined), 1_500))
@@ -9415,6 +9436,7 @@ if (!ownsSingleInstanceLock) {
       if (BrowserWindow.getAllWindows().length === 0) {
         createWindow(codexMissions, (window) => {
           approvalWindow = window
+          browserHost.attachWindow(window)
           guardClose(window)
           attendWindow(window)
           replayDiscoveryToWindow()
@@ -9468,6 +9490,7 @@ if (ownsSingleInstanceLock) {
       deadlineMs: SHUTDOWN_DEADLINE_MS,
       work: async () => {
         await terminalForShutdown?.dispose()
+        await browserForShutdown?.dispose()
         await mcpForShutdown?.dispose()
         await voiceForShutdown?.dispose()
         await remoteControlForShutdown?.dispose()

@@ -1,5 +1,21 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { TERMINAL_SHELLS, TERMINAL_CREATE, TERMINAL_INPUT, TERMINAL_RESIZE, TERMINAL_CLOSE, TERMINAL_EVENT, TERMINAL_LINK, TERMINAL_COPY, type TerminalApi } from '../shared/terminal.js'
+import {
+  BROWSER_BACK_CHANNEL,
+  BROWSER_BOUNDS_CHANNEL,
+  BROWSER_CLOSE_PANEL_CHANNEL,
+  BROWSER_CLOSE_TAB_CHANNEL,
+  BROWSER_EVENT_CHANNEL,
+  BROWSER_FORWARD_CHANNEL,
+  BROWSER_NAVIGATE_CHANNEL,
+  BROWSER_NEW_TAB_CHANNEL,
+  BROWSER_OPEN_PANEL_CHANNEL,
+  BROWSER_RELOAD_CHANNEL,
+  BROWSER_SELECT_TAB_CHANNEL,
+  BROWSER_STATE_CHANNEL,
+  BROWSER_STOP_CHANNEL,
+  type BrowserPanelState
+} from '../shared/browser.js'
 import { APPEARANCE_CHANGED_CHANNEL, APPEARANCE_GET_CHANNEL, APPEARANCE_SET_CHANNEL, themeFromArguments } from '../shared/appearance.js'
 import type { AppearanceState, ThemeChoice } from '../shared/appearance.js'
 import { ACP_AGENTS_LIST_CHANNEL, ACP_AGENTS_REMOVE_CHANNEL, ACP_AGENTS_SAVE_CHANNEL, ACP_AGENTS_TEST_CHANNEL } from '../shared/acp-agents.js'
@@ -452,6 +468,25 @@ const desktopApi: DesktopApi = {
       const receive = (_event: Electron.IpcRendererEvent, event: Parameters<Parameters<TerminalApi['onEvent']>[0]>[0]) => listener(event)
       ipcRenderer.on(TERMINAL_EVENT, receive)
       return () => { ipcRenderer.removeListener(TERMINAL_EVENT, receive) }
+    }
+  },
+  browser: {
+    state: () => ipcRenderer.invoke(BROWSER_STATE_CHANNEL),
+    openPanel: (url) => ipcRenderer.invoke(BROWSER_OPEN_PANEL_CHANNEL, url),
+    closePanel: () => ipcRenderer.invoke(BROWSER_CLOSE_PANEL_CHANNEL),
+    setBounds: (bounds) => ipcRenderer.invoke(BROWSER_BOUNDS_CHANNEL, bounds),
+    navigate: (url, tabId) => ipcRenderer.invoke(BROWSER_NAVIGATE_CHANNEL, url, tabId),
+    back: (tabId) => ipcRenderer.invoke(BROWSER_BACK_CHANNEL, tabId),
+    forward: (tabId) => ipcRenderer.invoke(BROWSER_FORWARD_CHANNEL, tabId),
+    reload: (tabId) => ipcRenderer.invoke(BROWSER_RELOAD_CHANNEL, tabId),
+    stop: (tabId) => ipcRenderer.invoke(BROWSER_STOP_CHANNEL, tabId),
+    newTab: (url) => ipcRenderer.invoke(BROWSER_NEW_TAB_CHANNEL, url),
+    selectTab: (tabId) => ipcRenderer.invoke(BROWSER_SELECT_TAB_CHANNEL, tabId),
+    closeTab: (tabId) => ipcRenderer.invoke(BROWSER_CLOSE_TAB_CHANNEL, tabId),
+    onState: (listener) => {
+      const receive = (_event: Electron.IpcRendererEvent, state: BrowserPanelState) => listener(state)
+      ipcRenderer.on(BROWSER_EVENT_CHANNEL, receive)
+      return () => { ipcRenderer.removeListener(BROWSER_EVENT_CHANNEL, receive) }
     }
   },
   acpAgents: {

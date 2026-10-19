@@ -205,6 +205,14 @@ reads of your folder stays on this machine.
 - **Locust's permission host listens on `127.0.0.1` only.** Claude Code asks it
   before a connector call or a command, and each run gets its own token. Locust
   also reads Antigravity's own local server, at `127.0.0.1`.
+- **Locust's browser bridge listens on `127.0.0.1` only.** The in-window Browser
+  panel runs in its own isolated Chromium session (`persist:locust-browser`),
+  separate from your Chrome profile and cookies. When a teammate runs on an
+  agent that accepts per-run MCP tools, a per-run stdio bridge forwards browser
+  tool calls to this loopback listener with a token minted for that run only.
+  Nothing the browser shows reaches a model unless a teammate's tool call asked
+  for it in that turn, and password, payment, submit, send, download, and
+  cross-origin navigations ask on a card in the conversation first.
 - **Let your other AI apps use Locust** (Settings > General) is off by default.
   When enabled, a separate listener binds only to `127.0.0.1` and
   authenticates the token before reading the request body. The local stdio

@@ -65,6 +65,9 @@ export type IconName =
   | 'mic-off'
   // A link (0.770), from Lucide's link.
   | 'link'
+  | 'globe'
+  | 'arrow-left'
+  | 'arrow-right'
 
 export function Icon({ name, size = 16 }: { name: IconName; size?: number }): ReactNode {
   const paths: Record<IconName, ReactNode> = {
@@ -158,6 +161,9 @@ export function Icon({ name, size = 16 }: { name: IconName; size?: number }): Re
     plug: <><path d="M12 22v-5" /><path d="M9 8V2" /><path d="M15 8V2" /><path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z" /></>,
     server: <><rect x="2" y="2" width="20" height="8" rx="2" /><rect x="2" y="14" width="20" height="8" rx="2" /><path d="M6 6h.01" /><path d="M6 18h.01" /></>,
     link: <><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" /><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" /></>,
+    globe: <><circle cx="12" cy="12" r="9" /><path d="M3 12h18" /><path d="M12 3a14.5 14.5 0 0 0 0 18 14.5 14.5 0 0 0 0-18" /></>,
+    'arrow-left': <><path d="m12 19-7-7 7-7" /><path d="M19 12H5" /></>,
+    'arrow-right': <><path d="M5 12h14" /><path d="m12 5 7 7-7 7" /></>,
     users: <><circle cx="9" cy="8" r="3" /><path d="M3.5 19a5.5 5.5 0 0 1 11 0" /><path d="M15 6.5a3 3 0 0 1 0 5.8" /><path d="M17 14a5 5 0 0 1 3.5 5" /></>
   }
 

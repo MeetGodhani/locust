@@ -495,6 +495,19 @@ export interface RuntimeCommandOptions {
    * GitHub (0.710), which live in Locust's profile. Claude Code only.
    */
   readonly skillPlugins?: readonly string[];
+  /**
+   * Per-run browser MCP server (`locust_browser`). Passed per-run on the
+   * command line or environment and never written to global agent configs.
+   */
+  readonly browserMcp?: BrowserMcpSpec;
+}
+
+export interface BrowserMcpSpec {
+  readonly configPath: string;
+  readonly copilotConfigPath?: string;
+  readonly command: string;
+  readonly args: readonly string[];
+  readonly env: Readonly<Record<string, string>>;
 }
 
 /** A command name as a runtime lists it: `init`, `security-review`, `plugin:skill`. */
@@ -939,6 +952,7 @@ export function createClaudePrintCommand(
      * a scope nobody chose. Failing closed there is deliberate.
      */
     ...(auto ? [] : connectorRules(options.connectors)),
+    ...(auto || options.browserMcp === undefined ? [] : ["--allowedTools", "mcp__locust_browser__*"]),
     /*
      * And somewhere to ASK, for everything the rules above did not cover.
      *
@@ -959,6 +973,12 @@ export function createClaudePrintCommand(
           requireText(options.permissionBridge.configPath, "Permission bridge config"),
           "--permission-prompt-tool",
           requireText(options.permissionBridge.toolName, "Permission tool"),
+        ]),
+    ...(options.browserMcp === undefined
+      ? []
+      : [
+          "--mcp-config",
+          requireText(options.browserMcp.configPath, "Browser MCP config"),
         ]),
   ];
   // `--add-dir` too outside Auto: `--restricted` confines the file tools to
@@ -1503,7 +1523,7 @@ export const OPENCODE_AUTO_CONFIG = JSON.stringify({
  * What OpenCode is told for a mode, as environment: its permission config and, for a read-only run, no plugins.
  * One function for `run` and the server (0.677), so a mode means the same thing on either route.
  */
-export function openCodeModeEnv(options: { readonly sandbox?: RuntimeCommandOptions["sandbox"]; readonly repositoryRoot?: string; readonly providers?: RuntimeCommandOptions["providers"]; readonly openCodeGuardPlugin?: string }): Readonly<Record<string, string>> {
+export function openCodeModeEnv(options: { readonly sandbox?: RuntimeCommandOptions["sandbox"]; readonly repositoryRoot?: string; readonly providers?: RuntimeCommandOptions["providers"]; readonly openCodeGuardPlugin?: string; readonly browserMcp?: BrowserMcpSpec }): Readonly<Record<string, string>> {
   const auto = sandboxArgument(options.sandbox) === "full-access";
   const readOnly = sandboxArgument(options.sandbox) === "read-only";
   // A worktree run needs its parent repository; a read-only one still needs
@@ -1523,7 +1543,10 @@ export function openCodeModeEnv(options: { readonly sandbox?: RuntimeCommandOpti
   // (OPENCODE_PURE, "run without external plugins"; plugin/index.ts:181).
   // Only for read-only runs: a run that may edit is already trusted with
   // the folder, and the person's own plugins are theirs to have there.
-  const configured = withOpenCodeGuard(withoutOpenCodeQuestionTool(withOpenCodeProviders(config, options.providers)), options.openCodeGuardPlugin);
+  const configured = withOpenCodeBrowserMcp(
+    withOpenCodeGuard(withoutOpenCodeQuestionTool(withOpenCodeProviders(config, options.providers)), options.openCodeGuardPlugin),
+    options.browserMcp,
+  );
   return {
     OPENCODE_CONFIG_CONTENT: configured,
     ...(readOnly ? { OPENCODE_PURE: "1" } : {}),
@@ -1563,6 +1586,29 @@ export function withOpenCodeGuard(config: string, plugin: string | undefined): s
   const parsed = JSON.parse(config) as Record<string, unknown>;
   const plugins = Array.isArray(parsed.plugin) ? parsed.plugin : [];
   return JSON.stringify({ ...parsed, plugin: [...plugins, requireText(plugin, "Command guard plugin")] });
+}
+
+export function withOpenCodeBrowserMcp(config: string, browserMcp: BrowserMcpSpec | undefined): string {
+  if (browserMcp === undefined) return config;
+  const parsed = JSON.parse(config) as Record<string, unknown>;
+  const mcp = (parsed.mcp as Record<string, unknown> | undefined) ?? {};
+  const permission = (parsed.permission as Record<string, unknown> | undefined) ?? {};
+  return JSON.stringify({
+    ...parsed,
+    mcp: {
+      ...mcp,
+      locust_browser: {
+        type: "local",
+        command: [requireText(browserMcp.command, "Browser MCP command"), ...browserMcp.args],
+        environment: browserMcp.env,
+        enabled: true,
+      },
+    },
+    permission: {
+      ...permission,
+      "locust_browser_*": "allow",
+    },
+  });
 }
 
 /**
@@ -1842,6 +1888,8 @@ export function createOpenCodeServeCommand(
     readonly sandbox?: RuntimeCommandOptions["sandbox"];
     /** Locust's command guard, in every mode (0.722, withOpenCodeGuard). */
     readonly openCodeGuardPlugin?: string;
+    /** Per-run browser MCP server (`locust_browser`). */
+    readonly browserMcp?: BrowserMcpSpec;
   },
 ): RuntimeCommandSpec {
   if (options.sandbox !== undefined) {
@@ -1864,7 +1912,12 @@ export function createOpenCodeServeCommand(
   return baseSpec("opencode", executable, options.workspacePath, ["serve", "--port", "0", "--hostname", "127.0.0.1"], {
     stdin: "protocol",
     sandbox: "workspace-write",
-    env: { OPENCODE_CONFIG_CONTENT: withOpenCodeGuard(withoutOpenCodeQuestionTool(withOpenCodeProviders(config, options.providers) ?? config), options.openCodeGuardPlugin) },
+    env: {
+      OPENCODE_CONFIG_CONTENT: withOpenCodeBrowserMcp(
+        withOpenCodeGuard(withoutOpenCodeQuestionTool(withOpenCodeProviders(config, options.providers) ?? config), options.openCodeGuardPlugin),
+        options.browserMcp,
+      ),
+    },
   });
 }
 
@@ -1944,6 +1997,10 @@ export function createCopilotPromptCommand(
   // No teammate ends the person's browser (0.721, main/command-guard.ts).
   if (options.guardPlugin !== undefined) {
     args.push("--plugin-dir", requireText(options.guardPlugin, "Command guard plugin"));
+  }
+  if (options.browserMcp !== undefined) {
+    const mcpPath = requireText(options.browserMcp.copilotConfigPath ?? options.browserMcp.configPath, "Browser MCP config");
+    args.push("--additional-mcp-config", `@${mcpPath}`);
   }
   return baseSpec("copilot", executable, options.workspacePath, args, { stdin: "none", sandbox: sandboxArgument(options.sandbox) });
 }

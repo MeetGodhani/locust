@@ -1,4 +1,6 @@
-import { policyTurnRefusal } from '../shared/organization-policy.js'
+import { policyFeatureRefusal, policyTurnRefusal } from '../shared/organization-policy.js'
+import { supportsPerRunBrowserMcp } from '../shared/browser.js'
+import type { BrowserMcpRegistration, BrowserRunContext } from './browser-host.js'
 import {
   asProcessNormalizer,
   codexAppServerPolicy,
@@ -671,6 +673,14 @@ interface CodexMissionServiceOptions {
    * Without it that mode has nobody to ask, and every request is refused.
    */
   readonly approvals?: ApprovalChannel
+  /**
+   * Per-run browser MCP server host. Registers a token and config for each
+   * local turn on an MCP-capable runtime and releases it when the turn ends.
+   */
+  readonly browserHost?: {
+    registerRun(run: BrowserRunContext): Promise<BrowserMcpRegistration>
+    releaseRun(runId: string): Promise<void>
+  }
 }
 
 function error(
@@ -913,6 +923,7 @@ export function createCodexMissionService(options: CodexMissionServiceOptions): 
     // The run is over, so nobody can answer a permission it was still asking:
     // refuse what is waiting, forget its token, remove its config.
     void options.permissionHost?.release(candidate.runId).catch(() => undefined)
+    void options.browserHost?.releaseRun(candidate.runId).catch(() => undefined)
     options.approvals?.release(candidate.runId)
     // Whatever ended this run, anyone waiting on it is told. Fire and forget:
     // a meeting's bookkeeping must never hold a slot open.
@@ -2092,6 +2103,52 @@ export function createCodexMissionService(options: CodexMissionServiceOptions): 
           cloud === undefined && runtime === 'claude' && effectiveSandbox !== 'full-access' && options.permissionHost !== undefined
             ? await options.permissionHost.register({ runId, missionId, cwd: runCwd, beforeApproval: flushBeforeApproval })
             : undefined
+        const browserRuntime = supportsPerRunBrowserMcp(runtime) ? runtime : undefined
+        const browserApprovalHandler =
+          cloud === undefined && browserRuntime !== undefined && options.approvals !== undefined
+            ? options.approvals.requestHandlerFor({ runId, missionId, cwd: runCwd, changesByItem, runtime: browserRuntime })
+            : undefined
+        const browserMcp =
+          cloud === undefined &&
+          browserRuntime !== undefined &&
+          options.browserHost !== undefined &&
+          policyFeatureRefusal(options.organizationPolicy, 'browser') === undefined
+            ? await options.browserHost.registerRun({
+                runId,
+                missionId,
+                teammateLabel: peer?.self.name ?? runtimeDisplayName(runtime),
+                cwd: runCwd,
+                ...(browserApprovalHandler === undefined
+                  ? {}
+                  : {
+                      askApproval: async (decision) => {
+                        await flushBeforeApproval()
+                        const res = await browserApprovalHandler({
+                          id: 0,
+                          method: 'item/commandExecution/requestApproval',
+                          params: {
+                            command: decision.detail,
+                            cwd: runCwd,
+                            locustAlwaysKey: `browser:${decision.gate}:${decision.summary}`,
+                            locustCard: {
+                              summary: decision.summary,
+                              alwaysCovers: `this same browser action (${decision.gate}) during this session`,
+                              dataSentSays: 'The browser action above runs in Locust’s isolated Browser panel.',
+                              reversibleSays: 'Submitting a form, sending, paying, or downloading cannot be undone by Locust.'
+                            }
+                          }
+                        })
+                        const rec = typeof res === 'object' && res !== null && !Array.isArray(res) ? (res as Record<string, unknown>) : {}
+                        const dec = rec.decision
+                        return {
+                          approved: dec === 'accept' || dec === 'acceptForSession',
+                          always: dec === 'acceptForSession',
+                          ...(typeof rec.reason === 'string' && rec.reason.length > 0 ? { reason: rec.reason } : {})
+                        }
+                      }
+                    })
+              }).catch(() => undefined)
+            : undefined
         /*
          * A MODEL OF THE PERSON'S OWN (0.357) is declared to OpenCode for this
          * run only, key and all, in the child's environment. One that has
@@ -2157,7 +2214,8 @@ export function createCodexMissionService(options: CodexMissionServiceOptions): 
               ...(mode === 'approve-each' ? {} : { sandbox: effectiveSandbox }),
               ...(repositoryRoot === undefined ? {} : { repositoryRoot }),
               ...(providers === undefined ? {} : { providers }),
-              ...(openCodeGuardPlugin === undefined ? {} : { openCodeGuardPlugin })
+              ...(openCodeGuardPlugin === undefined ? {} : { openCodeGuardPlugin }),
+              ...(browserMcp === undefined ? {} : { browserMcp })
             })
           }
           if (runtime === 'opencode') {
@@ -2171,6 +2229,7 @@ export function createCodexMissionService(options: CodexMissionServiceOptions): 
               ...(repositoryRoot === undefined ? {} : { repositoryRoot }),
               ...(providers === undefined ? {} : { providers }),
               ...(openCodeGuardPlugin === undefined ? {} : { openCodeGuardPlugin }),
+              ...(browserMcp === undefined ? {} : { browserMcp }),
               ...choice
             })
           }
@@ -2216,13 +2275,15 @@ export function createCodexMissionService(options: CodexMissionServiceOptions): 
               ...(chosenModel === undefined || chosenModel === 'auto' ? {} : { model: chosenModel }),
               ...(chosenEffort === undefined ? {} : { effort: chosenEffort }),
               ...(resumeThreadId === undefined ? { sessionId: copilotSessionId } : { resumeThreadId }),
-              ...(copilotGuardPlugin === undefined ? {} : { guardPlugin: copilotGuardPlugin })
+              ...(copilotGuardPlugin === undefined ? {} : { guardPlugin: copilotGuardPlugin }),
+              ...(browserMcp === undefined ? {} : { browserMcp })
             })
           }
           return runtime === 'claude'
             ? createClaudePrintCommand(agentExecutable, {
                 workspacePath: agentFolder,
                 ...(permissionBridge === undefined ? {} : { permissionBridge }),
+                ...(browserMcp === undefined ? {} : { browserMcp }),
                 ...(commandGuardPath === undefined ? {} : { commandGuard: { settingsPath: commandGuardPath } }),
                 ...(skillPlugins.length === 0 ? {} : { skillPlugins }),
                 // Every connector the person's own Claude Code can reach.
@@ -2662,7 +2723,21 @@ ${sentPrompt.trim()}`
               ...(side === undefined ? {} : { forkThread: true }),
               ...(codexCommand === 'review' || codexCommand === 'compact' ? { slashCommand: codexCommand } : {}),
               // No teammate ends your browser, Codex too (0.720).
-              ...(codexGuardConfig === undefined ? {} : { threadConfig: codexGuardConfig as Readonly<Record<string, JsonValue>> }),
+              ...(() => {
+                const codexThreadConfig: Record<string, JsonValue> = {
+                  ...((codexGuardConfig as Readonly<Record<string, JsonValue>> | undefined) ?? {}),
+                  ...(browserMcp === undefined
+                    ? {}
+                    : {
+                        'mcp_servers.locust_browser.command': browserMcp.command,
+                        'mcp_servers.locust_browser.args': [...browserMcp.args],
+                        'mcp_servers.locust_browser.env': browserMcp.env,
+                        'mcp_servers.locust_browser.enabled': true,
+                        'mcp_servers.locust_browser.default_tools_approval_mode': 'approve'
+                      })
+                }
+                return Object.keys(codexThreadConfig).length === 0 ? {} : { threadConfig: codexThreadConfig }
+              })(),
               signal: controller.signal,
               now
             })
@@ -2702,6 +2777,18 @@ ${sentPrompt.trim()}`
               command,
               prompt: runtimePrompt,
               ...(resumeThreadId === undefined ? {} : { resumeSessionId: resumeThreadId }),
+              ...(browserMcp === undefined
+                ? {}
+                : {
+                    mcpServers: [
+                      {
+                        name: 'locust_browser',
+                        command: browserMcp.command,
+                        args: browserMcp.args,
+                        env: Object.entries(browserMcp.env).map(([name, value]) => ({ name, value }))
+                      }
+                    ]
+                  }),
               // The model picked for it, by the option its own Test named; nothing else of the agent's is changed.
               ...(acpAgentRun.model === undefined || modelOption === undefined ? {} : { requiredConfig: { [modelOption.id]: acpAgentRun.model } }),
               ...(handler === undefined
@@ -2727,6 +2814,18 @@ ${sentPrompt.trim()}`
               command,
               prompt: runtimePrompt,
               ...(resumeThreadId === undefined ? {} : { resumeSessionId: resumeThreadId }),
+              ...(browserMcp === undefined
+                ? {}
+                : {
+                    mcpServers: [
+                      {
+                        name: 'locust_browser',
+                        command: browserMcp.command,
+                        args: browserMcp.args,
+                        env: Object.entries(browserMcp.env).map(([name, value]) => ({ name, value }))
+                      }
+                    ]
+                  }),
               // Agent mode, which asks; never Autopilot, and allow-all off.
               modeId: COPILOT_ACP_SESSION.modeId,
               requiredConfig: COPILOT_ACP_SESSION.requiredConfig,
@@ -2792,6 +2891,7 @@ ${sentPrompt.trim()}`
             : 'The Codex process could not be started safely.'
           // A run that never started still registered a token. Let it go.
           void options.permissionHost?.release(runId).catch(() => undefined)
+          void options.browserHost?.releaseRun(runId).catch(() => undefined)
           try {
             await options.ledger.appendHostFailure(missionId, {
               code: 'runtime-start-failed',

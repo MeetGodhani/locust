@@ -20,6 +20,7 @@ export interface OrganizationPolicy {
   readonly phone?: boolean
   readonly cloud?: boolean
   readonly terminal?: boolean
+  readonly browser?: boolean
 }
 
 /** A launch-time snapshot. An error is a closed gate, never an empty policy. */
@@ -41,10 +42,10 @@ export function policyRefusal(state: OrganizationPolicyState, setting: keyof Org
   return `${why} Set by your organization (${setting} in ${state.path}). Nothing was started.`
 }
 
-export function policyFeatureRefusal(state: OrganizationPolicyState | undefined, setting: 'otherApps' | 'phone' | 'cloud' | 'terminal'): string | undefined {
+export function policyFeatureRefusal(state: OrganizationPolicyState | undefined, setting: 'otherApps' | 'phone' | 'cloud' | 'terminal' | 'browser'): string | undefined {
   if (state?.error !== undefined) return state.error
   if (state?.policy[setting] !== false) return undefined
-  const name = { otherApps: 'Access from other AI apps, the locust command and editors is off.', phone: 'Phone pairing is off.', cloud: 'Cloud computers and cloud tasks are off.', terminal: 'The terminal panel is off.' }[setting]
+  const name = { otherApps: 'Access from other AI apps, the locust command and editors is off.', phone: 'Phone pairing is off.', cloud: 'Cloud computers and cloud tasks are off.', terminal: 'The terminal panel is off.', browser: 'The browser panel is off.' }[setting]
   return policyRefusal(state, setting, name)
 }
 
@@ -117,6 +118,7 @@ export function policySettingWords(key: string, value: unknown): string {
     case 'phone':
     case 'cloud':
     case 'terminal':
+    case 'browser':
       return value === false ? 'Off' : 'Allowed'
     default:
       return String(value)
@@ -152,6 +154,10 @@ export function policyTerminalRefusal(state: OrganizationPolicyState | undefined
   }
   if (state.policy.highestMode !== undefined && state.policy.highestMode !== 'auto') return policyRefusal(state, 'highestMode', 'An interactive shell cannot enforce the highest permission mode. Use a conversation in Locust.')
   return undefined
+}
+
+export function policyBrowserRefusal(state: OrganizationPolicyState | undefined): string | undefined {
+  return policyFeatureRefusal(state, 'browser')
 }
 
 /** Keep only selectable ids, including each effort variant; no synthetic default escapes the allowlist. */

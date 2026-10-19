@@ -15,6 +15,7 @@ export function TitleBar({
   swarm,
   needsYou = 0,
   onNeedsYou,
+  browser,
   terminal
 }: {
   readonly workspaceName: string
@@ -24,6 +25,7 @@ export function TitleBar({
   readonly needsYou?: number
   /** Opens the list under the chip. */
   readonly onNeedsYou?: (anchor: HTMLElement) => void
+  readonly browser?: ReactNode
   readonly terminal?: ReactNode
 }): ReactElement {
   return (
@@ -31,6 +33,7 @@ export function TitleBar({
       <span />
       <span className="lc-titlebar__title">{workspaceName}</span>
       <div className="lc-titlebar__right" onDoubleClick={(event) => event.stopPropagation()}>
+        {browser}
         {terminal}
         {/* A workspace-wide setting deserves a persistent, visible statement. */}
         {swarm && <span className="lc-swarmchip">Swarm · every run at max effort</span>}

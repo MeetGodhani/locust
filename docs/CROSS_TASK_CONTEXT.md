@@ -177,6 +177,29 @@ continue; report exact validation results, and say what was not run.
 
 ## Handoff log
 
+### 2026-10-18 — browser teammates can use
+
+- Scope: `exec/agent-browser`, based on `c0a3439b`. The incoming untracked `docs/HANDOFF-agent-browser.md` and
+  `.locust/` stay out of the commit. No version, changelog, installer, site or global configuration change; no paid
+  model turn or push.
+- Main owns the isolated Browser panel (`browser-host.ts`, `browser-url.ts`, `browser-ipc.ts`) in its own Chromium
+  partition (`persist:locust-browser`, separate from the person's Chrome profile and cookies) and the loopback MCP
+  server (`/browser/call`) paired with `resources/locust-browser-bridge.mjs`. Views are created lazily on first open
+  or tool use (`viewCount === 0` at rest).
+- Per-run MCP tools (`browser_open`, `browser_read`, `browser_click`, `browser_type`, `browser_press`,
+  `browser_select`, `browser_scroll`, `browser_screenshot`, `browser_console`, `browser_network`, `browser_back`,
+  `browser_forward`, `browser_tabs`) are passed per run across `claude`, `codex`, `opencode`, `copilot`, and `acp`,
+  never written to global agent configs. Runtimes without per-run MCP (`cursor`, `antigravity`, `muse`) display an
+  explicit note in the panel.
+- URL containment allows `http:`, `https:`, `localhost`/`127.0.0.1`, and `file:` inside the conversation folder
+  (resolved with `realpathSync` so symlinks/junctions cannot escape). Ask-first gates (`credential`, `submit`,
+  `purchase`, `send`, `download`, `leave-origin`) raise Locust's approval card (`ApprovalChannel`) before acting.
+  `browser: false` joins organization policy (`organization-policy.ts`, `docs/ADMIN.md`).
+- Observed: `pnpm typecheck`, `agent-browser.test.ts` (including negative mutation control), `_tools/gate.sh`, and
+  packaged Windows drive (`_tools/drive-agent-browser.mjs` against `release/win-unpacked/Locust.exe`, 12/12 checks,
+  zero model spend) all passed.
+- Not run: macOS/Linux packaged runs, live paid cloud model turns.
+
 ### 2026-10-18 — terminal beside the conversation
 
 - Scope: `exec/terminal-panel`, based on `226c38ef`. The incoming untracked `HANDOFF-terminal-panel.md` stays out

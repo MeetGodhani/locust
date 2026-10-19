@@ -1,8 +1,10 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { TerminalToggle } from './components/TerminalToggle.js'
+import { BrowserToggle } from './components/BrowserToggle.js'
 import { isTerminalToggle } from './terminalKeys.js'
-import { policyTerminalRefusal } from '../../shared/organization-policy.js'
+import { policyBrowserRefusal, policyTerminalRefusal } from '../../shared/organization-policy.js'
 const TerminalPanel = lazy(() => import('./components/TerminalPanel.js'))
+const BrowserPanel = lazy(() => import('./components/BrowserPanel.js'))
 import { BOT_SIZE } from './botSizes.js'
 import { OrganizationPolicyContext, OrganizationPolicyNotice } from './organizationPolicy.js'
 import { POLICY_MODE_ORDER, policyModeAllowed } from '../../shared/organization-policy.js'
@@ -1935,11 +1937,19 @@ export default function App(): ReactElement {
   const [changesOpen, setChangesOpen] = useState(false)
   const [terminalOpen, setTerminalOpen] = useState(false)
   const [terminalMounted, setTerminalMounted] = useState(false)
+  const [browserOpen, setBrowserOpen] = useState(false)
+  const [browserMounted, setBrowserMounted] = useState(false)
   const terminalRefusal = policyTerminalRefusal(build?.organizationPolicy)
+  const browserRefusal = policyBrowserRefusal(build?.organizationPolicy)
+  const closeBrowserPanel = () => {
+    setBrowserOpen(false)
+    void window.desktop?.browser?.closePanel().catch(() => undefined)
+  }
   const toggleTerminal = () => {
     if (terminalRefusal !== undefined) return
     setTerminalMounted(true)
     setTerminalOpen(open => !open)
+    closeBrowserPanel()
     setScreen('workroom')
     setChangesOpen(false)
     setInspectorOpen(false)
@@ -1951,6 +1961,48 @@ export default function App(): ReactElement {
     setCloudPanel(false)
     setBackgroundPanel(false)
   }
+  const toggleBrowser = () => {
+    if (browserRefusal !== undefined) return
+    setBrowserMounted(true)
+    const nextOpen = !browserOpen
+    setBrowserOpen(nextOpen)
+    setTerminalOpen(false)
+    setScreen('workroom')
+    setChangesOpen(false)
+    setInspectorOpen(false)
+    setReviewingId(undefined)
+    setBesideId(undefined)
+    setViewingFile(undefined)
+    setViewerRefusal(undefined)
+    setSideChat(undefined)
+    setCloudPanel(false)
+    setBackgroundPanel(false)
+    if (nextOpen) {
+      void window.desktop?.browser?.openPanel().catch(() => undefined)
+    } else {
+      void window.desktop?.browser?.closePanel().catch(() => undefined)
+    }
+  }
+  useEffect(() => {
+    const api = window.desktop?.browser
+    if (api === undefined) return
+    return api.onState((next) => {
+      if (next.open) {
+        setBrowserMounted(true)
+        setBrowserOpen(true)
+        setTerminalOpen(false)
+        setChangesOpen(false)
+        setInspectorOpen(false)
+        setReviewingId(undefined)
+        setBesideId(undefined)
+        setViewingFile(undefined)
+        setViewerRefusal(undefined)
+        setSideChat(undefined)
+        setCloudPanel(false)
+        setBackgroundPanel(false)
+      }
+    })
+  }, [])
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (!isTerminalToggle(event) || event.repeat) return
@@ -8390,7 +8442,10 @@ export default function App(): ReactElement {
   const benchmarkEntries = listBenchmarks()
   useEffect(() => {
     // A file or another panel explicitly opened takes this slot; the terminals keep their shells and screens.
-    if (viewingFile !== undefined || viewerRefusal !== undefined || besideId !== undefined || reviewingId !== undefined || sideChat !== undefined || cloudPanel || backgroundPanel) setTerminalOpen(false)
+    if (viewingFile !== undefined || viewerRefusal !== undefined || besideId !== undefined || reviewingId !== undefined || sideChat !== undefined || cloudPanel || backgroundPanel) {
+      setTerminalOpen(false)
+      if (browserOpen) closeBrowserPanel()
+    }
   }, [viewingFile, viewerRefusal, besideId, reviewingId, sideChat, cloudPanel, backgroundPanel])
   /*
    * `has-inspector` is what insets the workroom so the drawer does not cover
@@ -8398,11 +8453,12 @@ export default function App(): ReactElement {
    * The file viewer shares that region, so it shares the class: one inset
    * rule, whichever of the two is occupying the space.
    */
+  const panelBesideOpen = (terminalOpen || browserOpen) && screen === 'workroom'
   return (
     <CallTodosContext.Provider value={callTodos}>
     <OrganizationPolicyContext.Provider value={build?.organizationPolicy}>
     <ApprovalRuleContext.Provider value={ruleOfCard}>
-    <div className={`lc-shell${layoutMode === 'compact' ? ' is-compact' : ''}${terminalOpen && screen === 'workroom' ? ' has-viewer has-changes' : ''}${!terminalOpen && changesOpen && changesAvailable && screen === 'workroom' && viewingFile === undefined && viewerRefusal === undefined && besideRun === undefined && reviewing === undefined ? ' has-viewer has-changes' : ''}${!terminalOpen && (viewingFile !== undefined || viewerRefusal !== undefined || besideRun !== undefined || reviewing !== undefined) && screen === 'workroom' ? ' has-viewer' :!terminalOpen && inspectorOpen && liveRun !== undefined && screen === 'workroom' ? ' has-inspector' : ''}`}>
+    <div className={`lc-shell${layoutMode === 'compact' ? ' is-compact' : ''}${panelBesideOpen ? ' has-viewer has-changes' : ''}${!panelBesideOpen && changesOpen && changesAvailable && screen === 'workroom' && viewingFile === undefined && viewerRefusal === undefined && besideRun === undefined && reviewing === undefined ? ' has-viewer has-changes' : ''}${!panelBesideOpen && (viewingFile !== undefined || viewerRefusal !== undefined || besideRun !== undefined || reviewing !== undefined) && screen === 'workroom' ? ' has-viewer' :!panelBesideOpen && inspectorOpen && liveRun !== undefined && screen === 'workroom' ? ' has-inspector' : ''}`}>
       <TitleBar
         // With no folder the composer chip already says so; the bar shows the
         // build instead (Colin, 2026-09-05).
@@ -8411,6 +8467,7 @@ export default function App(): ReactElement {
         swarm={swarm}
         needsYou={needsYouItems.length}
         onNeedsYou={openNeedsYou}
+        browser={liveRun === undefined ? <BrowserToggle open={browserOpen} refusal={browserRefusal} onToggle={toggleBrowser} /> : undefined}
         terminal={liveRun === undefined ? <TerminalToggle open={terminalOpen} refusal={terminalRefusal} onToggle={toggleTerminal} /> : undefined}
       />
       <div className="lc-body">
@@ -9366,6 +9423,7 @@ export default function App(): ReactElement {
                       <Icon name="diff" size={13} /> Review changes
                     </button>
                   )}
+                  <BrowserToggle open={browserOpen} refusal={browserRefusal} onToggle={toggleBrowser} />
                   <TerminalToggle open={terminalOpen} refusal={terminalRefusal} onToggle={toggleTerminal} />
                   {/* The folder's changes, as Claude Code's Changes panel (0.732); a branch of a teammate's own has Review changes. */}
                   {workspacePath !== undefined && pickedTeammate?.worktree !== true && changesAvailable && (
@@ -9379,6 +9437,7 @@ export default function App(): ReactElement {
                         setInspectorOpen(false)
                         setChangesOpen(!changesOpen)
                         setTerminalOpen(false)
+                        closeBrowserPanel()
                       }}
                     >
                       <Icon name="diff" size={13} /> Changes
@@ -9394,6 +9453,7 @@ export default function App(): ReactElement {
                       setChangesOpen(false)
                       setInspectorOpen(!inspectorOpen)
                       setTerminalOpen(false)
+                      closeBrowserPanel()
                     }}
                   >
                     <Icon name="activity" size={13} /> Activity
@@ -9993,7 +10053,10 @@ export default function App(): ReactElement {
         {terminalMounted && <Suspense fallback={null}><TerminalPanel visible={terminalOpen && screen === 'workroom'}
           context={{ ...(terminalMissionId === undefined ? {} : { missionId: terminalMissionId }), ...(pickedTeammate === undefined ? {} : { teammateId: pickedTeammate.teammateId }) }}
           onClose={() => setTerminalOpen(false)} /></Suspense>}
-        {!terminalOpen && viewerRefusal !== undefined && screen === 'workroom' && viewingFile === undefined && (
+        {browserMounted && <Suspense fallback={null}><BrowserPanel visible={browserOpen && screen === 'workroom'}
+          runtime={liveRun?.data?.runtime ?? composerRoute.runtime}
+          onClose={closeBrowserPanel} /></Suspense>}
+        {!terminalOpen && !browserOpen && viewerRefusal !== undefined && screen === 'workroom' && viewingFile === undefined && (
           <aside className="lc-viewer lc-viewer--refused" role="status">
             <div className="lc-viewer__head">
               <span className="lc-viewer__name">{refusedName === undefined || refusedName.length === 0 ? 'Could not open that file' : `Could not open ${refusedName}`}</span>
