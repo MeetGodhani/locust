@@ -11,6 +11,18 @@ Settings shows this file as What's new. An entry may group its changes under
 about when they arrive on it carries `<!-- big -->` on the line under its
 heading: the home screen then shows it once, as a splash.
 
+## 0.806.0 - 2026-10-19
+<!-- big -->
+
+### New
+
+- **A long conversation has a rail of your own messages.** Once a conversation scrolls and has four or more of your messages, a slim strip at its right edge marks each one. Hover a mark to read its first line; click it, or press Ctrl+Alt+Up and Ctrl+Alt+Down, to jump back to it. It steps aside when a panel beside the conversation leaves no room for it.
+- **The context ring says what fills a Claude conversation.** Pressing the ring now lists Claude Code's own estimate for the last finished turn: the conversation, tools, skills, the system prompt and the room left, with a note when something you control takes a large share. Reading it costs nothing and adds nothing to the conversation.
+
+### Improved
+
+- **References work with Claude in Edit.** A reference was left out of a Claude conversation in Edit, because Edit could have changed it. Now Claude reads it there too, and Claude Code's own file rules keep it from changing it.
+
 ## 0.805.0 - 2026-10-19
 
 ### Fixed
