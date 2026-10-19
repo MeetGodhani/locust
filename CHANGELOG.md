@@ -11,6 +11,12 @@ Settings shows this file as What's new. An entry may group its changes under
 about when they arrive on it carries `<!-- big -->` on the line under its
 heading: the home screen then shows it once, as a splash.
 
+## 0.803.0 - 2026-10-19
+
+### Improved
+
+- **The folder chip stays grey in a folder like .claude.** It turned amber there on every conversation, even ones you keep there on purpose. Now it looks like any folder; its hover still says why such a folder is risky, and Locust still asks once before the first conversation there.
+
 ## 0.802.0 - 2026-10-19
 
 ### Improved
