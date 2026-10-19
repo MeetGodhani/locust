@@ -11,6 +11,14 @@ Settings shows this file as What's new. An entry may group its changes under
 about when they arrive on it carries `<!-- big -->` on the line under its
 heading: the home screen then shows it once, as a splash.
 
+## 0.800.0 - 2026-10-19
+
+### Improved
+
+- **The chat box fits beside the browser.** With the browser open, the chat box's buttons ran to three rows with Send alone on the last. Now they are two, with Send at the end of the second, and the model chip shows the model's name there; its hover still says the whole route.
+- **Settings › Chat reads like the rest of Settings.** Where your commands live, on this computer and in this folder, are rows with Open folder at their end.
+- **An Antigravity turn that has not started says so.** If Antigravity takes a turn but writes nothing for it, usually because its window was closed or crashed, the conversation says so after a minute instead of after ten.
+
 ## 0.799.0 - 2026-10-19
 <!-- big -->
 
