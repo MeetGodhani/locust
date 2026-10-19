@@ -60,11 +60,10 @@ describe('the </> button', () => {
     expect(held).toContain('title="Available when Wren finishes')
   })
 
-  it('sits in the conversation header before the ... menu, and the same action heads that menu', () => {
-    const button = APP.indexOf('<OpenInTerminalButton offer={shownTerminal}')
-    const more = APP.indexOf('aria-label="More actions"')
-    expect(button).toBeGreaterThan(-1)
-    expect(button).toBeLessThan(more)
+  it('heads the ... menu, and is no longer a header button of its own (0.797: the header is a row of icons)', () => {
+    // Colin, 2026-10-19: "buttons are getting a little too much". The header's `</>` repeated the menu's first action.
+    expect(APP).not.toContain('<OpenInTerminalButton offer={shownTerminal}')
+    expect(APP.indexOf('aria-label="More actions"')).toBeGreaterThan(-1)
     const menu = APP.indexOf('headerActions.push({ label: `Open in terminal (${shownTerminal.runtimeName})`')
     const reviews = APP.indexOf('label: `Ask ${reviewer.name} for a review`')
     expect(menu).toBeGreaterThan(-1)
