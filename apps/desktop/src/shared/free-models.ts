@@ -10,6 +10,14 @@
  * longcat-2.5-preview-free ~13.5s. Kept with _tools/sweep-drives.mjs
  * (FREE_MODELS) at each release's sweep.
  *
+ * The order is not that one at the top. A new person's first model is the steadiest and the likeliest to
+ * stay, not the quickest at one sum: deepseek-v4.1-flash-free first (Colin, 2026-10-19: "i heard space bunny
+ * might be removed soon so maybe use deepseek"), Locust's own drives' model since 2026-10-18 and OpenCode's
+ * most used free model that week (opencode.ai/data: 74T tokens), a named provider's model. space-bunny-free
+ * second, the default from 0.756 to 0.794: OpenCode calls it a stealth model, free for a limited time, and
+ * stealth models are the ones it retires (Fledge Alpha). The rest follow by answer time. A model OpenCode
+ * stops listing is never offered, whatever its place here.
+ *
  * Gone from OpenCode's free list since the 2026-10-09 sweep, so dropped:
  * nemotron-3-ultra-free, ling-3.1-flash-free, muse-spark-1.3-contributor-free.
  * Not named: jev-1.13-free, listed on 2026-10-18 but answering nothing --
@@ -19,10 +27,10 @@
  * Scout falls back along it when its free model's provider will not answer.
  */
 export const FREE_MODELS_BEST_FIRST: readonly string[] = [
-  'opencode/nemotron-3.5-lightning-free',
-  'opencode/space-bunny-free',
-  'opencode/nemotron-3.5-super-vl-free',
   'opencode/deepseek-v4.1-flash-free',
+  'opencode/space-bunny-free',
+  'opencode/nemotron-3.5-lightning-free',
+  'opencode/nemotron-3.5-super-vl-free',
   'opencode/glm-5.3-flash-free',
   'opencode/mimo-v2.6-flash-free',
   'opencode/beam-free',

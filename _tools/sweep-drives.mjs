@@ -46,10 +46,10 @@ const from = arg('--from')
  * listed by OpenCode but answered nothing, so it is in neither list.
  */
 const FREE_MODELS = [
-  'opencode/nemotron-3.5-lightning-free',
-  'opencode/space-bunny-free',
-  'opencode/nemotron-3.5-super-vl-free',
   'opencode/deepseek-v4.1-flash-free',
+  'opencode/space-bunny-free',
+  'opencode/nemotron-3.5-lightning-free',
+  'opencode/nemotron-3.5-super-vl-free',
   'opencode/glm-5.3-flash-free',
   'opencode/mimo-v2.6-flash-free',
   'opencode/beam-free',

@@ -26,12 +26,12 @@ const shown = FRESH.filter((entry) => !retired.has(entry.id))
 
 describe('a new person starts on the steadiest free model', () => {
   it('not on the first the alphabet lists', () => {
-    expect(freeStartModel('opencode', shown, [])).toBe('opencode/nemotron-3.5-lightning-free')
+    expect(freeStartModel('opencode', shown, [])).toBe('opencode/deepseek-v4.1-flash-free')
     expect(freeStartModel('opencode', shown, [])).not.toBe('opencode/beam-free')
   })
 
   it('and a failure there offers the next steadiest, with the unnamed after all of them', () => {
-    expect(nextFreeModel('opencode', 'opencode/nemotron-3.5-lightning-free', shown)?.id).toBe('opencode/space-bunny-free')
+    expect(nextFreeModel('opencode', 'opencode/deepseek-v4.1-flash-free', shown)?.id).toBe('opencode/space-bunny-free')
     const order = freeModelsBestFirst(shown).map((entry) => entry.id)
     expect(order.slice(0, FREE_MODELS_BEST_FIRST.length)).toEqual(FREE_MODELS_BEST_FIRST)
     // Jev 1.13 is not named (it answered nothing on 2026-10-18): after the named ones, in the order OpenCode lists them.
@@ -47,7 +47,7 @@ describe('a new person starts on the steadiest free model', () => {
       refusal: () => undefined,
       label: (choice) => choice.model
     }).map((pick) => pick.model)
-    expect(picks).toEqual(['opencode/nemotron-3.5-lightning-free', 'opencode/space-bunny-free'])
+    expect(picks).toEqual(['opencode/nemotron-3.5-lightning-free', 'opencode/deepseek-v4.1-flash-free'])
   })
 
   it('the order only orders: a name OpenCode no longer lists adds nothing', () => {
