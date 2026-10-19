@@ -1,5 +1,13 @@
 # What Locust sends over the network
 
+**Conversation references from GitHub.** Only when you choose a repository, Locust asks your own `gh repo clone`
+for a shallow copy from `github.com`, or uses `git clone --depth 1` over HTTPS for a public repository if gh cannot
+clone it. Private repositories use gh's existing sign-in; Locust never reads a token or signs you in. A copy is
+limited to 500 MB including its git data. Opening the conversation after an hour refreshes its copy, unless a run
+is still using it. Old and released copies move to Locust's own `reference-trash` folder, not permanent deletion.
+Local reference folders are not cloned or uploaded. As with the project folder, an agent may send what it reads
+to its model's service. References do not narrow the mode: Auto can change them, and its chips say so.
+
 **Links in the terminal.** Clicking a web link in the person's terminal opens it in their browser, through the
 main process, for HTTP and HTTPS only. Terminal output stays in this window and is never sent to a model or
 written into a conversation. Commands the person types use their own environment and can make their own

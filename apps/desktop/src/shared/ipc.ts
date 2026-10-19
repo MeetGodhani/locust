@@ -23,7 +23,7 @@ import type { Spend } from './spend.js'
 import type { UsageRange, UsageSummary } from './usage.js'
 import type { ConnectorAddRequest, ConnectorAddResponse, ConnectorAgent } from './connector-add.js'
 import type { GithubAccount, GithubCliVersions, GithubInstallResult, GithubSignInCode, GithubSignInResult } from './github-account.js'
-import type { FolderPullRequest, PullRequestNews } from './pull-request.js'
+import type { FolderPullRequest, LinkedPullRequest, PullLinkAddress, PullRequestNews } from './pull-request.js'
 import type { FolderDiff } from './folder-diff.js'
 import type { CloudAgent, CloudFolderState, CloudSetupStep, CloudSignInStep, CloudUse, PublicCloudComputer, PublicCloudTurn } from './cloud-computer.js'
 import type { OfficeDocument } from './office-document.js'
@@ -3013,6 +3013,8 @@ export type MissionApprovalAnswer =
     }
 
 export interface CodexMissionStartRequest {
+  /** Host picker/clone identities, never paths. Omitted means keep this conversation's references. */
+  readonly referenceIds?: readonly string[]
   readonly account?: string
   readonly prompt: string
   readonly mode?: MissionMode
@@ -3866,6 +3868,8 @@ export interface DesktopApi {
   folderIsRepository(): Promise<boolean | undefined>
   /** The pull request for the branch the open folder is on, read with the person's own gh (0.720). */
   folderPullRequest(): Promise<FolderPullRequest | undefined>
+  /** A pull request linked in a conversation: owner, repo and number, read with the person's own gh. */
+  pullLink(request: PullLinkAddress): Promise<LinkedPullRequest | undefined>
   /** Watch the folder's pull request, or stop (0.731); answers whether it is watched now. */
   watchPullRequest(url: string, on: boolean): Promise<boolean>
   /** The folder's changes against its base, or one of its branch's commits (0.732). */
@@ -4106,6 +4110,7 @@ export interface DesktopApi {
    * it here.
    */
   readMission(missionId: string): Promise<MissionReadResponse>
+  references?(request: import('./references.js').ReferenceRequest): Promise<import('./references.js').ReferencesReply>
   /** A turn that ran out of its agent's plan, carried on with `route` (0.774, shared/carry-on.ts): the card's one press. */
   carryOn(missionId: string, route: CarryOnRoute): Promise<CarryOnResponse>
   addMemory(request: MemoryAddRequest): Promise<MemoryListResponse>

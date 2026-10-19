@@ -367,6 +367,8 @@ function baseSpec(
 export type { MissionSandbox } from "./types.js";
 
 export interface RuntimeCommandOptions {
+  /** Host-selected references. No grant is added to a mode that could then write outside its folder. */
+  readonly referenceFolders?: readonly string[];
   readonly workspacePath: string;
   /**
    * The repository this run's folder is a WORKTREE of, when it is one.
@@ -1012,6 +1014,7 @@ export function createClaudePrintCommand(
     const folder = requireText(dir, "Skill folder");
     args.push("--plugin-dir", folder, ...(auto ? [] : ["--add-dir", folder]));
   }
+  if (!editing) for (const folder of options.referenceFolders ?? []) args.push("--add-dir", requireText(folder, "Reference folder"));
   if (options.model !== undefined) {
     args.push("--model", requireText(options.model, "Model"));
   }
@@ -1182,6 +1185,7 @@ export function createAgyPrintCommand(
 ): RuntimeCommandSpec {
   const sandbox = sandboxArgument(options.sandbox);
   const args = ["--output-format", "stream-json", "--input-format", "stream-json"];
+  if (sandbox === "read-only") for (const folder of options.referenceFolders ?? []) args.push("--add-dir", requireText(folder, "Reference folder"));
   if (sandbox === "workspace-write") args.push("--mode", "accept-edits");
   if (sandbox === "full-access") args.push("--dangerously-skip-permissions");
   if (options.model !== undefined) args.push("--model", requireText(options.model, "Model"));
@@ -1543,7 +1547,7 @@ export const OPENCODE_AUTO_CONFIG = JSON.stringify({
  * What OpenCode is told for a mode, as environment: its permission config and, for a read-only run, no plugins.
  * One function for `run` and the server (0.677), so a mode means the same thing on either route.
  */
-export function openCodeModeEnv(options: { readonly sandbox?: RuntimeCommandOptions["sandbox"]; readonly repositoryRoot?: string; readonly providers?: RuntimeCommandOptions["providers"]; readonly openCodeGuardPlugin?: string; readonly browserMcp?: BrowserMcpSpec }): Readonly<Record<string, string>> {
+export function openCodeModeEnv(options: { readonly sandbox?: RuntimeCommandOptions["sandbox"]; readonly repositoryRoot?: string; readonly providers?: RuntimeCommandOptions["providers"]; readonly openCodeGuardPlugin?: string; readonly browserMcp?: BrowserMcpSpec; readonly referenceFolders?: readonly string[] }): Readonly<Record<string, string>> {
   const auto = sandboxArgument(options.sandbox) === "full-access";
   const readOnly = sandboxArgument(options.sandbox) === "read-only";
   // A worktree run needs its parent repository; a read-only one still needs
@@ -1563,8 +1567,22 @@ export function openCodeModeEnv(options: { readonly sandbox?: RuntimeCommandOpti
   // (OPENCODE_PURE, "run without external plugins"; plugin/index.ts:181).
   // Only for read-only runs: a run that may edit is already trusted with
   // the folder, and the person's own plugins are theirs to have there.
+  // Read-only mode already refuses edits and shell writes. Auto already has access, so leave its config alone.
+  const parsed = JSON.parse(config) as { permission: Record<string, unknown> };
+  if (readOnly && (options.referenceFolders?.length ?? 0) > 0) {
+    const old = parsed.permission.external_directory;
+    parsed.permission.external_directory = {
+      "*": "deny",
+      ...(typeof old === "object" && old !== null ? old : {}),
+      ...Object.fromEntries(options.referenceFolders!.flatMap((folder) => {
+        const path = requireText(folder, "Reference folder").replace(/\\/g, "/").replace(/\/+$/, "");
+        const spellings = /^[A-Za-z]:\//.test(path) ? [path, path.replace(/\//g, "\\")] : [path];
+        return spellings.flatMap((spelling) => [[spelling, "allow"], [`${spelling}${spelling.includes("\\") ? "\\" : "/"}**`, "allow"], [`${spelling}${spelling.includes("\\") ? "\\" : "/"}*`, "allow"]]);
+      })),
+    };
+  }
   const configured = withOpenCodeBrowserMcp(
-    withOpenCodeGuard(withoutOpenCodeQuestionTool(withOpenCodeProviders(config, options.providers)), options.openCodeGuardPlugin),
+    withOpenCodeGuard(withoutOpenCodeQuestionTool(withOpenCodeProviders(JSON.stringify(parsed), options.providers)), options.openCodeGuardPlugin),
     options.browserMcp,
   );
   return {
@@ -1896,6 +1914,7 @@ export function createOpenCodeRunCommand(
 export function createOpenCodeServeCommand(
   executable: ExecutableLaunch,
   options: {
+    readonly referenceFolders?: readonly string[];
     readonly workspacePath: string;
     readonly repositoryRoot?: string;
     /** The person's own models, as for a run (withOpenCodeProviders). */
@@ -1987,6 +2006,7 @@ export function createCopilotPromptCommand(
   ];
   if (sandboxArgument(options.sandbox) === "read-only") {
     args.push("--deny-tool=write,shell");
+    for (const folder of options.referenceFolders ?? []) args.push("--add-dir", requireText(folder, "Reference folder"));
   }
   if (sandboxArgument(options.sandbox) === "full-access") {
     // "Disable file path verification and allow" access outside the workspace

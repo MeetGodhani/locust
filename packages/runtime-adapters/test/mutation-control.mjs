@@ -37,6 +37,18 @@ const ANTIGRAVITY_EVENTS = join(ROOT, 'src', 'antigravity-events.ts')
 
 const MUTATIONS = [
   {
+    file: COMMANDS, name: 'references: Claude cannot read the selected reference',
+    from: 'if (!editing) for (const folder of options.referenceFolders ?? [])',
+    to: 'if (false) for (const folder of options.referenceFolders ?? [])',
+    expect: 'Claude adds a reference only when its existing tools cannot edit or run commands'
+  },
+  {
+    file: COMMANDS, name: 'references: OpenCode refuses every reference read',
+    from: 'if (readOnly && (options.referenceFolders?.length ?? 0) > 0)',
+    to: 'if (false)',
+    expect: 'OpenCode adds only named reference reads while every write denial and bash rule stays intact'
+  },
+  {
     file: OPENCODE_SERVE,
     name: 'opencode-replay: only the final assistant message is recovered',
     from: '      for (const message of turnMessages) {',

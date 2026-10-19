@@ -67,6 +67,23 @@ const ORG_VIEW_TEST = 'src/renderer/src/managed-controls-say-who-set-them.test.t
 
 const MUTATIONS = [
   ...[
+    ['Auto references are omitted', 'shared/references.ts', "if (mode === 'auto') return { include: true", "if (mode === 'auto') return { include: false", 'full-access modes keep the reference with a plain write warning'],
+    ['a restricted extra folder becomes writable', 'shared/references.ts', "return { include: false, note: 'Not shared in this mode", "return { include: true, note: 'Not shared in this mode", 'a restricted runtime omits a grant that would make the reference writable and says why'],
+    ['an unextended runtime loses a harmless brief reference', 'shared/references.ts', "return { include: true, note: 'Named in the brief", "return { include: false, note: 'Named in the brief", 'names references without changing an unextended runtime or inventing a write-access reason to omit them'],
+    ['the size cap is ignored', 'main/conversation-references.ts', 'if (bytes > limit)', 'if (false)', 'refuses an oversized clone and recycles it, never the local folder'],
+    ['a reference is kept per turn rather than per conversation', 'main/conversation-references.ts', 's.turns[mission] = root', 's.turns[mission] = mission', 'survives a restart and later turns, but not another conversation of the same teammate'],
+    ['unused clones are not recycled', 'main/conversation-references.ts', 'if (item.repository !== undefined) {', 'if (false) {', 'only recycles a clone when its last conversation and live run release it'],
+    ['a failed start discards the unsent reference', 'main/conversation-references.ts', 'await collect(ids.filter((id) => pendingCollection.has(id)))', 'await collect(ids)', 'keeps an unsent reference after a failed start releases its lease, until the person removes it'],
+    ['the host accepts arbitrary clone addresses', 'main/conversation-references.ts', 'if (match === null) return undefined', 'if (match === null) return value', 'accepts only repository identities, not arbitrary git URLs, paths, options or shell fragments']
+  ].map(([name, file, from, to, expected]) => ({ name: `references: ${name}`, file: join(ROOT, 'src', file), from, to, expect: expected, tests: ['src/main/a-reference-stays-with-its-conversation.test.ts'] })),
+  {
+    name: 'references: the every-turn reference brief is dropped', file: MISSIONS,
+    from: "if (!bare && options.references !== undefined) runtimePrompt = [runtimePrompt, referencesSection(referenceFolders)].join('\\n\\n')",
+    to: "if (false) runtimePrompt = [runtimePrompt, referencesSection(referenceFolders)].join('\\n\\n')",
+    expect: 'briefs the same reference on later turns and never adds it to another conversation',
+    tests: ['src/main/a-reference-is-briefed-on-every-turn.test.ts']
+  },
+  ...[
     ['foreign OpenCode replies are accepted', 'if (info.sessionID !== sessionId || !record(info.time)) continue', 'if (!record(info.time)) continue', 'reads OpenCode list and export output without tools, reasoning, foreign replies or unfinished exchanges'],
     ['OpenCode tool steps finish exchanges', "info.finish === 'stop'", "info.finish === 'tool-calls'", 'reads OpenCode list and export output without tools, reasoning, foreign replies or unfinished exchanges'],
     ['Cursor messages lose their order', 'for (const id of messages)', 'for (const id of [...messages].reverse())', 'reads Cursor chat metadata and ordered messages without changing the chat store or opening configuration'],

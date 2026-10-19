@@ -44,7 +44,7 @@ import { Icon } from './Icon.js'
 import { ApprovalCard } from './ApprovalCard.js'
 import { CancellationCard, stoppedBeforeAnyTool } from './CancellationCard.js'
 import { SignInButton } from './SignInButton.js'
-import { AgentAvatar, AgentText, DiagnosticLine, LiveStepCard, PlanSteps } from './ThreadItems.js'
+import { AgentAvatar, AgentText, DiagnosticLine, LinkedWords, LiveStepCard, PlanSteps } from './ThreadItems.js'
 import { CloudChangeCard, CloudMarker } from './CloudTurn.js'
 import { cloudFilesHere, type PublicCloudTurn } from '../../../shared/cloud-computer.js'
 import { splitAttachments } from '../../../shared/attachments.js'
@@ -1420,7 +1420,7 @@ onResume,
         )
     return (
       <>
-        {words !== undefined && <div className="lc-bubble">{words}{edit}</div>}
+        {words !== undefined && <div className="lc-bubble"><LinkedWords text={words} />{edit}</div>}
         {notes.length > 0 && <SentNotes notes={notes} edited={edited?.()} workspacePath={workspacePath} />}
         {attached.length > 0 && (
           <div className="lc-sentfiles">

@@ -168,3 +168,208 @@ export function pullRequestNews(before: FolderPullRequest, now: FolderPullReques
   const sentence = said.join(', and ')
   return { number: now.number, url: now.url, said: sentence.charAt(0).toUpperCase() + sentence.slice(1), needsWork }
 }
+
+/**
+ * A PULL REQUEST LINKED IN A CONVERSATION.
+ *
+ * The header reads the folder's own pull request. A link in what was said is
+ * any owner and repo. The window asks for those three parts and nothing else;
+ * the host runs `gh pr view` and answers with the state. An issue is named
+ * here too, and not read, so a later reader can sit beside this one.
+ */
+export const GITHUB_PULL_LINK_CHANNEL = 'github:pull-link'
+
+/** What `gh pr view <n> --repo <owner>/<repo> --json` is asked for. */
+export const LINK_PULL_FIELDS = 'state,isDraft,mergedAt,statusCheckRollup,title'
+
+const OWNER = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/
+const REPO = /^(?!\.\.?$)[A-Za-z0-9._-]{1,100}$/
+const NUMBER = /^[1-9]\d{0,9}$/
+const MAX_PULL = 1_000_000_000
+const REQUEST_KEYS = new Set(['owner', 'repo', 'number'])
+
+export interface PullLinkAddress {
+  readonly owner: string
+  readonly repo: string
+  readonly number: number
+}
+
+/** A GitHub link a conversation can wear. Only a pull request is read today. */
+export type GitHubConversationLink =
+  | ({ readonly kind: 'pull' } & PullLinkAddress)
+  | { readonly kind: 'issue'; readonly owner: string; readonly repo: string; readonly number: number }
+
+export type PullLinkChecks = 'passing' | 'failing' | 'running' | 'none'
+
+export interface LinkedPullRequest {
+  readonly state: PullRequestState
+  readonly checks: PullLinkChecks
+  readonly passed: number
+  readonly failed: number
+  readonly running: number
+  readonly total: number
+}
+
+export type ConversationPiece =
+  | { readonly kind: 'text'; readonly text: string }
+  | { readonly kind: 'link'; readonly text: string; readonly href: string; readonly pull?: PullLinkAddress }
+
+function addressOf(owner: string, repo: string, raw: string): PullLinkAddress | undefined {
+  if (!OWNER.test(owner) || !REPO.test(repo) || !NUMBER.test(raw)) return undefined
+  const number = Number(raw)
+  if (!Number.isInteger(number) || number < 1 || number > MAX_PULL) return undefined
+  return { owner, repo, number }
+}
+
+/** `https://github.com/<owner>/<repo>/pull/<n>`, or the same shape for an issue. Anything else is not one. */
+export function githubLinkOf(url: string): GitHubConversationLink | undefined {
+  if (url.length > 2048) return undefined
+  let parsed: URL
+  try {
+    parsed = new URL(url)
+  } catch {
+    return undefined
+  }
+  if (parsed.protocol !== 'https:' || parsed.username !== '' || parsed.password !== '') return undefined
+  if (parsed.hostname.toLowerCase().replace(/^www\./, '') !== 'github.com') return undefined
+  const parts = parsed.pathname.split('/').filter((part) => part.length > 0)
+  if (parts.length !== 4) return undefined
+  const owner = parts[0] ?? ''
+  const repo = parts[1] ?? ''
+  const kind = parts[2]
+  const address = addressOf(owner, repo, parts[3] ?? '')
+  if (address === undefined) return undefined
+  if (kind === 'pull') return { kind: 'pull', ...address }
+  if (kind === 'issues') return { kind: 'issue', ...address }
+  return undefined
+}
+
+/** The only request the window may make: owner, repo, and a positive number. Anything else is refused. */
+export function pullLinkRequest(value: unknown): PullLinkAddress | undefined {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined
+  const record = value as Record<string, unknown>
+  for (const key of Object.keys(record)) if (!REQUEST_KEYS.has(key)) return undefined
+  if (typeof record.owner !== 'string' || typeof record.repo !== 'string' || typeof record.number !== 'number') return undefined
+  if (!Number.isInteger(record.number) || record.number < 1 || record.number > MAX_PULL) return undefined
+  if (!OWNER.test(record.owner) || !REPO.test(record.repo)) return undefined
+  return { owner: record.owner, repo: record.repo, number: record.number }
+}
+
+function countChecks(rollup: unknown): { readonly passed: number; readonly failed: number; readonly running: number } {
+  const checks = (Array.isArray(rollup) ? rollup : []).filter(
+    (one): one is Record<string, unknown> => typeof one === 'object' && one !== null && !Array.isArray(one)
+  )
+  let passed = 0
+  let failed = 0
+  let running = 0
+  for (const check of checks) {
+    const standing = checkOf(check)
+    if (standing === 'passed') passed += 1
+    else if (standing === 'failed') failed += 1
+    else running += 1
+  }
+  return { passed, failed, running }
+}
+
+/**
+ * `gh pr view --json state,isDraft,mergedAt,statusCheckRollup,title`.
+ * The number and the address came from the link, not from this JSON.
+ * A closed pull request with `mergedAt` set is merged, which is GitHub's own meaning.
+ * Checks that have not finished are "running" here; the header's word for the same fact is "pending".
+ */
+export function linkedPullRequestOf(json: string): LinkedPullRequest | undefined {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(json)
+  } catch {
+    return undefined
+  }
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return undefined
+  const pr = parsed as Record<string, unknown>
+  const raw = typeof pr.state === 'string' ? pr.state.toUpperCase() : ''
+  const merged = typeof pr.mergedAt === 'string' && pr.mergedAt.trim().length > 0
+  const state: PullRequestState | undefined =
+    raw === 'MERGED' ? 'merged' : raw === 'CLOSED' ? (merged ? 'merged' : 'closed') : raw === 'OPEN' ? (pr.isDraft === true ? 'draft' : 'open') : undefined
+  if (state === undefined) return undefined
+  const tally = countChecks(pr.statusCheckRollup)
+  const total = tally.passed + tally.failed + tally.running
+  const settled = state === 'merged' || state === 'closed'
+  const checks: PullLinkChecks = settled || total === 0 ? 'none' : tally.failed > 0 ? 'failing' : tally.running > 0 ? 'running' : 'passing'
+  return { state, checks, ...tally, total }
+}
+
+export function pullLinkWord(state: PullRequestState): string {
+  return STATE_WORD[state]
+}
+
+/** "Open · 3 of 4 checks passed · 1 running". A merged or closed one's checks are history. */
+export function pullLinkHover(link: LinkedPullRequest): string {
+  const word = pullLinkWord(link.state)
+  if (link.state === 'merged' || link.state === 'closed' || link.total === 0) return word
+  const name = link.total === 1 ? 'check' : 'checks'
+  const parts = [word, `${String(link.passed)} of ${String(link.total)} ${name} passed`]
+  if (link.failed > 0) parts.push(`${String(link.failed)} failing`)
+  if (link.running > 0) parts.push(`${String(link.running)} running`)
+  return parts.join(' · ')
+}
+
+function webHref(url: string): boolean {
+  if (url.length > 2048) return false
+  try {
+    const parsed = new URL(url)
+    return (parsed.protocol === 'https:' || parsed.protocol === 'http:') && parsed.hostname.length > 0 && parsed.username === ''
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Plain text split into words and web links.
+ * A bare `https://github.com/.../pull/n` becomes a link. An issue, a commit,
+ * or a file does not, unless it was already written as a Markdown link, and
+ * then it stays a link with no pull request on it. A URL inside `code` stays code.
+ */
+export function conversationPieces(text: string): readonly ConversationPiece[] {
+  const scan = text.replace(/`[^`\n]*`/g, (span) => ' '.repeat(span.length))
+  const hits: { at: number; length: number; piece: ConversationPiece }[] = []
+  for (const match of scan.matchAll(/\[([^\]\n]*)\]\((https?:\/\/[^)\s]+)\)/g)) {
+    const href = match[2] ?? ''
+    if (!webHref(href)) continue
+    const found = githubLinkOf(href)
+    const label = match[1] ?? ''
+    hits.push({
+      at: match.index ?? 0,
+      length: match[0].length,
+      piece: {
+        kind: 'link',
+        text: label.length > 0 ? label : href,
+        href,
+        ...(found?.kind === 'pull' ? { pull: { owner: found.owner, repo: found.repo, number: found.number } } : {})
+      }
+    })
+  }
+  for (const match of scan.matchAll(/https:\/\/github\.com\/[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?\/[A-Za-z0-9._-]{1,100}\/pull\/[1-9]\d{0,9}\/?(?![A-Za-z0-9/])/g)) {
+    const at = match.index ?? 0
+    if (hits.some((hit) => at >= hit.at && at < hit.at + hit.length)) continue
+    const href = match[0]
+    const found = githubLinkOf(href)
+    if (found?.kind !== 'pull') continue
+    hits.push({
+      at,
+      length: href.length,
+      piece: { kind: 'link', text: href, href, pull: { owner: found.owner, repo: found.repo, number: found.number } }
+    })
+  }
+  hits.sort((a, b) => a.at - b.at)
+  if (hits.length === 0) return [{ kind: 'text', text }]
+  const pieces: ConversationPiece[] = []
+  let cursor = 0
+  for (const hit of hits) {
+    if (hit.at < cursor) continue
+    if (hit.at > cursor) pieces.push({ kind: 'text', text: text.slice(cursor, hit.at) })
+    pieces.push(hit.piece)
+    cursor = hit.at + hit.length
+  }
+  if (cursor < text.length) pieces.push({ kind: 'text', text: text.slice(cursor) })
+  return pieces
+}

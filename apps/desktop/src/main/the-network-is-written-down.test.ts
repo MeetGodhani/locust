@@ -81,6 +81,14 @@ describe('every place Locust reaches the network is in docs/NETWORK.md', () => {
 })
 
 describe('the addresses are the ones the code uses', () => {
+  it('reference clones use the person\'s gh and only a fixed GitHub HTTPS fallback', () => {
+    const source = read('./conversation-references.ts')
+    expect(source).toContain("run('gh', ['repo', 'clone'")
+    expect(source).toContain('https://github.com/${repository}.git')
+    expect(NETWORK).toContain('Conversation references from GitHub')
+    expect(NETWORK).toContain('reference-trash')
+    expect(NETWORK).toContain('500 MB')
+  })
   it('OpenAI voice typing has one fixed HTTPS destination', () => {
     expect(VOICE_OPENAI_URL).toBe('https://api.openai.com/v1/audio/transcriptions')
     expect(NETWORK).toContain(VOICE_OPENAI_URL)

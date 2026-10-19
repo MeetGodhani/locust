@@ -32,6 +32,7 @@ import { handoffPreviewParts, joinerBefore } from '../handoffPreview.js'
 import type { HandoffPreviewParts } from '../handoffPreview.js'
 import { AttachedImage } from './AttachedImage.js'
 import { PagePointChips } from './PagePointChips.js'
+import { ReferenceChips } from './ReferenceChips.js'
 import { MetalSend } from './MetalSend.js'
 import type { MetalMotion, MetalPreset, MetalStrength } from '../../../shared/ipc.js'
 import { isImagePath } from '../../../shared/image-files.js'
@@ -200,6 +201,9 @@ export function connectorsNote(
 }
 
 export interface ComposerProps {
+  readonly referenceMissionId?: string
+  readonly referenceCwd?: string
+  readonly referencesOnCloud?: boolean
   /** The teammate whose conversation this is, for Talk (0.746): a call with them, into this conversation. */
   readonly talkTo?: VoiceCallTalkTo
   /**
@@ -285,7 +289,7 @@ export interface ComposerProps {
   readonly onSwarmChange: (swarm: boolean) => void
   /** True when it started; false, or the words saying why not (M27), when it did not. */
   /** `leaveOut`: a reply on another runtime, the brief sections the person left out (0.527). */
-  readonly onStart: (prompt: string, options?: { readonly leaveOut?: readonly string[] }) => Promise<boolean | string>
+  readonly onStart: (prompt: string, options?: { readonly leaveOut?: readonly string[]; readonly referenceIds?: readonly string[] }) => Promise<boolean | string>
   /**
    * TAG A TEAMMATE FROM ANY CONVERSATION (0.438, shared/tagging.ts): the team
    * `@` offers, who is on screen (never offered), and what happens to the
@@ -502,6 +506,9 @@ const COMPUTER_CLOUD_DESC = 'Runs on your cloud computer, a GitHub Codespace; wa
 const agentComputerDesc = (agentName: string): string => `${agentName} runs it on your cloud computer, a GitHub Codespace; watch it here, bring the change home when it is done`
 
 export function Composer({
+  referenceMissionId,
+  referenceCwd,
+  referencesOnCloud,
   talkTo,
   handBack,
   quoteIn,
@@ -700,6 +707,10 @@ export function Composer({
   const [chatModeOpen, setChatModeOpen] = useState(false)
   /** The folder chip's menu (0.458). */
   const [folderOpen, setFolderOpen] = useState(false)
+  const [referenceOpen, setReferenceOpen] = useState(0)
+  const [referenceIds, setReferenceIds] = useState<readonly string[]>([])
+  const [referenceBusy, setReferenceBusy] = useState(false)
+  const [referencesSent, setReferencesSent] = useState(0)
   // The context ring's menu (0.797): what it says, and Compact now.
   const [contextOpen, setContextOpen] = useState(false)
   /** Which comparison column's picker is open, or the + for a third (0.460). */
@@ -1006,7 +1017,7 @@ export function Composer({
   // still comes from discovery, so a route that is installed but signed out
   // cannot be started.
   const routeCanRun = hostCanRunMission(route.runtime)
-  const canStart = selectedReady && routeCanRun && busyWith === undefined && value.trim().length > 0
+  const canStart = selectedReady && routeCanRun && busyWith === undefined && value.trim().length > 0 && !referenceBusy
   // While a mission works, what you type is not lost and not sent into a run
   // that cannot hear it: it waits and goes as the next turn when this one
   // finishes. Before 0.20.0 the box was simply disabled, so the only way to
@@ -1134,6 +1145,7 @@ export function Composer({
   const submit = (submitEvent: FormEvent<HTMLFormElement>): void => {
     submitEvent.preventDefault()
     if (queueing.current || commandAsk !== undefined || issueList !== undefined) return
+    if (referenceBusy) { setNote('Wait for the references to be ready. Your message is still in the box.'); return }
     const drafted = bangDraft(value)
     if (!terminalOff && drafted !== undefined) {
       if (drafted.command.length > 0) onRunCommand?.(drafted.command)
@@ -1213,7 +1225,8 @@ export function Composer({
     setValue('')
     const sending = attached
     setAttached([])
-    void onStart(withAttachments(prompt, files), continuation === undefined || leaveOut.length === 0 ? undefined : { leaveOut }).then((started) => {
+    const handoffOptions = continuation === undefined || leaveOut.length === 0 ? undefined : { leaveOut }
+    void onStart(withAttachments(prompt, files), referenceIds.length === 0 ? handoffOptions : { ...handoffOptions, referenceIds }).then((started) => {
       if (started !== true) {
         setValue(typed)
         setAttached(sending)
@@ -1222,6 +1235,7 @@ export function Composer({
         return
       }
       // Gone with the message; kept, for another try, when it did not go.
+      setReferencesSent((value) => value + 1)
       onPagePointsSent?.()
       if (notes.length > 0) onClearDiffNotes?.()
     })
@@ -2007,6 +2021,8 @@ export function Composer({
           * belongs -- and each one removes itself, because attaching four
           * files and wanting three was previously all-or-nothing.
           */}
+        {/* The folders this conversation reads (0.804), inside the box with what else goes with the message. */}
+        <ReferenceChips draftKey={draftKey ?? 'new'} {...(referenceMissionId === undefined ? {} : { missionId: referenceMissionId })} openRequest={referenceOpen} sent={referencesSent} runtime={route.runtime} mode={mode} {...(referenceCwd === undefined ? {} : { cwd: referenceCwd })} {...(referencesOnCloud === undefined ? {} : { cloud: referencesOnCloud })} onChange={setReferenceIds} onBusy={setReferenceBusy} />
         {/* Who is tagged (0.438): where the message goes besides the one on screen, removable. */}
         {tagged.length > 0 && (
           <div className="lc-tagged" aria-label="Tagged">
@@ -2377,6 +2393,7 @@ export function Composer({
               <span className="lc-control__anchor lc-control__anchor--folder" ref={folderAnchor}>
                 {folderOpen && (
                   <div className="lc-menu lc-menu--folders" role="menu" aria-label="Work in folder">
+                    <button type="button" role="menuitem" className="lc-menu__item" onClick={() => { setFolderOpen(false); setReferenceOpen((value) => value + 1) }}><span className="lc-menu__text"><span className="lc-menu__name">Add a reference...</span><span className="lc-menu__desc">Read another folder or GitHub repository</span></span></button>
                     {folders.slice(0, 8).map((folder) => (
                       <button
                         key={folder.id}
@@ -2429,7 +2446,7 @@ export function Composer({
                         ? `Teammates work in ${workspacePath}. Locust made this folder; pick any other to work there instead.`
                         : `New conversations work in ${workspacePath}`
                 }
-                onClick={() => (folders.length === 0 ? onChooseFolder() : setFolderOpen(!folderOpen))}
+                onClick={() => setFolderOpen(!folderOpen)}
               >
                 <Icon name="folder" size={13} />
                 <span className="lc-control__folder">{workspaceName ?? 'No folder'}</span>

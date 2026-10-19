@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useId, useMemo, useRef, useState } from 'react'
+import { Fragment, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { BOT_SIZE } from '../botSizes.js'
 import type { ReactElement } from 'react'
 import { ColouredCode } from './ColouredCode.js'
@@ -11,6 +11,9 @@ import type { ListItem } from '../agentText.js'
 import { splitSettled } from '../settledText.js'
 import { quietMinutes } from '../quiet.js'
 import { linkHost } from '../../../shared/outbound-links.js'
+import { conversationPieces, githubLinkOf, pullLinkHover, pullLinkWord } from '../../../shared/pull-request.js'
+import type { ConversationPiece, LinkedPullRequest, PullLinkAddress } from '../../../shared/pull-request.js'
+import { sharedPullLinks } from '../pullLinkWatch.js'
 import type { OrbState, PlanStep } from '../missionView.js'
 import { TeammateBot } from './TeammateBot.js'
 import type { TeammateBotProps } from './TeammateBot.js'
@@ -54,6 +57,8 @@ function OutboundLink({
   readonly host: string
 }): ReactElement {
   const [refused, setRefused] = useState<string>()
+  const found = githubLinkOf(href)
+  const pull = found?.kind === 'pull' ? { owner: found.owner, repo: found.repo, number: found.number } : undefined
   return (
     <>
       <button
@@ -84,6 +89,7 @@ function OutboundLink({
           */}
         <span className="lc-link__host"> ({host})</span>
       </button>
+      {pull !== undefined && <PullLinkChip address={pull} />}
       {refused !== undefined && (
         <span className="lc-link__refusal" role="status">
           {refused}
@@ -169,7 +175,53 @@ export function hexColourOf(text: string): string | undefined {
  */
 function nested(text: string): ReactElement | string {
   const spans = splitInlineCode(text)
-  return spans.length === 1 && spans[0]?.kind === 'plain' && hexColourOf(text) === undefined ? text : inline(text)
+  const plain = spans.length === 1 && spans[0]?.kind === 'plain' && hexColourOf(text) === undefined
+  if (plain && conversationPieces(text).every((piece) => piece.kind === 'text')) return text
+  return inline(text)
+}
+
+function pieceNodes(pieces: readonly ConversationPiece[]): readonly ReactElement[] {
+  return pieces.map((piece, index) => {
+    if (piece.kind === 'text') return <span key={`w${String(index)}`}>{piece.text}</span>
+    const host = linkHost(piece.href)
+    if (host === undefined) return <span key={`w${String(index)}`}>{piece.text}</span>
+    return <OutboundLink key={`w${String(index)}`} href={piece.href} text={piece.text} host={host} />
+  })
+}
+
+function drawPlain(text: string, key: string): ReactElement {
+  const pieces = conversationPieces(text)
+  if (pieces.length === 1 && pieces[0]?.kind === 'text') return <span key={key}>{text}</span>
+  return <Fragment key={key}>{pieceNodes(pieces)}</Fragment>
+}
+
+/** The person's own message: a pull request URL becomes a link, and the rest of what they typed stays as they typed it. */
+export function LinkedWords({ text }: { readonly text: string }): ReactElement {
+  const pieces = conversationPieces(text)
+  if (pieces.every((piece) => piece.kind === 'text')) return <>{text}</>
+  return <>{pieceNodes(pieces)}</>
+}
+
+function PullLinkChip({ address }: { readonly address: PullLinkAddress }): ReactElement | null {
+  const subscribe = useMemo(
+    () => (onChange: () => void) => sharedPullLinks().watch(address, onChange),
+    [address.owner, address.repo, address.number]
+  )
+  const link = useSyncExternalStore(subscribe, () => sharedPullLinks().current(address), () => undefined)
+  if (link === undefined) return null
+  return <PullLinkChipView link={link} />
+}
+
+/** The chip itself, from a pull request a link named. */
+export function PullLinkChipView({ link }: { readonly link: LinkedPullRequest }): ReactElement {
+  const hover = pullLinkHover(link)
+  const tone = link.checks === 'failing' ? 'red' : link.checks === 'running' ? 'amber' : link.checks === 'passing' ? 'green' : undefined
+  return (
+    <span className="lc-prlink" data-state={link.state} data-checks={link.checks} title={hover} aria-label={hover}>
+      <span className="lc-prlink__state">{pullLinkWord(link.state)}</span>
+      {tone !== undefined && <span className={`lc-prlink__mark lc-tone-${tone}`} aria-hidden="true" />}
+    </span>
+  )
 }
 
 /** A line of prose a model wrote, drawn as a reply draws it: inline code, links, colours (0.771: a walkthrough's notes). */
@@ -268,7 +320,7 @@ function inline(text: string): ReactElement {
         if (span.kind === 'math') {
           return <MathTex key={`s${String(index)}`} tex={span.text} display={span.display === true} inText />
         }
-        return <span key={`s${String(index)}`}>{span.text}</span>
+        return drawPlain(span.text, `s${String(index)}`)
       })}
     </>
   )

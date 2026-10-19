@@ -181,8 +181,9 @@ import { readWorkspaceImage } from './workspace-image.js'
 import { readPdfPages } from './pdf-pages.js'
 import { addConnector, removeConnector } from './connector-add.js'
 import { createGithubAccount, ghCommand } from './github-account.js'
-import { FOLDER_PULL_REQUEST_CHANNEL, PULL_REQUEST_NEWS_CHANNEL, PULL_REQUEST_WATCH_CHANNEL } from '../shared/pull-request.js'
+import { FOLDER_PULL_REQUEST_CHANNEL, GITHUB_PULL_LINK_CHANNEL, PULL_REQUEST_NEWS_CHANNEL, PULL_REQUEST_WATCH_CHANNEL } from '../shared/pull-request.js'
 import { createPullRequestWatch } from './pull-request-watch.js'
+import { createPullLinkReader } from './pull-link.js'
 import { FOLDER_DIFF_CHANNEL } from '../shared/folder-diff.js'
 import { GITHUB_ACCOUNT_CHANNEL, GITHUB_CLI_VERSIONS_CHANNEL, GITHUB_INSTALL_CHANNEL, GITHUB_UPDATE_CHANNEL, GITHUB_SIGN_IN_CANCEL_CHANNEL, GITHUB_SIGN_IN_CHANNEL, GITHUB_SIGN_IN_CODE_CHANNEL } from '../shared/github-account.js'
 import type { AgentLaunch } from './connector-add.js'
@@ -232,6 +233,8 @@ const ROUTINE_TICK_MS = 60_000
 const ROUTINE_FIRST_TICK_MS = 15_000
 import type { RoutineRunner } from './routine-runner.js'
 import { readOneMission, deleteMissionRecord, knownDigests, namedByATeammate, newestTurnOf, readMissionHistory, spendByTeammate, usageTurns, withLiveMissionIds } from './mission-history.js'
+import { createReferenceStore } from './conversation-references.js'
+import { REFERENCES_CHANNEL, type ReferenceRequest } from '../shared/references.js'
 import { isUsageRange, usageSummary } from '../shared/usage.js'
 import { monthOf } from '../shared/spend.js'
 import { createOwnModelStore, OwnModelRefusal, ownModelAddress, ownModelId, testOwnEndpoint } from './own-models.js'
@@ -2563,7 +2566,46 @@ if (!ownsSingleInstanceLock) {
         return { ok: false, accounts: await agentAccounts.list().catch(() => []), message: cause instanceof Error ? cause.message : 'The account could not be changed. Your other accounts are unchanged.' }
       }
     })
+    const references = createReferenceStore({
+      root: app.getPath('userData'),
+      note: (message) => note('reference-cleanup-failed', message),
+      parent: async (id) => (await missionLedger.getMission(id))?.metadata.continuesFrom?.missionId,
+      pickFolder: async () => {
+        if (!app.isPackaged && process.env.LOCUST_REFERENCE_PATH) return process.env.LOCUST_REFERENCE_PATH
+        const owner = BrowserWindow.getFocusedWindow()
+        if (owner === null) return undefined
+        const picked = await dialog.showOpenDialog(owner, { title: 'Add a reference folder', buttonLabel: 'Add reference', properties: ['openDirectory'] })
+        return picked.canceled ? undefined : picked.filePaths[0]
+      }
+    })
+    void references.sweep().catch((error: unknown) => note('reference-cleanup-failed', error instanceof Error ? error.message : 'The reference cache was left alone.'))
+    ipcMain.handle(REFERENCES_CHANNEL, async (event, request: ReferenceRequest) => {
+      if (!fromOwnWindow(event)) return { ok: false, message: 'Only Locust\'s own window can choose references. Nothing was changed.' }
+      try {
+        if (request?.action === 'folder') {
+          const item = await references.folder()
+          return { ok: true, references: item === undefined ? [] : [item] }
+        }
+        if (request?.action === 'github' && typeof request.repository === 'string' && request.repository.length <= 240) return { ok: true, references: [await references.github(request.repository)] }
+        if (request?.action === 'discard' && typeof request.id === 'string' && /^[a-f0-9-]{36}$/.test(request.id)) {
+          await references.discard(request.id)
+          return { ok: true, references: [] }
+        }
+        if ((request?.action === 'list' || request?.action === 'set') && (request.missionId === undefined || (typeof request.missionId === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(request.missionId)))) {
+          if (request.missionId !== undefined && await missionLedger.getMission(request.missionId) === undefined) throw new Error('That conversation is not available. Its references were not changed.')
+          if (request.action === 'set') {
+            if (request.missionId === undefined) throw new Error('Open a conversation first. Nothing was changed.')
+            await references.set(request.missionId, request.ids)
+          }
+          return { ok: true, references: await references.list(request.missionId), ...(request.missionId === undefined ? {} : { cwd: await references.cwd(request.missionId) }) }
+        }
+        return { ok: false, message: 'Choose a folder or GitHub repository using Add a reference. Nothing was changed.' }
+      } catch (error) {
+        return { ok: false, message: error instanceof Error ? error.message : 'The reference could not be added. Your conversation is unchanged.' }
+      }
+    })
     const codexMissions = createCodexMissionService({
+      references,
       organizationPolicy,
       workspacePath,
       // 0.458: the window's folder now, and a conversation's own folder by id.
@@ -3114,6 +3156,21 @@ if (!ownsSingleInstanceLock) {
     // The folder's pull request, for the header (0.720, shared/pull-request.ts): read with the person's own gh.
     ipcMain.handle(FOLDER_PULL_REQUEST_CHANNEL, (event) =>
       fromOwnWindow(event) ? folderCommits.pullRequest(workspacePath).catch(() => undefined) : undefined
+    )
+    /*
+     * A pull request linked in a conversation (shared/pull-request.ts). The window sends an owner, a repo and a
+     * number; this runs gh and answers with the state, or nothing when gh cannot. It never prints what gh said.
+     */
+    const pullLinkReader = createPullLinkReader({
+      gh: (args) => new Promise((resolve, reject) => {
+        execFile(ghCommand(), [...args], {
+          windowsHide: true, timeout: 30_000, maxBuffer: 1024 * 1024,
+          env: { ...process.env, GH_PROMPT_DISABLED: '1', GH_NO_UPDATE_NOTIFIER: '1' }
+        }, (error, stdout) => { if (error) reject(error); else resolve(String(stdout)) })
+      })
+    })
+    ipcMain.handle(GITHUB_PULL_LINK_CHANNEL, (event, request: unknown) =>
+      fromOwnWindow(event) ? pullLinkReader.read(request) : undefined
     )
     // The folder's changes in one panel (0.732): the whole change, or one of the branch's commits.
     ipcMain.handle(FOLDER_DIFF_CHANNEL, (event, sha: unknown) =>
@@ -8745,6 +8802,7 @@ if (!ownsSingleInstanceLock) {
         // restore had to be able to put the conversation back whole.
         const held = await missionLedger.listTrashedMissions()
         const gone = await missionLedger.emptyTrash()
+        await references.forget(held.map((entry) => entry.missionId))
         for (const entry of held) {
           await teammates.unassignMission(entry.missionId).catch(() => undefined)
         }
@@ -8900,7 +8958,8 @@ if (!ownsSingleInstanceLock) {
           // Your cloud computer (0.761): only the person's own Cloud, and Set it up when they pressed it.
           (payload as { readonly cloud?: unknown }).cloud === true
             ? { setUp: (payload as { readonly cloudSetUp?: unknown }).cloudSetUp === true }
-            : undefined
+            : undefined,
+          payload.referenceIds
         )
         if (response.ok) {
           await assignOwner(peer?.self.teammateId, response.data.missionId)

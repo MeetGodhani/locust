@@ -210,7 +210,7 @@ export function spendGuarded(appEnv, spends, environment = process.env) {
   return guarded
 }
 
-export async function startDrive({ name, port, workspace, seed, files = {}, env = {}, keep = false, profilePath, outPath, stepFrom = 0, spends = false, sendsNothing = false, packaged, launchElsewhere = false, focused = false, extraArgs = [] }) {
+export async function startDrive({ name, port, workspace, seed, files = {}, env = {}, keep = false, profilePath, outPath, stepFrom = 0, spends = false, sendsNothing = false, holdCursor = true, packaged, launchElsewhere = false, focused = false, extraArgs = [] }) {
   if (spends) assertMaySpend(name)
   try {
     const already = await fetch(`http://127.0.0.1:${String(port)}/json/list`, { signal: AbortSignal.timeout(1500) })
@@ -306,8 +306,8 @@ export async function startDrive({ name, port, workspace, seed, files = {}, env 
    * Colin on Grok 4.6 High). An exit hook covers a drive that throws; a
    * drive killed outright is put right by the next one to start.
    */
-  const cursorDefault = sendsNothing
-    ? { done: true, putBack: () => 'No agent turn was sent; the Cursor default was not read or changed.' }
+  const cursorDefault = sendsNothing || !holdCursor
+    ? { done: true, putBack: () => 'This drive does not use Cursor; its default was not read or changed.' }
     : holdCursorDefault({ say })
   process.once('exit', () => { if (!cursorDefault.done) cursorDefault.putBack() })
   // Held until `ready()` returns (or `finish`, for a drive that never asks).

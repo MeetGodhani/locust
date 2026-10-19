@@ -596,3 +596,21 @@ Entries since 2026-10-03, newest first. Earlier entries (2026-08-30 to
   full puppet checks. Neither sends a turn. The normal drive is unchanged
   unless an observation option is supplied.
 - Evidence and verification limits: `docs/REPORT-2026-10-05-first-launch-blocked.md`.
+
+## Conversation references (2026-10-19)
+
+- `main/conversation-references.ts` holds host-picked identities and conversation roots in the profile's
+  `conversation-references.json`, separately from teammates. Every normal turn uses the current selection,
+  including resumed turns; an empty selection explicitly withdraws earlier references from the brief.
+- A reference must never narrow the chosen mode's tools. Auto keeps its existing access and the chip warns
+  that it can change the reference. Codex gets a brief, never `--add-dir` (which would widen writes).
+  Claude Code, OpenCode, Copilot and Antigravity add outside folders only in their existing read-only modes;
+  in other confined modes the chip explains why that extra grant is omitted. Other runtimes get a brief only,
+  with a chip saying their existing permissions still apply. Local paths are not sent to a cloud computer.
+- GitHub references are shallow host copies under `reference-repositories`, capped at 500 MiB and refreshed
+  after an hour when reopened, never during an active turn. Replaced or released copies move to
+  `reference-trash`; chosen local folders are never moved. Soft-deleted conversations retain references for
+  restore; permanently emptying the conversation trash releases them. These machine-local records and copies
+  are excluded from profile backups.
+- `_tools/drive-conversation-references.mjs` uses one free OpenCode Ask turn and a separate reference folder.
+  Its `holdCursor: false` option avoids reading or changing Cursor's global defaults.

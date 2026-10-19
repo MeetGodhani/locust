@@ -15646,6 +15646,68 @@ textarea.lc-compare__judgecriteria {
   color: var(--lc-amber-text);
 }
 
+/* A pull request's state, beside the link it belongs to (ThreadItems.tsx). It fades in when the state arrives. It is
+ * not a button: the link still opens the browser. A PILL, as GitHub draws a state (0.804): as bare coloured words it
+ * read as part of the sentence -- "pull/42 Merged and pull/7 Open" -- and Merged in blue beside a blue link read as
+ * more link. Merged is GitHub's purple. */
+.lc-prlink {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  margin-inline-start: 0.4em;
+  padding: 0 0.5em;
+  border-radius: 999px;
+  font-size: 0.82em;
+  font-weight: 500;
+  line-height: 1.6;
+  white-space: nowrap;
+  vertical-align: 0.06em;
+  animation: lc-prlink-in 180ms ease forwards;
+}
+
+.lc-prlink[data-state='open'] {
+  color: var(--lc-green-text);
+  background: var(--lc-green-tint);
+}
+
+.lc-prlink[data-state='draft'] {
+  color: var(--lc-text-muted);
+  background: var(--lc-chip-bg);
+}
+
+.lc-prlink[data-state='merged'] {
+  color: var(--lc-violet-text);
+  background: var(--lc-violet-tint);
+}
+
+.lc-prlink[data-state='closed'] {
+  color: var(--lc-red-text);
+  background: var(--lc-red-tint);
+}
+
+/* The word takes the chip's state colour. The mark sets its own. */
+.lc-prlink__state {
+  color: inherit;
+}
+
+.lc-prlink__mark {
+  width: 0.45em;
+  height: 0.45em;
+  border-radius: 50%;
+  background: currentColor;
+  align-self: center;
+  flex: none;
+}
+
+@keyframes lc-prlink-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lc-prlink { animation: none; }
+}
+
 /* --- 4. The rerun offer -------------------------------------------------
  * Replaces .lc-rerun, .lc-rerun span. Not a card. Same register as
  * .lc-diagnostic (a note about the run, left-ruled), in green because the
@@ -23833,4 +23895,24 @@ textarea.lc-compare__judgecriteria {
   background: var(--lc-hover-surface);
   color: var(--lc-text-primary);
 }
+
+/* Reference chips sit below the box: persistent conversation context, not attachments to one message. */
+.lc-references { padding: 0; }
+.lc-references:empty { display: none; }
+.lc-references__chips { display: flex; flex-wrap: wrap; gap: var(--lc-space-2); padding: var(--lc-space-2) 0; }
+.lc-reference { display: inline-flex; align-items: center; gap: var(--lc-space-2); min-width: 0; max-width: 100%; padding: var(--lc-space-2); border: 1px solid var(--lc-border-control); border-radius: var(--lc-radius-control); color: var(--lc-text-muted); background: var(--lc-hover-surface); }
+.lc-reference.is-unavailable { border-style: dashed; }
+.lc-reference__body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.lc-reference__name { overflow-wrap: anywhere; font-size: var(--lc-text-mono-label); font-family: var(--lc-font-mono); color: var(--lc-text-primary); }
+.lc-reference__note, .lc-references__note { font-size: var(--lc-text-mono-label); color: var(--lc-text-muted); }
+.lc-reference button, .lc-referencepicker__head button { border: 0; background: transparent; color: var(--lc-text-muted); padding: var(--lc-space-2); cursor: pointer; }
+.lc-referencepicker { border: 1px solid var(--lc-border-control); border-radius: var(--lc-radius-control); padding: var(--lc-space-3); margin: var(--lc-space-2) 0; background: var(--lc-hover-surface); font-size: var(--lc-text-body); color: var(--lc-text-primary); }
+.lc-referencepicker__head { display: flex; align-items: center; justify-content: space-between; }
+.lc-referencepicker p { margin: var(--lc-space-2) 0; color: var(--lc-text-muted); }
+/* The two ways in, as the app's other chip buttons are (0.804): bare bordered buttons read as unstyled. */
+.lc-referencepicker__choices { display: flex; flex-wrap: wrap; gap: var(--lc-space-3); }
+.lc-referencepicker__github > button { margin-top: var(--lc-space-3); }
+.lc-referencepicker__github { margin-top: var(--lc-space-3); }
+.lc-referencepicker__github label { display: flex; flex-direction: column; gap: var(--lc-space-2); }
+.lc-referencepicker__github input { min-width: 0; width: 100%; box-sizing: border-box; padding: var(--lc-space-2); border: 1px solid var(--lc-border-control); border-radius: var(--lc-radius-control); background: transparent; color: var(--lc-text-primary); font: inherit; }
 

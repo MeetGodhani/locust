@@ -80,6 +80,9 @@ const NEVER_COPIED = new Set(['.writable'])
  * that rebuilds itself.
  */
 export const LEFT_OUT: Readonly<Record<string, string>> = {
+  'conversation-references.json': 'reference folders belong to this machine: choose them again after a restore',
+  'reference-repositories': 'shallow reference copies: downloaded again after choosing a repository',
+  'reference-trash': 'recoverable old reference copies on this machine, never permanently deleted by reference cleanup',
   'agent-accounts': 'added agent homes and sign-ins: they stay on this machine and are never copied into a backup',
   'locust-mcp-connection.json': 'the local MCP server token and address: they belong to this Windows account and are minted again',
   'locust-mcp.json': 'whether other AI apps can use Locust on this machine: enable again after a restore',

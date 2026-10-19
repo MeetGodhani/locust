@@ -4637,7 +4637,7 @@ export default function App(): ReactElement {
     setCompares((current) => [...current.filter((one) => one.compareId !== next.compareId), next])
 
   /** The send, when a comparison is ticked or on screen; otherwise the ordinary one. */
-  const sendOrCompare = async (prompt: string, sendOptions?: { readonly leaveOut?: readonly string[] }): Promise<boolean | string> => {
+  const sendOrCompare = async (prompt: string, sendOptions?: { readonly leaveOut?: readonly string[]; readonly referenceIds?: readonly string[] }): Promise<boolean | string> => {
     const bridge = window.desktop
     // Background (W10): Claude Code's own session takes the turn; the panel follows it.
     if (backgroundOn && comparing === undefined && composerRoute.runtime === 'claude') {
@@ -4670,11 +4670,11 @@ export default function App(): ReactElement {
     // YOUR CLOUD COMPUTER (0.761): an OpenCode teammate's turn runs on the repository's codespace, as a turn of this
     // conversation. Cloud stays on, so the conversation's next turn goes there too.
     if (cloudOn && comparing === undefined && composerRoute.runtime === 'opencode') {
-      return startFromComposer(prompt, sendOptions?.leaveOut, true)
+      return startFromComposer(prompt, sendOptions?.leaveOut, true, sendOptions?.referenceIds)
     }
     // Claude Code or Codex on your own cloud computer (0.768), not its maker's cloud: a turn of this conversation there.
     if (computerOn && comparing === undefined && (composerRoute.runtime === 'claude' || composerRoute.runtime === 'codex')) {
-      return startFromComposer(prompt, sendOptions?.leaveOut, true)
+      return startFromComposer(prompt, sendOptions?.leaveOut, true, sendOptions?.referenceIds)
     }
     // Cloud (0.503): the task goes to Codex Cloud, and the panel follows it.
     if (cloudOn && comparing === undefined && composerRoute.runtime === 'claude') {
@@ -4756,7 +4756,7 @@ export default function App(): ReactElement {
       setCompareBlind(false)
       return true
     }
-    return startFromComposer(prompt, sendOptions?.leaveOut)
+    return startFromComposer(prompt, sendOptions?.leaveOut, undefined, sendOptions?.referenceIds)
   }
 
   /** Keep one column: the others stop, and the conversation carries on from the kept one. */
@@ -5209,7 +5209,7 @@ export default function App(): ReactElement {
       return { text: 'The tagged teammates could not be sent it.', sent: false }
     }
   }
-  const startFromComposer = async (prompt: string, leaveOut?: readonly string[], cloud?: boolean): Promise<boolean | string> => {
+  const startFromComposer = async (prompt: string, leaveOut?: readonly string[], cloud?: boolean, referenceIds?: readonly string[]): Promise<boolean | string> => {
     startRefusal.current = undefined
     const rewind = rewinding !== undefined && rewinding.key === shownKey ? rewinding : undefined
     // Files first, so the teammate starts on the folder as it was (0.502).
@@ -5219,7 +5219,7 @@ export default function App(): ReactElement {
     if (rewind !== undefined && rewind.putBack && rewind.files.length > 0 && putBack === undefined) {
       return 'Not sent: the files could not be put back, so nothing was changed. Untick it to send the edit on its own.'
     }
-    const started = await startMission(prompt, undefined, { fromComposer: true, ...(cloud === true ? { cloud: true } : {}), ...(leaveOut === undefined || leaveOut.length === 0 ? {} : { leaveOut }), ...(rewind === undefined ? {} : { rewind: { ...rewind, ...(putBack === undefined ? {} : { putBackResult: putBack }) } }) })
+    const started = await startMission(prompt, undefined, { fromComposer: true, ...(referenceIds === undefined ? {} : { referenceIds }), ...(cloud === true ? { cloud: true } : {}), ...(leaveOut === undefined || leaveOut.length === 0 ? {} : { leaveOut }), ...(rewind === undefined ? {} : { rewind: { ...rewind, ...(putBack === undefined ? {} : { putBackResult: putBack }) } }) })
     if (started && rewind !== undefined) setRewinding(undefined)
     return started ? true : (startRefusal.current ?? false)
   }
@@ -5273,6 +5273,7 @@ export default function App(): ReactElement {
       readonly as?: StartAs
       /** Typed in the box and sent from it: a refusal can hand the words back. */
       readonly fromComposer?: boolean
+      readonly referenceIds?: readonly string[]
       /** Sent with Cloud for a teammate whose maker has no cloud: it runs on the person's cloud computer (0.761). */
       readonly cloud?: boolean
       /** A reply on another runtime: the brief sections the person left out (0.527). */
@@ -5419,6 +5420,7 @@ export default function App(): ReactElement {
         // here: picked in this chat, or the conversation's own (0.552).
         ...(teammateId !== undefined && as === undefined && (pickerRoutes.has(pickKey) || conversationRoute !== undefined) ? { routeOverrideFor: teammateId } : {}),
         ...(teammateId === undefined ? {} : { teammateId }),
+        ...(options?.referenceIds === undefined ? {} : { referenceIds: options.referenceIds }),
         // A review's Ask is for that run only (0.514): the host leaves the saved route alone.
         ...(as?.oneOff === true ? { keepSavedRoute: true } : {}),
         ...(continuing === undefined ? {} : { followUpOf: continuing.data!.missionId }),
@@ -7791,6 +7793,10 @@ export default function App(): ReactElement {
   const shownConversation = liveRun?.data?.missionId ?? shownKey
   const shownRow = shownConversation === undefined ? undefined : sidebarMissions.find((entry) => (entry.memberIds ?? [entry.missionId]).includes(shownConversation))
   const composerDraftKey = shownConversation === undefined ? 'new' : shownRow?.rootId ?? shownRow?.missionId ?? shownConversation
+  const referenceFolderId = shownConversation === undefined ? workspaceId : historyById.get(shownConversation)?.workspaceId ?? runFolders.current.get(shownConversation) ?? workspaceId
+  const referenceCwd = pickedTeammate?.worktree === true
+    ? worktrees?.list.find((tree) => tree.teammateId === pickedTeammate.teammateId)?.path
+    : pickedTeammate?.folder ?? folders.find((folder) => folder.id === referenceFolderId)?.path ?? workspacePath
   draftKeyRef.current = composerDraftKey
   useEffect(() => {
     const bridge = window.desktop?.ownCommands
@@ -10005,6 +10011,9 @@ export default function App(): ReactElement {
           {screen === 'workroom' && (
           <Composer
             draftKey={composerDraftKey}
+            {...(shownData?.missionId === undefined ? {} : { referenceMissionId: shownData.missionId })}
+            {...(referenceCwd === undefined ? {} : { referenceCwd })}
+            referencesOnCloud={cloudOn || computerOn}
             ownCommands={ownCommandMenu}
             onChooseOwnCommand={chooseOwnCommand}
             onRunCommand={runOwnCommand}

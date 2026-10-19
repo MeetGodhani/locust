@@ -82,7 +82,9 @@ import { createPeerExchange, createTranscriptTracker, publicPeerMessage } from '
 import type { MemoryBriefing } from './peer-exchange.js'
 import type { PeerExchange, TranscriptTracker } from './peer-exchange.js'
 import type { MissionPeerContext } from './workroom-briefing.js'
-import { openCodeReadOnlySection, planSection } from './workroom-briefing.js'
+import { openCodeReadOnlySection, planSection, referencesSection } from './workroom-briefing.js'
+import { referenceAccess } from '../shared/references.js'
+import type { ReferenceStore } from './conversation-references.js'
 import { undoneNote } from './undone-note.js'
 import { briefHeld, briefPlan, compactedDuring } from './brief-sessions.js'
 import type { BriefSessions } from './brief-sessions.js'
@@ -315,7 +317,8 @@ export interface CodexMissionService {
      * YOUR CLOUD COMPUTER (0.761, cloud-turns.ts): the turn runs on the repository's GitHub Codespace. Only the
      * direct-message handler supplies it, from the composer's Cloud; `setUp` when the person pressed Set it up.
      */
-    cloud?: { readonly setUp?: boolean }
+    cloud?: { readonly setUp?: boolean },
+    referenceIds?: readonly string[]
   ): Promise<CodexMissionStartResponse>
   cancel(runId: unknown): CodexMissionCancelResponse
   /**
@@ -475,6 +478,7 @@ interface CodexMissionServiceOptions {
     cwd?: string
   ) => AppServerRunProcess
   readonly ledger: MissionLedger
+  readonly references?: ReferenceStore
   /**
    * A3.3: the person's check, after a turn that changed files -- in the
    * folder the run changed. Its answer goes to that run's thread; nothing
@@ -933,6 +937,7 @@ export function createCodexMissionService(options: CodexMissionServiceOptions): 
     // refuse what is waiting, forget its token, remove its config.
     void options.permissionHost?.release(candidate.runId).catch(() => undefined)
     void options.browserHost?.releaseRun(candidate.runId).catch(() => undefined)
+    void options.references?.release(candidate.runId).catch(() => undefined)
     options.approvals?.release(candidate.runId)
     // Whatever ended this run, anyone waiting on it is told. Fire and forget:
     // a meeting's bookkeeping must never hold a slot open.
@@ -1451,7 +1456,8 @@ export function createCodexMissionService(options: CodexMissionServiceOptions): 
       side?: { readonly of: string; readonly question: number },
       rewind?: boolean,
       leaveOut?: readonly string[],
-      cloud?: { readonly setUp?: boolean }
+      cloud?: { readonly setUp?: boolean },
+      referenceIds?: readonly string[]
     ): Promise<CodexMissionStartResponse> {
       // All callers, including routines, relays, compares, resume and handoffs, cross this gate before I/O.
       const managed = policyTurnRefusal(options.organizationPolicy, { runtime, mode, model: route.model, account: route.account, cloud: cloud !== undefined })
@@ -1561,6 +1567,7 @@ export function createCodexMissionService(options: CodexMissionServiceOptions): 
       const follows = followUpOf ?? continuation?.missionId
       const claimKey = slot !== undefined ? `slot:${owner}` : follows === undefined ? `new:${owner}:${String((freshClaims += 1))}` : `follows:${follows}`
       let claimed = false
+      let referenceRun: string | undefined
       try {
         if (disposed) {
           return error(
@@ -2087,6 +2094,12 @@ export function createCodexMissionService(options: CodexMissionServiceOptions): 
         // ledger's workspace id stays the FOLDER's: history is per folder.
         // A comparison's column may answer in a copy of the folder (0.443, compare-copies.ts).
         const runCwd = slot?.cwd ?? peer?.cwd ?? runFolder
+        const references = await options.references?.select(continues, referenceIds) ?? []
+        const referenceFolders = references.filter((item) => referenceAccess(runtime, mode, item.path, runCwd, cloud !== undefined).include).map((item) => item.path)
+        if (references.length > 0) {
+          options.references?.hold(runId, references.map((item) => item.id))
+          referenceRun = runId
+        }
         // Named by whoever made the worktree, not inferred from this folder:
         // a teammate with its own folder is in a worktree of a repository
         // that is not this one. Absent unless the run really is in a
@@ -2213,6 +2226,7 @@ export function createCodexMissionService(options: CodexMissionServiceOptions): 
           const agentExecutable = cloudLaunch?.executable ?? executable
           const agentFolder = cloudLaunch?.dir ?? runCwd
           const choice = {
+            referenceFolders,
             ...(picked.model === undefined ? {} : { model: picked.model }),
             ...(chosenEffort === undefined ? {} : { effort: chosenEffort }),
             ...(resumeThreadId === undefined ? {} : { resumeThreadId }),
@@ -2220,6 +2234,7 @@ export function createCodexMissionService(options: CodexMissionServiceOptions): 
           }
           if (runtime === 'opencode' && opencodeServes) {
             return createOpenCodeServeCommand(executable, {
+              referenceFolders,
               workspacePath: runCwd,
               // Approve each asks for everything; any other mode, what `run` would have been told.
               ...(mode === 'approve-each' ? {} : { sandbox: effectiveSandbox }),
@@ -2247,6 +2262,7 @@ export function createCodexMissionService(options: CodexMissionServiceOptions): 
           if (runtime === 'antigravity') {
             // Antigravity CLI (0.540): the prompt goes on stdin as its own stream-json line.
             return createAgyPrintCommand(executable, {
+              referenceFolders,
               workspacePath: runCwd,
               sandbox: effectiveSandbox,
               ...agyRoute(chosenModel, route.effort),
@@ -2528,6 +2544,8 @@ ${sentPrompt.trim()}`
           runtimePrompt = solo.runtimePrompt
           briefGiven = solo.given
         }
+        // Repeated even on a resumed session. Omitted references are never named in a brief that would imply access.
+        if (!bare && options.references !== undefined) runtimePrompt = [runtimePrompt, referencesSection(referenceFolders)].join('\n\n')
         // A follow-up to a turn the person undid starts with what Undo put back (0.784, undone-note.ts).
         if (!bare && side === undefined && resumedRunId !== undefined) {
           const undone = (await options.turnRecords?.get(resumedRunId).catch(() => undefined))?.undone
@@ -2616,6 +2634,7 @@ ${sentPrompt.trim()}`
             // the briefing, which is longer and quotes teammates, out of it.
             command: recordableCommand(command, prompt)
           })
+          if (references.length > 0 || referenceIds !== undefined) await options.references?.bind(missionId, continues, references.map((item) => item.id), runCwd)
         } catch {
           return error(
             'PERSISTENCE_FAILED',
@@ -3019,6 +3038,7 @@ ${sentPrompt.trim()}`
           }
         }
       } finally {
+        if (referenceRun !== undefined && !active.has(referenceRun)) await options.references?.release(referenceRun).catch(() => undefined)
         if (claimed) starting.delete(claimKey)
         startOperations.delete(startOperation)
         resolveStartOperation()
