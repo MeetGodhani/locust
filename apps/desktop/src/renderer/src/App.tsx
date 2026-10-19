@@ -71,6 +71,7 @@ import type {
   PublicConnector
 } from '../../shared/ipc.js'
 import { roleLabelOf } from '../../shared/ipc.js'
+import { addPagePoint, MAX_PAGE_POINTS, noteOnPagePoint, withoutPagePoint, type PagePointChip } from '../../shared/browser-point.js'
 import { isPanelRunKind } from '../../shared/panel-runs.js'
 import { carryOnOffer, planRanOut } from '../../shared/carry-on.js'
 import type { PlanRunsOut } from '../../shared/carry-on.js'
@@ -2257,6 +2258,8 @@ export default function App(): ReactElement {
   useEffect(() => window.desktop?.onPullRequestNews((news) => setPullRequestNewsShown(news)), [])
   // A part of a reply the person asked about (SelectionAsk): quoted into the box.
   const [quoteIn, setQuoteIn] = useState<{ readonly quote: string; readonly attachments?: readonly string[] }>()
+  // Parts of the browser page waiting in the box. They leave when the conversation changes.
+  const [pagePoints, setPagePoints] = useState<readonly PagePointChip[]>([])
   // Intent belongs to the addressed teammate, not to discovery or the last
   // thread visited. Session-only state deliberately clears on app restart.
   const [pickerRoutes, setPickerRoutes] = useState<ReadonlyMap<string, RouteChoice>>(new Map())
@@ -7816,6 +7819,7 @@ export default function App(): ReactElement {
       })
     }).catch(() => place({ ...entry, running: false, output: 'That command could not be started. Nothing was run.', exitCode: 1 }))
   }
+  useEffect(() => { setPagePoints([]) }, [composerDraftKey])
   const besideRow = besideId === undefined ? undefined : sidebarMissions.find((entry) => (entry.memberIds ?? [entry.missionId]).includes(besideId))
   const besideRun = ((): LiveRunState | undefined => {
     if (besideId === undefined) return undefined
@@ -9993,6 +9997,10 @@ export default function App(): ReactElement {
             onRouteChange={changeRoute}
             {...(handBack === undefined ? {} : { handBack })}
             {...(quoteIn === undefined ? {} : { quoteIn })}
+            pagePoints={pagePoints}
+            onPagePointNote={(id, note) => setPagePoints((current) => noteOnPagePoint(current, id, note))}
+            onPagePointRemove={(id) => setPagePoints((current) => withoutPagePoint(current, id))}
+            onPagePointsSent={() => setPagePoints([])}
             models={models}
             diffNotes={shownNotes}
             onClearDiffNotes={() => changeShownNotes(() => [])}
@@ -10216,6 +10224,23 @@ export default function App(): ReactElement {
           onClose={() => setTerminalOpen(false)} /></Suspense>}
         {browserMounted && <Suspense fallback={null}><BrowserPanel visible={browserOpen && screen === 'workroom'}
           runtime={liveRun?.data?.runtime ?? composerRoute.runtime}
+          {...(browserRefusal === undefined ? {} : { pointingOff: browserRefusal })}
+          onPointed={async (pick) => {
+            if (pagePoints.length >= MAX_PAGE_POINTS) {
+              return 'Eight parts are already in the box. Remove one to point at another. The page was not added.'
+            }
+            const bridge = window.desktop
+            const named = `page-part-${String(Date.now())}.png`
+            const answer = pick.png === undefined || bridge === undefined ? undefined : await bridge.attachPasted(named, pick.png).catch(() => undefined)
+            const attachment = answer?.ok === true ? answer.paths[0] : undefined
+            const chip: PagePointChip = {
+              id: `page-point-${String(Date.now())}-${Math.random().toString(36).slice(2, 8)}`,
+              point: pick.point,
+              note: '',
+              ...(attachment === undefined ? {} : { attachment })
+            }
+            setPagePoints((current) => addPagePoint(current, chip).points)
+          }}
           onClose={closeBrowserPanel} /></Suspense>}
         {!terminalOpen && !browserOpen && viewerRefusal !== undefined && screen === 'workroom' && viewingFile === undefined && (
           <aside className="lc-viewer lc-viewer--refused" role="status">

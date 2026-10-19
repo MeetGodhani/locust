@@ -11,6 +11,8 @@ import {
   BROWSER_NEW_TAB_CHANNEL,
   BROWSER_OPEN_PANEL_CHANNEL,
   BROWSER_RELOAD_CHANNEL,
+  BROWSER_POINT_CANCEL_CHANNEL,
+  BROWSER_POINT_CHANNEL,
   BROWSER_SELECT_TAB_CHANNEL,
   BROWSER_STATE_CHANNEL,
   BROWSER_STOP_CHANNEL,
@@ -85,5 +87,14 @@ export function registerBrowserIpc(host: BrowserHost, own: (event: IpcMainInvoke
   ipcMain.handle(BROWSER_CLOSE_TAB_CHANNEL, (event, rawTabId: unknown) => {
     if (!own(event) || !isTabId(rawTabId)) return host.getState()
     return host.closeTab(rawTabId)
+  })
+  // The window asks to point. It does not send a script.
+  ipcMain.handle(BROWSER_POINT_CHANNEL, (event) => {
+    if (!own(event)) return { ok: false, message: 'That request was rejected. The page was not pointed at.' }
+    return host.point()
+  })
+  ipcMain.handle(BROWSER_POINT_CANCEL_CHANNEL, (event) => {
+    if (!own(event)) return
+    return host.cancelPoint()
   })
 }

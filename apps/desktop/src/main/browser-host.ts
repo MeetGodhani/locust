@@ -25,6 +25,8 @@ import {
   type BrowserTabState
 } from '../shared/browser.js'
 import { resolveBrowserUrl } from './browser-url.js'
+import { BROWSER_POINT_CANCEL, BROWSER_POINT_PROBE, pointInBrowser, type BrowserPointPage } from './browser-point.js'
+import { beginBrowserPoint, type BrowserPointResponse } from '../shared/browser-point.js'
 
 export interface BrowserMcpRegistration {
   readonly configPath: string
@@ -70,6 +72,7 @@ export interface BrowserHostOptions {
     readonly toolName: string
     readonly summary: string
   }) => void
+  readonly emitPointHotkey?: () => void
   readonly now?: () => Date
   readonly port?: number
 }
@@ -90,6 +93,8 @@ export interface BrowserHost {
   newTab(rawUrl?: string): Promise<BrowserPanelState>
   selectTab(tabId: string): BrowserPanelState
   closeTab(tabId: string): BrowserPanelState
+  point(): Promise<BrowserPointResponse>
+  cancelPoint(): Promise<void>
   registerRun(run: BrowserRunContext): Promise<BrowserMcpRegistration>
   releaseRun(runId: string): Promise<void>
   callTool(
@@ -113,6 +118,7 @@ interface InternalTab {
   readonly consoleEntries: BrowserConsoleEntry[]
   readonly networkEntries: BrowserNetworkEntry[]
   lastElements: BrowserElementSnapshot[]
+  canPoint?: boolean
 }
 
 interface RegisteredRun extends BrowserRunContext {
@@ -295,6 +301,34 @@ export function createBrowserHost(options: BrowserHostOptions): BrowserHost {
   let lastError: string | undefined
   let tabSeq = 0
   let activeToolRun: RegisteredRun | undefined
+  let pointing = false
+  let pointGeneration = 0
+
+  const pageOf = (wc: WebContents): BrowserPointPage => ({
+    executeJavaScript: (code, userGesture) => wc.executeJavaScript(code, userGesture),
+    capturePage: (rect) => wc.capturePage(rect),
+    getURL: () => wc.getURL(),
+    isDestroyed: () => wc.isDestroyed(),
+    getZoomFactor: () => wc.getZoomFactor()
+  })
+
+  const probePointing = (tab: InternalTab): void => {
+    const wc = tab.view.webContents
+    if (wc.isDestroyed() || tab.url.length === 0 || tab.url === 'about:blank') {
+      tab.canPoint = undefined
+      return
+    }
+    void wc.executeJavaScript(BROWSER_POINT_PROBE, true).then(
+      (value) => {
+        tab.canPoint = value === true
+        notifyState()
+      },
+      () => {
+        tab.canPoint = false
+        notifyState()
+      }
+    )
+  }
 
   const tabs = new Map<string, InternalTab>()
   const runsByToken = new Map<string, RegisteredRun>()
@@ -310,7 +344,8 @@ export function createBrowserHost(options: BrowserHostOptions): BrowserHost {
       loading: tab.loading,
       canGoBack: !destroyed && wc.navigationHistory.canGoBack(),
       canGoForward: !destroyed && wc.navigationHistory.canGoForward(),
-      ...(tab.previewDataUrl !== undefined ? { previewDataUrl: tab.previewDataUrl } : {})
+      ...(tab.previewDataUrl !== undefined ? { previewDataUrl: tab.previewDataUrl } : {}),
+      ...(tab.canPoint !== undefined ? { canPoint: tab.canPoint } : {})
     }
   }
 
@@ -556,6 +591,15 @@ export function createBrowserHost(options: BrowserHostOptions): BrowserHost {
       syncViewAttachment()
       notifyState()
       void refreshTabPreview(tab)
+      probePointing(tab)
+    })
+
+    wc.on('before-input-event', (event, input) => {
+      if (input.type !== 'keyDown' || input.isAutoRepeat) return
+      const chord = (input.control || input.meta) && input.shift && !input.alt && input.code === 'KeyC'
+      if (!chord) return
+      event.preventDefault()
+      options.emitPointHotkey?.()
     })
 
     wc.on('page-title-updated', (_event, title) => {
@@ -1316,6 +1360,38 @@ export function createBrowserHost(options: BrowserHostOptions): BrowserHost {
         syncViewAttachment()
       }
       return notifyState()
+    },
+
+    async point() {
+      const refused = beginBrowserPoint(options.policyRefusal?.())
+      if (refused !== undefined) return refused
+      const tab = activeTabId === undefined ? undefined : tabs.get(activeTabId)
+      if (tab === undefined || tab.url.length === 0 || tab.view.webContents.isDestroyed()) {
+        return { ok: false, message: 'There is no page to point at. Open one in the browser first.' }
+      }
+      if (pointing) return { ok: false, message: 'Already pointing at the page. Press the button again or Esc to stop.' }
+      pointing = true
+      const generation = ++pointGeneration
+      try {
+        const answer = await pointInBrowser(pageOf(tab.view.webContents))
+        if (!tab.view.webContents.isDestroyed()) {
+          const before = tab.canPoint
+          if (!answer.ok && answer.blocked === true) tab.canPoint = false
+          else if (answer.ok) tab.canPoint = true
+          if (tab.canPoint !== before) notifyState()
+        }
+        return answer
+      } finally {
+        if (generation === pointGeneration) pointing = false
+      }
+    },
+
+    cancelPoint() {
+      pointGeneration += 1
+      pointing = false
+      const tab = activeTabId === undefined ? undefined : tabs.get(activeTabId)
+      if (tab === undefined || tab.view.webContents.isDestroyed()) return Promise.resolve()
+      return tab.view.webContents.executeJavaScript(BROWSER_POINT_CANCEL).then(() => undefined, () => undefined)
     },
 
     closeTab(tabId) {

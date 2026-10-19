@@ -12,12 +12,16 @@ import {
   BROWSER_NAVIGATE_CHANNEL,
   BROWSER_NEW_TAB_CHANNEL,
   BROWSER_OPEN_PANEL_CHANNEL,
+  BROWSER_POINT_CANCEL_CHANNEL,
+  BROWSER_POINT_CHANNEL,
+  BROWSER_POINT_HOTKEY_CHANNEL,
   BROWSER_RELOAD_CHANNEL,
   BROWSER_SELECT_TAB_CHANNEL,
   BROWSER_STATE_CHANNEL,
   BROWSER_STOP_CHANNEL,
   type BrowserPanelState
 } from '../shared/browser.js'
+import type { BrowserPointResponse } from '../shared/browser-point.js'
 import { APPEARANCE_CHANGED_CHANNEL, APPEARANCE_GET_CHANNEL, APPEARANCE_SET_CHANNEL, themeFromArguments } from '../shared/appearance.js'
 import type { AppearanceState, ThemeChoice } from '../shared/appearance.js'
 import { ACP_AGENTS_LIST_CHANNEL, ACP_AGENTS_REMOVE_CHANNEL, ACP_AGENTS_SAVE_CHANNEL, ACP_AGENTS_TEST_CHANNEL } from '../shared/acp-agents.js'
@@ -486,6 +490,13 @@ const desktopApi: DesktopApi = {
     newTab: (url) => ipcRenderer.invoke(BROWSER_NEW_TAB_CHANNEL, url),
     selectTab: (tabId) => ipcRenderer.invoke(BROWSER_SELECT_TAB_CHANNEL, tabId),
     closeTab: (tabId) => ipcRenderer.invoke(BROWSER_CLOSE_TAB_CHANNEL, tabId),
+    point: () => ipcRenderer.invoke(BROWSER_POINT_CHANNEL) as Promise<BrowserPointResponse>,
+    cancelPoint: () => ipcRenderer.invoke(BROWSER_POINT_CANCEL_CHANNEL) as Promise<void>,
+    onPointHotkey: (listener) => {
+      const receive = () => listener()
+      ipcRenderer.on(BROWSER_POINT_HOTKEY_CHANNEL, receive)
+      return () => { ipcRenderer.removeListener(BROWSER_POINT_HOTKEY_CHANNEL, receive) }
+    },
     onState: (listener) => {
       const receive = (_event: Electron.IpcRendererEvent, state: BrowserPanelState) => listener(state)
       ipcRenderer.on(BROWSER_EVENT_CHANNEL, receive)

@@ -31,6 +31,7 @@ import type { MissionRuntimeId } from '@teammate/runtime-adapters'
 import { handoffPreviewParts, joinerBefore } from '../handoffPreview.js'
 import type { HandoffPreviewParts } from '../handoffPreview.js'
 import { AttachedImage } from './AttachedImage.js'
+import { PagePointChips } from './PagePointChips.js'
 import { MetalSend } from './MetalSend.js'
 import type { MetalMotion, MetalPreset, MetalStrength } from '../../../shared/ipc.js'
 import { isImagePath } from '../../../shared/image-files.js'
@@ -47,6 +48,7 @@ import { EffortSlider } from './EffortSlider.js'
 import { CloudEnvironmentField } from './CloudEnvironmentField.js'
 import { effortScale, joinEffort, splitEffort } from '../effortScale.js'
 import { ATTACHMENT_DIR, attachmentLabel, MAX_ATTACHMENTS, withAttachments } from '../../../shared/attachments.js'
+import { messageOfPagePoints, type PagePointChip } from '../../../shared/browser-point.js'
 import { diffNotesTile, withDiffNotes } from '../diffNotes.js'
 import type { DiffNote } from '../diffNotes.js'
 import { availableCommands, matchingCommands, runtimeSlashCommands, slashQuery, SLASH_COMMANDS } from '../slashCommands.js'
@@ -209,6 +211,15 @@ export interface ComposerProps {
    * box, above whatever is typed there. A new object quotes again.
    */
   readonly quoteIn?: { readonly quote: string; readonly attachments?: readonly string[] }
+  /**
+   * Parts of the browser page waiting to be sent. Each picture is attached
+   * with the message; removing a chip removes its picture. Nothing is sent
+   * until Send.
+   */
+  readonly pagePoints?: readonly PagePointChip[]
+  readonly onPagePointNote?: (id: string, note: string) => void
+  readonly onPagePointRemove?: (id: string) => void
+  readonly onPagePointsSent?: () => void
   /** Each runtime's own slash commands, as its CLI last listed them (0.426). */
   readonly runtimeCommands?: RuntimeCommandsResponse
   /**
@@ -486,6 +497,10 @@ export function Composer({
   talkTo,
   handBack,
   quoteIn,
+  pagePoints,
+  onPagePointNote,
+  onPagePointRemove,
+  onPagePointsSent,
   runtimeCommands,
   hasConnectors = false,
   connectorsOff,
@@ -1111,20 +1126,25 @@ export function Composer({
     sendNow.current = false
     const typed = value.trim()
     // Notes alone are a message: the person may have nothing to add to them.
+    // A pointed part of the page is one too, notes and all.
     const notes = diffNotes ?? []
-    const prompt = withDiffNotes(typed, notes)
+    const pointed = messageOfPagePoints(pagePoints ?? [])
+    const body = [pointed.text, typed].filter((part) => part.length > 0).join('\n\n')
+    const prompt = withDiffNotes(body, notes)
     if (prompt.length === 0) return
+    const files = [...pointed.attachments, ...attached].slice(0, MAX_ATTACHMENTS)
     // The tagged are sent it first, while the conversation on screen is still
     // the one they came from; with nobody on screen they are who it goes to.
     if (tagged.length > 0 && onTag !== undefined) {
       // Who it went to is a report, not a refusal: plain, with the team's icon.
-      void onTag(tagged, withAttachments(prompt, attached)).then((said) => {
+      void onTag(tagged, withAttachments(prompt, files)).then((said) => {
         if (said !== undefined) setRefusal({ text: said.text, ...(said.sent ? { plain: true, icon: 'users' as const } : {}) })
       })
       setTagged([])
       if (currentTeammateId === undefined) {
         setValue('')
         setAttached([])
+        onPagePointsSent?.()
         if (notes.length > 0) onClearDiffNotes?.()
         return
       }
@@ -1138,11 +1158,12 @@ export function Composer({
       // review): the queued row dropped them, and the tiles then rode along
       // on the next, unrelated message.
       queueing.current = true
-      void Promise.resolve(onQueue(prompt, attached, now && onSendQueuedNow !== undefined)).then((saved) => {
+      void Promise.resolve(onQueue(prompt, files, now && onSendQueuedNow !== undefined)).then((saved) => {
         if (saved === false) return
         // A disk acknowledgement must not erase a newer thought typed meanwhile.
         if (valueNow.current === value) setValue('')
         setAttached([])
+        onPagePointsSent?.()
         if (notes.length > 0) onClearDiffNotes?.()
       }).finally(() => { queueing.current = false })
       return
@@ -1174,7 +1195,7 @@ export function Composer({
     setValue('')
     const sending = attached
     setAttached([])
-    void onStart(withAttachments(prompt, sending), continuation === undefined || leaveOut.length === 0 ? undefined : { leaveOut }).then((started) => {
+    void onStart(withAttachments(prompt, files), continuation === undefined || leaveOut.length === 0 ? undefined : { leaveOut }).then((started) => {
       if (started !== true) {
         setValue(typed)
         setAttached(sending)
@@ -1183,6 +1204,7 @@ export function Composer({
         return
       }
       // Gone with the message; kept, for another try, when it did not go.
+      onPagePointsSent?.()
       if (notes.length > 0) onClearDiffNotes?.()
     })
   }
@@ -1979,6 +2001,13 @@ export function Composer({
               {currentTeammateId === undefined ? 'this goes to them' : 'they are sent this too, each in a conversation of their own'}
             </span>
           </div>
+        )}
+        {(pagePoints ?? []).length > 0 && (
+          <PagePointChips
+            points={pagePoints ?? []}
+            onNote={(id, note) => onPagePointNote?.(id, note)}
+            onRemove={(id) => onPagePointRemove?.(id)}
+          />
         )}
         {(attached.length > 0 || (diffNotes ?? []).length > 0) && (
           <div className="lc-attached" aria-label={`${attachmentLabel(attached.length)} attached`}>
@@ -2892,7 +2921,7 @@ export function Composer({
                       routeCanRun,
                       busy: busyWith !== undefined,
                       // Notes on the diff are a message on their own.
-                      empty: value.trim().length === 0 && (diffNotes ?? []).length === 0
+                      empty: value.trim().length === 0 && (diffNotes ?? []).length === 0 && (pagePoints ?? []).length === 0
                     }) ?? 'Send — Shift+Enter for a new line'
                   }
                 >

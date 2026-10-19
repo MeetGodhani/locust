@@ -177,6 +177,26 @@ continue; report exact validation results, and say what was not run.
 
 ## Handoff log
 
+### 2026-10-19 — point at a part of the browser page
+
+- Scope: `exec/page-point`, based on `18702215`. The incoming `docs/HANDOFF-page-point.md` and the drive captures in
+  `docs/point-at-the-browser-2026-10-19/` stay out of the commit. No version, changelog, installer, site, or push.
+- The browser toolbar points at the page in that page's own WebContents. One pick carries the address, a short
+  selector, scrubbed HTML, the styles that matter for a visual fix, a picture taken after the outline is gone, and
+  a source file only when the page itself names one. Several picks wait as chips, each with a note, until Send.
+  Removing a chip removes its picture. The message marks the block as page content. Typed form values are left out.
+  A password, payment, or one-time-code field is not pictured. A page that will not run the picker says so on the
+  button. Organization policy `browser: false` turns pointing off too.
+- Observed: `pnpm typecheck` passed. `_tools/gate.sh` passed. The desktop suite's first run had two timeouts in
+  `a-conversation-can-be-pinned.test.ts` (11263 passed); the retry of that file passed 3. The app build passed.
+  `node apps/desktop/test/mutation-control.mjs page-point` caught 7 of 7. `_tools/drive-point-at-the-browser.mjs`
+  on the dev build at 1200x720, with no model turn, passed every check: the button's chip had a picture, its styles,
+  and `src/SaveButton.tsx:18`; the button's own click did not run; the password chip had no value and no picture;
+  a note was on the chip; nothing was sent.
+- Not run: macOS, Linux, the packaged app, and a paid model turn.
+- The browser page shows up on the devtools port at its real address, but that socket's default script context is
+  still `about:blank`. The drive evaluates in the context whose origin is `http://127.0.0.1`.
+
 ### 2026-10-18 — browser teammates can use
 
 - Scope: `exec/agent-browser`, based on `c0a3439b`. The incoming untracked `docs/HANDOFF-agent-browser.md` and

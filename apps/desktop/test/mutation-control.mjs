@@ -1539,6 +1539,63 @@ const MUTATIONS = [
     from: "    if (reach === undefined) return { verdict: 'allow', by: 'earlier-always' }",
     to: "    if (reach === undefined || reach !== undefined) return { verdict: 'allow', by: 'earlier-always' }",
     expect: 'asks again about a command that reaches other programs, though Always was given, and says why'
+  },
+  // Point at a part of the browser page. A focused run: node test/mutation-control.mjs page-point
+  {
+    file: join(ROOT, 'src', 'shared', 'browser-point.ts'),
+    name: 'page-point: form values are quoted',
+    from: '  return omitFormValues(html)',
+    to: '  return html',
+    expect: 'form values never appear in a pick',
+    tests: ['src/main/a-part-of-the-browser-can-be-pointed-at.test.ts']
+  },
+  {
+    file: join(ROOT, 'src', 'shared', 'browser-point.ts'),
+    name: 'page-point: trimmed code is shown as if it were the whole of it',
+    from: '  if (left > 0) lines.push(`(${String(left)} more characters of its code not shown)`)',
+    to: '  if (false) lines.push(`(${String(left)} more characters of its code not shown)`)',
+    expect: 'a trimmed HTML says it was trimmed',
+    tests: ['src/main/a-part-of-the-browser-can-be-pointed-at.test.ts']
+  },
+  {
+    file: join(ROOT, 'src', 'shared', 'browser-point.ts'),
+    name: 'page-point: removing a chip keeps its picture',
+    from: '  return current.filter((chip) => chip.id !== id)',
+    to: '  return current',
+    expect: 'removing a chip removes its picture',
+    tests: ['src/main/a-part-of-the-browser-can-be-pointed-at.test.ts']
+  },
+  {
+    file: join(ROOT, 'src', 'shared', 'browser-point.ts'),
+    name: 'page-point: a colour is left off the styles',
+    from: "  push('color', side(raw, 'color'))",
+    to: "  push('color', undefined)",
+    expect: 'lists the styles that matter for a visual fix',
+    tests: ['src/main/a-part-of-the-browser-can-be-pointed-at.test.ts']
+  },
+  {
+    file: join(ROOT, 'src', 'main', 'browser-host.ts'),
+    name: 'page-point: organization policy does not turn pointing off',
+    from: '      if (refused !== undefined) return refused',
+    to: '      if (false) return refused',
+    expect: 'browser: false turns pointing off too',
+    tests: ['src/main/a-part-of-the-browser-can-be-pointed-at.test.ts']
+  },
+  {
+    file: join(ROOT, 'src', 'main', 'browser-point.ts'),
+    name: 'page-point: a password field is photographed',
+    from: '    if (read.point.pictureNote !== undefined) return { ok: true, picked: read.point }',
+    to: '    if (false) return { ok: true, picked: read.point }',
+    expect: 'a password field is not pictured with its contents',
+    tests: ['src/main/a-part-of-the-browser-can-be-pointed-at.test.ts']
+  },
+  {
+    file: join(ROOT, 'src', 'main', 'browser-ipc.ts'),
+    name: 'page-point: the window can hand a script to the picker',
+    from: '    return host.point()',
+    to: '    return host.point(event)',
+    expect: 'the picker request goes through main only',
+    tests: ['src/main/a-part-of-the-browser-can-be-pointed-at.test.ts']
   }
 ]
 

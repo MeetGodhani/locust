@@ -124,7 +124,7 @@ import { TERMINAL_EVENT } from '../shared/terminal.js'
 import { policyBrowserRefusal, policyTerminalRefusal } from '../shared/organization-policy.js'
 import { createBrowserHost } from './browser-host.js'
 import { registerBrowserIpc } from './browser-ipc.js'
-import { BROWSER_EVENT_CHANNEL } from '../shared/browser.js'
+import { BROWSER_EVENT_CHANNEL, BROWSER_POINT_HOTKEY_CHANNEL } from '../shared/browser.js'
 import { catchUpTerminal, createTerminalCatchUp, createTerminalImports, createTranscriptReader, transcriptPathFor } from './terminal-catch-up.js'
 import type { CatchUpFacts } from './terminal-catch-up.js'
 import { importSession, listImportableSessions } from './session-import.js'
@@ -2343,6 +2343,11 @@ if (!ownsSingleInstanceLock) {
       emitState: (state) => {
         if (approvalWindow !== undefined && !approvalWindow.isDestroyed() && !approvalWindow.webContents.isDestroyed()) {
           approvalWindow.webContents.send(BROWSER_EVENT_CHANNEL, state)
+        }
+      },
+      emitPointHotkey: () => {
+        if (approvalWindow !== undefined && !approvalWindow.isDestroyed() && !approvalWindow.webContents.isDestroyed()) {
+          approvalWindow.webContents.send(BROWSER_POINT_HOTKEY_CHANNEL)
         }
       }
     })

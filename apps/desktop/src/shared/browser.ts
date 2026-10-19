@@ -1,4 +1,5 @@
 import type { MissionRuntimeId } from '@teammate/runtime-adapters'
+import type { BrowserPointResponse } from './browser-point.js'
 
 export const BROWSER_OPEN_PANEL_CHANNEL = 'locust:browser:open-panel'
 export const BROWSER_CLOSE_PANEL_CHANNEL = 'locust:browser:close-panel'
@@ -13,6 +14,9 @@ export const BROWSER_SELECT_TAB_CHANNEL = 'locust:browser:select-tab'
 export const BROWSER_CLOSE_TAB_CHANNEL = 'locust:browser:close-tab'
 export const BROWSER_STATE_CHANNEL = 'locust:browser:state'
 export const BROWSER_EVENT_CHANNEL = 'locust:browser:event'
+export const BROWSER_POINT_CHANNEL = 'locust:browser:point'
+export const BROWSER_POINT_CANCEL_CHANNEL = 'locust:browser:point-cancel'
+export const BROWSER_POINT_HOTKEY_CHANNEL = 'locust:browser:point-hotkey'
 
 /**
  * Isolated persistent session for the Browser panel. Never reads or imports
@@ -36,6 +40,8 @@ export interface BrowserTabState {
   readonly canGoBack: boolean
   readonly canGoForward: boolean
   readonly previewDataUrl?: string
+  /** False when the page will not run the picker. Absent until that is known. */
+  readonly canPoint?: boolean
 }
 
 export interface BrowserActivity {
@@ -460,5 +466,8 @@ export interface BrowserApi {
   newTab(url?: string): Promise<BrowserPanelState>
   selectTab(tabId: string): Promise<BrowserPanelState>
   closeTab(tabId: string): Promise<BrowserPanelState>
+  point(): Promise<BrowserPointResponse>
+  cancelPoint(): Promise<void>
+  onPointHotkey(listener: () => void): () => void
   onState(listener: (state: BrowserPanelState) => void): () => void
 }

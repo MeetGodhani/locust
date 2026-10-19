@@ -3,23 +3,30 @@ import {
   browserRuntimeUnsupportedNote,
   type BrowserPanelState
 } from '../../../shared/browser.js'
+import { browserPointControl, BROWSER_POINT_SHORTCUT, isBrowserPointShortcut, type BrowserPoint } from '../../../shared/browser-point.js'
 import type { MissionRuntimeId } from '@teammate/runtime-adapters'
 import { Icon } from './Icon.js'
 
 export default function BrowserPanel({
   visible,
   runtime,
+  pointingOff,
+  onPointed,
   onClose
 }: {
   readonly visible: boolean
   readonly runtime?: MissionRuntimeId
+  readonly pointingOff?: string
+  readonly onPointed: (pick: { readonly point: BrowserPoint; readonly png?: Uint8Array }) => void | string | Promise<void | string | undefined>
   readonly onClose: () => void
 }) {
   const [state, setState] = useState<BrowserPanelState>({ open: visible, tabs: [] })
   const [addressInput, setAddressInput] = useState('')
   const [editingAddress, setEditingAddress] = useState(false)
   const [localError, setLocalError] = useState<string>()
+  const [pointing, setPointing] = useState<'idle' | 'pointing' | { readonly said: string }>('idle')
   const viewportRef = useRef<HTMLDivElement>(null)
+  const pointRef = useRef<() => void>(() => undefined)
 
   const activeTab = state.tabs.find((t) => t.id === state.activeTabId) ?? state.tabs[0]
   const runtimeNote = runtime !== undefined ? browserRuntimeUnsupportedNote(runtime) : undefined
@@ -84,6 +91,68 @@ export default function BrowserPanel({
     }
   }, [visible, reportBounds, state.activity, state.error, localError, runtimeNote, state.tabs.length])
 
+  const point = useCallback((): void => {
+    const api = window.desktop?.browser
+    if (api === undefined || pointingOff !== undefined) return
+    if (pointing === 'pointing') {
+      void api.cancelPoint().catch(() => undefined)
+      setPointing('idle')
+      return
+    }
+    if (activeTab?.canPoint === false) return
+    if (activeTab?.url === undefined || activeTab.url.length === 0) {
+      setPointing({ said: 'There is no page to point at. Open one in the browser first.' })
+      return
+    }
+    setPointing('pointing')
+    void api
+      .point()
+      .then(async (answer) => {
+        if (!answer.ok) {
+          setPointing(answer.blocked === true ? 'idle' : { said: answer.message })
+          return
+        }
+        setPointing('idle')
+        if (answer.picked === undefined) return
+        const said = await onPointed({ point: answer.picked, ...(answer.png === undefined ? {} : { png: answer.png }) })
+        if (typeof said === 'string' && said.length > 0) setPointing({ said })
+      })
+      .catch(() => setPointing({ said: 'The page could not be pointed at. It stayed as it was.' }))
+  }, [activeTab?.canPoint, activeTab?.url, onPointed, pointing, pointingOff])
+  pointRef.current = point
+
+  useEffect(() => {
+    if (visible || pointing !== 'pointing') return
+    void window.desktop?.browser?.cancelPoint().catch(() => undefined)
+    setPointing('idle')
+  }, [visible, pointing])
+
+  useEffect(() => {
+    return () => {
+      void window.desktop?.browser?.cancelPoint().catch(() => undefined)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!visible) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && pointing === 'pointing') {
+        event.preventDefault()
+        pointRef.current()
+        return
+      }
+      if (!isBrowserPointShortcut(event) || event.repeat) return
+      event.preventDefault()
+      pointRef.current()
+    }
+    window.addEventListener('keydown', onKey, true)
+    const off = window.desktop?.browser?.onPointHotkey(() => pointRef.current())
+    return () => {
+      window.removeEventListener('keydown', onKey, true)
+      off?.()
+    }
+  }, [visible, pointing])
+
   const submitAddress = async (event: React.FormEvent) => {
     event.preventDefault()
     const api = window.desktop?.browser
@@ -104,6 +173,12 @@ export default function BrowserPanel({
   }
 
   const errorText = localError ?? state.error
+  const pointControl = browserPointControl({
+    ...(pointingOff === undefined ? {} : { refusal: pointingOff }),
+    blocked: activeTab?.canPoint === false,
+    pointing: pointing === 'pointing',
+    hasPage: activeTab?.url !== undefined && activeTab.url.length > 0
+  })
 
   return (
     <aside className="lc-viewer lc-browser" aria-label="Browser panel" hidden={!visible}>
@@ -223,6 +298,7 @@ export default function BrowserPanel({
         >
           <Icon name={activeTab?.loading ? 'close' : 'refresh'} size={13} />
         </button>
+        <BrowserPointButton control={pointControl} onClick={point} />
         <form className="lc-browser__form" onSubmit={(e) => void submitAddress(e)}>
           <input
             type="text"
@@ -258,6 +334,13 @@ export default function BrowserPanel({
         </p>
       )}
 
+      {pointing === 'pointing' && (
+        <p className="lc-browser__hint" role="status">Click a part of the page to ask about it. Esc stops.</p>
+      )}
+      {typeof pointing === 'object' && (
+        <p className="lc-browser__hint is-said" role="status">{pointing.said}</p>
+      )}
+
       <div className="lc-browser__viewport" ref={viewportRef}>
         {activeTab?.previewDataUrl !== undefined && (
           <img className="lc-browser__preview" src={activeTab.previewDataUrl} alt="" />
@@ -277,5 +360,36 @@ export default function BrowserPanel({
         )}
       </div>
     </aside>
+  )
+}
+
+/** The toolbar control. A page that will not run the picker says so on the button. */
+export function BrowserPointButton({
+  control,
+  onClick
+}: {
+  readonly control: ReturnType<typeof browserPointControl>
+  readonly onClick: () => void
+}) {
+  const label = control.sentence
+    ? control.label
+    : control.pressed
+      ? 'Stop pointing'
+      : control.label === 'Open a page to point at it.'
+        ? 'Open a page to point at it.'
+        : 'Point at a part of the page'
+  return (
+    <button
+      type="button"
+      className={`lc-browser__point${control.pressed ? ' is-active' : ''}${control.sentence ? ' is-sentence' : ''}`}
+      aria-label={control.sentence ? control.label : control.pressed ? 'Stop pointing' : control.label === 'Open a page to point at it.' ? 'Open a page to point at it.' : 'Point at a part of the page'}
+      aria-pressed={control.pressed}
+      aria-keyshortcuts="Control+Shift+C"
+      title={control.disabled ? label : `${label} (${BROWSER_POINT_SHORTCUT})`}
+      disabled={control.disabled}
+      onClick={onClick}
+    >
+      {control.sentence ? label : <Icon name="target" size={13} />}
+    </button>
   )
 }
