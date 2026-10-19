@@ -11,6 +11,17 @@ Settings shows this file as What's new. An entry may group its changes under
 about when they arrive on it carries `<!-- big -->` on the line under its
 heading: the home screen then shows it once, as a splash.
 
+## 0.796.0 - 2026-10-19
+<!-- big -->
+
+### New
+
+- **A browser your teammates can use, beside the conversation.** Press Browser at the top of the window, and Locust's own browser opens beside the conversation: a session of its own, apart from your Chrome and its sign-ins, with tabs and an address bar. Your teammates can open pages in it, read them, click, type, take a screenshot and read the console and the network, so a teammate that builds a page can check that it works, and a quiet line names the teammate while it acts. Before it types a password or a card number, submits a form, buys, sends, downloads, or leaves for a site you have not opened, it asks you on a card in the conversation. Teammates on Claude Code, Codex, OpenCode, Copilot and agents you added have it; Cursor, Antigravity and Muse Code cannot take it yet, and the panel says so. A company's policy file can turn it off.
+
+### Improved
+
+- **Every list you choose from is Locust's own.** The fourteen that opened your system's plain list, in Compare, a new teammate, routines, Scout and the voice settings, now open the same menu as the chat box, in both themes, and work the same way from the keyboard.
+
 ## 0.795.0 - 2026-10-19
 
 ### New
