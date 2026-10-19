@@ -11,6 +11,13 @@ Settings shows this file as What's new. An entry may group its changes under
 about when they arrive on it carries `<!-- big -->` on the line under its
 heading: the home screen then shows it once, as a splash.
 
+## 0.794.0 - 2026-10-19
+<!-- big -->
+
+### New
+
+- **A terminal beside the conversation.** Press Terminal at the top of the window, or Ctrl+`, and a terminal opens beside the conversation in its folder, or in the teammate's own copy when it works in one, before the first message too. It is yours, not a teammate's: nothing typed or printed in it goes to a model. On Windows it opens PowerShell, and the arrow beside + offers Command Prompt, Git Bash and WSL when your PC has them; on a Mac or Linux it opens your login shell. Keep up to eight tabs. Hiding the panel keeps them running, closing a tab ends its shell, and quitting Locust ends them all. A company's policy file can turn it off.
+
 ## 0.793.0 - 2026-10-19
 
 ### Fixed
