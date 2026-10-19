@@ -104,6 +104,7 @@ export type RuntimeDiagnosticCode =
   | "check-pending"
   | "version-probe-failed"
   | "version-unrecognized"
+  | "version-unsupported"
   | "capability-probe-failed"
   | "required-capability-missing"
   | "authentication-required"

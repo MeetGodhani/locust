@@ -23,6 +23,7 @@ import type {
   CommandRunner,
   ExecutableLaunch,
   ExecutableLocator,
+  ParsedRuntimeVersion,
   ProbeCommand,
   RuntimeDiagnostic,
   RuntimeDiscovery,
@@ -45,6 +46,10 @@ interface IntegrationDefinition {
   readonly capabilityArgs: readonly string[];
   readonly readinessArgs: readonly string[];
   readonly requiredFeatures: readonly RuntimeFeature[];
+  /**
+   * A version this Locust cannot run yet, said in words instead of a turn that fails (0.805). Undefined: it can.
+   */
+  readonly unsupportedVersion?: (version: ParsedRuntimeVersion) => { readonly message: string; readonly resolution: string } | undefined;
   /**
    * Whether a readiness probe that EXITED cleanly actually reported ready.
    * Most CLIs say so with their exit code; one says "Not logged in" and
@@ -193,6 +198,19 @@ const DEFINITIONS: readonly IntegrationDefinition[] = [
     listAnswersReadiness: true,
     parseModels: parseOpenCodeModelList,
     requiredFeatures: OPENCODE_REQUIRED_FEATURES,
+    /*
+     * OPENCODE 2 IS NOT RUN YET (0.805). It keeps the `opencode` command but has no `opencode serve` and a new server
+     * API, so every turn Locust started on it ended "OpenCode's event stream closed before the turn finished" while
+     * the runtime read as ready (MEASURED 2026-10-19 on 2.0.32 first on PATH). It is said plainly instead, until the
+     * `opencode acp` route (runtime-adapters/src/opencode-acp-run.ts) is wired in.
+     */
+    unsupportedVersion: (version) =>
+      version.major >= 2
+        ? {
+            message: `OpenCode ${version.version} is installed, and Locust runs OpenCode 1 for now: OpenCode 2 changed how other apps talk to it. Support for it is on its way.`,
+            resolution: "To use OpenCode teammates today, use OpenCode 1 (npm install -g opencode-ai) as the opencode command.",
+          }
+        : undefined,
     readyWhen: (result) =>
       parseOpenCodeModelList(`${result.stdout}\n${result.stderr}`) !== undefined,
   },
@@ -748,8 +766,20 @@ async function discoverOne(
     );
   }
 
-  let readiness: RuntimeReadiness = missingFeatures.length > 0 ? "unsupported" : "unknown";
-  if (missingFeatures.length === 0) {
+  const refusedVersion = version === undefined ? undefined : definition.unsupportedVersion?.(version);
+  if (refusedVersion !== undefined) {
+    diagnostics.push(
+      diagnostic({
+        code: "version-unsupported",
+        severity: "error",
+        message: refusedVersion.message,
+        resolution: refusedVersion.resolution,
+      }),
+    );
+  }
+
+  let readiness: RuntimeReadiness = missingFeatures.length > 0 || refusedVersion !== undefined ? "unsupported" : "unknown";
+  if (missingFeatures.length === 0 && refusedVersion === undefined) {
     const signedOut = await missingCredentials(definition, statFile, environment);
     if (signedOut) {
       /*

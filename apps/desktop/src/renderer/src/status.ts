@@ -245,6 +245,14 @@ function baseRouteRowStatus(
       detail: `Installed, but ${runtime.displayName} is not signed in.`
     }
   }
+  if (runtime.status === 'unsupported') {
+    // A version Locust cannot run yet (0.805, OpenCode 2): a fact to act on, not a check to wait out.
+    return {
+      tag: 'UNAVAILABLE',
+      selectable: false,
+      detail: runtime.unsupportedNote ?? `This version of ${runtime.displayName} is not supported yet.`
+    }
+  }
   if (!runtimeIsUsable(runtime)) {
     // Installed but not answering is a moment, not a verdict: Claude Code's
     // first version probe can outlast the 5 s window on a cold start, and
@@ -451,7 +459,9 @@ export function teammateStatusView(input: {
       activity,
       label: !input.runtime.installed
         ? 'AI agent not installed'
-        : notAnswering
+        : input.runtime.status === 'unsupported'
+          ? 'This AI agent version is not supported yet'
+          : notAnswering
           ? 'AI agent not answering — checking again'
           : 'Sign-in needed',
       tone: notAnswering ? 'amber' : 'red',

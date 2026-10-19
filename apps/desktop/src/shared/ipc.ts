@@ -2330,7 +2330,7 @@ export interface RoutineImportRequest {
   readonly route: TeammateRoute
 }
 export type RuntimeAuthState = 'authenticated' | 'unauthenticated' | 'unknown' | 'not-applicable'
-export type RuntimeProbeStatus = 'ready' | 'not-installed' | 'auth-required' | 'offline' | 'probe-failed'
+export type RuntimeProbeStatus = 'ready' | 'not-installed' | 'auth-required' | 'offline' | 'probe-failed' | 'unsupported'
 
 export interface PublicRuntimeStatus {
   readonly id: LocalRuntimeId
@@ -2340,6 +2340,8 @@ export interface PublicRuntimeStatus {
   readonly auth: RuntimeAuthState
   readonly ready: boolean
   readonly status: RuntimeProbeStatus
+  /** Why an installed version cannot be run yet, and what to do (0.805: OpenCode 2). Only with status 'unsupported'. */
+  readonly unsupportedNote?: string
   /** Antigravity runs through Antigravity CLI rather than its app (0.541). */
   readonly throughCli?: true
   /**

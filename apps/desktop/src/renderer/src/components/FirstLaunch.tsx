@@ -700,7 +700,10 @@ export function FirstLaunch({
             const need: { readonly state?: string; readonly detail?: string; readonly free?: boolean } | undefined =
               usable || checking
                 ? undefined
-                : stuck
+                : runtime.status === 'unsupported'
+                  // A version Locust does not run yet (0.805, OpenCode 2): the state in the cell, why and what to do on hover.
+                  ? { state: 'not supported yet', ...(runtime.unsupportedNote === undefined ? {} : { detail: runtime.unsupportedNote }) }
+                  : stuck
                   ? { detail: 'did not answer its version check' }
                   : signIn
                     ? { state: 'not signed in', detail: facts?.account !== undefined ? `installed; signs in with ${facts.account}` : 'installed' }

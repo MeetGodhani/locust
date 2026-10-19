@@ -65,8 +65,11 @@ export function publicStatus(runtime: RuntimeDiscovery): PublicRuntimeStatus {
         ? 'unauthenticated'
         : 'unknown'
 
+  // A version this Locust cannot run yet (0.805, OpenCode 2): said, rather than read as a check that did not answer.
+  const refused = runtime.diagnostics?.find((note) => note.code === 'version-unsupported')
   let status: RuntimeProbeStatus
   if (!installed) status = 'not-installed'
+  else if (refused !== undefined) status = 'unsupported'
   else if (runtime.readiness === 'ready') status = 'ready'
   else if (runtime.readiness === 'authentication-required') status = 'auth-required'
   else if (runtime.readiness === 'unhealthy') status = 'offline'
@@ -80,6 +83,7 @@ export function publicStatus(runtime: RuntimeDiscovery): PublicRuntimeStatus {
     auth,
     ready: status === 'ready',
     status,
+    ...(refused === undefined ? {} : { unsupportedNote: `${refused.message}${refused.resolution === undefined ? '' : ` ${refused.resolution}`}` }),
     // Antigravity through its own CLI is an ordinary runtime, not the app's unpublished interface (0.541).
     ...(runtime.id === 'antigravity' && runtime.executable?.commandName === 'agy' ? { throughCli: true as const } : {}),
     // The sweep went on without this agent's check (main/sweep-settle.ts).
