@@ -11,6 +11,19 @@ Settings shows this file as What's new. An entry may group its changes under
 about when they arrive on it carries `<!-- big -->` on the line under its
 heading: the home screen then shows it once, as a splash.
 
+## 0.795.0 - 2026-10-19
+
+### New
+
+- **Home's starters say what they start, and each one can compare.** Four rows replace the "Try two models on" chips: Plan before building, Debug an issue, Review my changes, and Build a landing page. Pressing a row puts its words in the box for your teammate, in the mode it suits: Plan for a plan, and Ask for a review, so nothing changes. Its Compare button puts the same words in a comparison of two models: of the work, each in its own copy, for a fix or a page, or of the answers for a plan or a review. Nothing is sent until you press Send.
+- **Zoom into an image.** An image opened beside the conversation zooms with a trackpad pinch or Ctrl and the mouse wheel, around the pointer, and pans by dragging or scrolling once it is larger than the pane. Double-click or Fit puts it back, and 100% shows its own pixels.
+- **Move between conversations with the keyboard.** Alt+Down and Alt+Up open the next and the previous conversation in the sidebar; with Shift, the next or previous one waiting for you. Whatever you were typing stays with its conversation.
+
+### Improved
+
+- **The terminal lists WSL by distribution.** On Windows the shell menu offers each Linux you have installed, by name, such as Ubuntu (WSL), and no WSL entry when there is none.
+- **A new person starts on DeepSeek V4.1 Flash Free.** The free models are read again from OpenCode's list: three that are gone are dropped and five newer ones are added. A new person's first free model is now DeepSeek V4.1 Flash Free, with Space Bunny Free, which OpenCode offers for a limited time, after it.
+
 ## 0.794.0 - 2026-10-19
 <!-- big -->
 
