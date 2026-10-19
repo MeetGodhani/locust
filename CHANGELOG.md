@@ -17,6 +17,10 @@ heading: the home screen then shows it once, as a splash.
 
 - **The folder chip stays grey in a folder like .claude.** It turned amber there on every conversation, even ones you keep there on purpose. Now it looks like any folder; its hover still says why such a folder is risky, and Locust still asks once before the first conversation there.
 
+### Fixed
+
+- **A Copilot or own-agent turn ends when the agent's output stops.** If an agent that speaks the Agent Client Protocol (Copilot, or one you added in Settings > AI agents) closed its output mid-turn while its process lived on, the turn could wait for a timeout. Now it ends at once and says so, keeping a reply that had already arrived in full. This is also the groundwork for OpenCode 2, which Locust will run the same way. Built by Mit Godhani.
+
 ## 0.802.0 - 2026-10-19
 
 ### Improved
