@@ -101,7 +101,7 @@ try {
   await drive.resize(1215, 860)
   say(`  conversation: ${String(await drive.evaluate(`(() => { const row = [...document.querySelectorAll('button.lc-conv')].find((b) => b.innerText.includes('invoice total')); if (!row) return 'no row'; row.click(); return 'opened' })()`))}`)
   await sleep(2000)
-  say(`  changes: ${String(await drive.evaluate(`(() => { const button = [...document.querySelectorAll('button')].find((one) => one.innerText.trim() === 'Changes'); if (!button) return 'no changes button'; button.click(); return 'opened' })()`))}`)
+  say(`  changes: ${String(await drive.evaluate(`(() => { const button = [...document.querySelectorAll('button')].find((one) => (one.getAttribute('aria-label') || one.innerText.trim()) === 'Changes'); if (!button) return 'no changes button'; button.click(); return 'opened' })()`))}`)
   let first = await panel()
   for (let tries = 0; tries < 20 && first.files.length < 2; tries += 1) {
     await sleep(500)

@@ -225,7 +225,7 @@ try {
   await drive.evaluate(`(() => { document.querySelector('.lc-viewer__close')?.click(); return 'closed' })()`)
   await sleep(600)
   await drive.capture('what happened (Activity)', () => drive.evaluate(`(async () => {
-    ;[...document.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Activity')?.click()
+    ;[...document.querySelectorAll('button')].find((b) => (b.getAttribute('aria-label') || b.textContent.trim()) === 'Activity')?.click()
     await new Promise((r) => setTimeout(r, 900))
     return ${text('.lc-inspector')}
   })()`))

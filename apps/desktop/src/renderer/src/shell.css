@@ -14969,6 +14969,44 @@ textarea.lc-compare__judgecriteria {
   align-items: center;
 }
 
+/* Claude Code's row of icons (0.797): no box until pointed at, the icon
+   alone, its name on hover. A panel that is open keeps a quiet fill, the way
+   Claude Code marks the one in view, rather than the lime of a chosen chip. */
+.lc-headicon {
+  width: 30px;
+  height: 30px;
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--lc-radius-control);
+  background: transparent;
+  color: var(--lc-text-muted);
+  cursor: pointer;
+  transition: background var(--lc-motion-hover) var(--lc-ease), color var(--lc-motion-hover) var(--lc-ease);
+}
+
+.lc-headicon:hover:not(:disabled) {
+  background: var(--lc-hover-surface);
+  color: var(--lc-text-primary);
+}
+
+.lc-headicon.is-active {
+  background: var(--lc-hover-surface-strong);
+  color: var(--lc-text-primary);
+}
+
+.lc-headicon:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.lc-headicon:focus-visible {
+  outline: 2px solid var(--lc-border-strong);
+  outline-offset: 1px;
+}
+
 /* Armed for something that cannot be undone: the button itself says so. */
 /* The right-click menu on a mission row. */
 /* --- The right-click menu --------------------------------------------

@@ -78,7 +78,7 @@ try {
     return 'done'
   })()`)
   say(`all: ${String(await drive.capture('the changes panel, all changes', () => drive.evaluate(`(async () => {
-    const button = [...document.querySelectorAll('button')].find((el) => el.innerText.trim() === 'Changes')
+    const button = [...document.querySelectorAll('button')].find((el) => (el.getAttribute('aria-label') || el.innerText.trim()) === 'Changes')
     if (!button) return 'no Changes button'
     button.click()
     for (let i = 0; i < 40 && !document.querySelector('.lc-changes__filehead'); i += 1) await new Promise((r) => setTimeout(r, 250))

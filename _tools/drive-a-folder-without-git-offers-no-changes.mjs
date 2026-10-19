@@ -66,8 +66,8 @@ async function folderWithConversation(kind) {
 
 const MIRA = { teammateId: 'tm_mira000000000000000000', name: 'Mira', hue: 'violet', role: 'Custom', roleTitle: 'Developer', createdAt: '2026-10-15T01:00:00.000Z', route: FREE_ROUTE }
 const HEADER = `JSON.stringify({
-  changes: [...document.querySelectorAll('button')].some((b) => b.innerText.trim() === 'Changes'),
-  activity: [...document.querySelectorAll('button')].some((b) => b.innerText.trim() === 'Activity'),
+  changes: [...document.querySelectorAll('button')].some((b) => (b.getAttribute('aria-label') || b.innerText.trim()) === 'Changes'),
+  activity: [...document.querySelectorAll('button')].some((b) => (b.getAttribute('aria-label') || b.innerText.trim()) === 'Activity'),
   commit: [...document.querySelectorAll('button')].some((b) => b.innerText.trim() === 'Commit'),
   panel: Boolean(document.querySelector('.lc-changes'))
 })`
@@ -89,7 +89,7 @@ for (const [index, kind] of ['plain', 'git'].entries()) {
     await drive.resize(1440, 900)
     const header = JSON.parse(String(await drive.capture(`the conversation in the ${kind} folder`, () => drive.evaluate(`(async () => {
       ;[...document.querySelectorAll('.lc-convrow button.lc-conv')].find((r) => /port/i.test(r.innerText))?.click()
-      for (let i = 0; i < 40 && ![...document.querySelectorAll('button')].some((b) => b.innerText.trim() === 'Activity'); i += 1) await new Promise((r) => setTimeout(r, 250))
+      for (let i = 0; i < 40 && ![...document.querySelectorAll('button')].some((b) => (b.getAttribute('aria-label') || b.innerText.trim()) === 'Activity'); i += 1) await new Promise((r) => setTimeout(r, 250))
       await new Promise((r) => setTimeout(r, 2500))
       return ${HEADER}
     })()`))))
@@ -100,7 +100,7 @@ for (const [index, kind] of ['plain', 'git'].entries()) {
     } else {
       check('a repository offers Changes', header.changes, JSON.stringify(header))
       const panel = String(await drive.capture('Changes opened in the repository', () => drive.evaluate(`(async () => {
-        ;[...document.querySelectorAll('button')].find((b) => b.innerText.trim() === 'Changes')?.click()
+        ;[...document.querySelectorAll('button')].find((b) => (b.getAttribute('aria-label') || b.innerText.trim()) === 'Changes')?.click()
         for (let i = 0; i < 40 && !document.querySelector('.lc-changes .lc-diff__row.is-add'); i += 1) await new Promise((r) => setTimeout(r, 250))
         return (document.querySelector('.lc-changes')?.innerText ?? 'no panel').replace(/\\s+/g, ' ').slice(0, 300)
       })()`)))

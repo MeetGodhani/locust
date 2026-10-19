@@ -82,7 +82,7 @@ try {
     if (!row) return JSON.stringify({ error: 'no conversation row' })
     row.click()
     await new Promise((r) => setTimeout(r, 1200))
-    const activity = [...document.querySelectorAll('button')].find((b) => b.innerText.trim() === 'Activity')
+    const activity = [...document.querySelectorAll('button')].find((b) => (b.getAttribute('aria-label') || b.innerText.trim()) === 'Activity')
     if (!activity) return JSON.stringify({ error: 'no Activity button' })
     activity.click()
     for (let i = 0; i < 20 && !document.querySelector('.lc-rail__name'); i += 1) await new Promise((r) => setTimeout(r, 200))

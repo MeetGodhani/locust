@@ -123,7 +123,7 @@ try {
   // A live run's receipt is the inspector's (the durable receipt card is for
   // a mission restored from the ledger).
   const inspector = await drive.capture('the inspector, opened', () => drive.evaluate(`(async () => {
-    const toggle = [...document.querySelectorAll('.lc-workroom__header button')].find((b) => b.innerText.trim() === 'Activity')
+    const toggle = [...document.querySelectorAll('.lc-workroom__header button')].find((b) => (b.getAttribute('aria-label') || b.innerText.trim()) === 'Activity')
     if (toggle && toggle.getAttribute('aria-pressed') !== 'true') toggle.click()
     await new Promise(r => setTimeout(r, 500))
     ;[...document.querySelectorAll('.lc-inspector [role="tab"]')].find((t) => t.innerText.trim() === 'Details')?.click()

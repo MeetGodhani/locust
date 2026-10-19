@@ -1058,6 +1058,8 @@ export const WORKSPACE_SAVE_COPY_CHANNEL = 'workspace:save-copy'
  * form of that is a channel with no argument at all.
  */
 export const DIAGNOSTICS_REVEAL_CHANNEL = 'diagnostics:reveal'
+/** Open the folder teammates work in, in the file manager (0.797): the host's own folder, never a path the window names. */
+export const WORKSPACE_OPEN_CHANNEL = 'workspace:open'
 
 /**
  * Send feedback: the words from the Send feedback box, and the conversation
@@ -3956,6 +3958,8 @@ export interface DesktopApi {
   runtimeCommands(): Promise<RuntimeCommandsResponse>
   /** Show the diagnostics log in the file manager. Names no path. */
   revealDiagnostics(): Promise<void>
+  /** Open the folder teammates work in, in the file manager. Names no path: the host opens its own. */
+  openWorkspaceFolder(): Promise<{ readonly ok: true } | { readonly ok: false; readonly message: string }>
   /** Open the feedback report, filled in, in the person's browser. Names no address. */
   sendFeedback(report: FeedbackReport): Promise<OpenLinkResponse>
   /** The same report, as an email to the support address (0.593): opens the mail app, filled in. */

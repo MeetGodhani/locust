@@ -176,7 +176,7 @@ import { CommitChanges } from './components/CommitChanges.js'
 import { PullRequestChip } from './components/PullRequestChip.js'
 import { ShareTeamDialog } from './components/TeamCard.js'
 import { RuntimeMark } from './components/RuntimeMark.js'
-import { OpenInTerminalButton, terminalOffer } from './components/OpenInTerminal.js'
+import { terminalOffer } from './components/OpenInTerminal.js'
 import type { TerminalOffer } from './components/OpenInTerminal.js'
 import { Sidebar } from './components/Sidebar.js'
 import type { SidebarMission } from './components/Sidebar.js'
@@ -2062,6 +2062,8 @@ export default function App(): ReactElement {
   // Claude's cloud (0.538): what was sent from this folder, to find again or bring home.
   const [claudeCloud, setClaudeCloud] = useState<readonly PublicClaudeCloudSession[]>([])
   const [claudeCloudNote, setClaudeCloudNote] = useState<string>()
+  // The header's folder button, when the folder could not be opened (0.797): said on its hover.
+  const [folderProblem, setFolderProblem] = useState<string>()
   const [cloudWhere, setCloudWhere] = useState<PublicCloudWhere>()
   const [cloudNotes, setCloudNotes] = useState<readonly string[]>([])
   const [cloudProblem, setCloudProblem] = useState<string>()
@@ -7928,8 +7930,8 @@ export default function App(): ReactElement {
    */
   const headerActions: ContextMenuItem[] = []
   /*
-   * `</>` Open in terminal (0.387; components/OpenInTerminal.tsx): the header
-   * button, and the same action first in the ... menu.
+   * Open in terminal (0.387; components/OpenInTerminal.tsx): first in the ...
+   * menu, and only there since the header became a row of icons (0.797).
    */
   const terminalMissionId = liveRun?.data?.missionId ?? liveRun?.restoredMission?.missionId
   const shownTerminal =
@@ -9372,13 +9374,93 @@ export default function App(): ReactElement {
                     * menu: `Ask Yurt for a review` is one click instead of
                     * two and says who it goes to before you commit.
                     */}
-                  {shownTerminal !== undefined && terminalMissionId !== undefined && (
-                    <OpenInTerminalButton offer={shownTerminal} onOpen={() => openConversationInTerminal(terminalMissionId, shownTerminal)} />
+                  {/* The folder's pull request (0.720): only while its branch has one on GitHub. */}
+                  {workspacePath !== undefined && pickedTeammate?.worktree !== true && liveRun !== undefined && <PullRequestChip running={running} />}
+                  {/* Commit (0.680): the folder's own changes. A teammate on its own branch has Review and Land instead. */}
+                  {workspacePath !== undefined && pickedTeammate?.worktree !== true && liveRun !== undefined && (
+                    <CommitChanges
+                      running={running}
+                      {...((liveRun.data?.missionId ?? liveRun.restoredMission?.missionId) === undefined ? {} : { of: (liveRun.data?.missionId ?? liveRun.restoredMission?.missionId)! })}
+                      asks={[...(liveRun.earlierTurns ?? []).map((turn) => turn.prompt), liveRun.prompt].map((prompt) => splitAttachments(prompt).text).slice(-5)}
+                      {...(pickedTeammate === undefined ? {} : { teammate: pickedTeammate.name })}
+                      onCommitted={() => setCommits((count) => count + 1)}
+                    />
+                  )}
+                  {/*
+                    * CLAUDE CODE'S ROW OF ICONS (0.797). Colin, 2026-10-19, with Claude Code's header beside it: "lets
+                    * lean into something closer to what claude code has, buttons are getting a little too much". The
+                    * panels and the folder are icons with their names on hover, in Claude Code's order -- Activity,
+                    * Terminal, Changes, Browser, the folder, then the menu -- and Open in terminal, which was here as
+                    * a `</>` and first in the menu too, is in the menu only. Commit and the pull request stay words:
+                    * they appear only when there is something to do, and say what.
+                    */}
+                  <button
+                    type="button"
+                    className={`lc-headicon${inspectorOpen ? ' is-active' : ''}`}
+                    aria-label="Activity"
+                    aria-pressed={inspectorOpen}
+                    title="Activity: what this conversation's runs did"
+                    onClick={() => {
+                      setReviewingId(undefined)
+                      setChangesOpen(false)
+                      setInspectorOpen(!inspectorOpen)
+                      setTerminalOpen(false)
+                      closeBrowserPanel()
+                    }}
+                  >
+                    <Icon name="activity" size={15} />
+                  </button>
+                  <TerminalToggle open={terminalOpen} refusal={terminalRefusal} onToggle={toggleTerminal} />
+                  {/* Review changes (0.439): only a teammate on its own branch has one to review. */}
+                  {pickedTeammate?.worktree === true && (
+                    <button
+                      type="button"
+                      className={`lc-headicon${reviewingId === pickedTeammate.teammateId ? ' is-active' : ''}`}
+                      aria-label={`Review ${pickedTeammate.name}'s changes`}
+                      aria-pressed={reviewingId === pickedTeammate.teammateId}
+                      title={`Review changes: what ${pickedTeammate.name} has saved on its own branch, whole or turn by turn`}
+                      onClick={() => setReviewingId(reviewingId === pickedTeammate.teammateId ? undefined : pickedTeammate.teammateId)}
+                    >
+                      <Icon name="diff" size={15} />
+                    </button>
+                  )}
+                  {/* The folder's changes, as Claude Code's Changes panel (0.732); a branch of a teammate's own has Review changes. */}
+                  {workspacePath !== undefined && pickedTeammate?.worktree !== true && changesAvailable && (
+                    <button
+                      type="button"
+                      className={`lc-headicon${changesOpen ? ' is-active' : ''}`}
+                      aria-label="Changes"
+                      aria-pressed={changesOpen}
+                      title="Changes: every file this folder's branch changed, against where it left its base"
+                      onClick={() => {
+                        setReviewingId(undefined)
+                        setInspectorOpen(false)
+                        setChangesOpen(!changesOpen)
+                        setTerminalOpen(false)
+                        closeBrowserPanel()
+                      }}
+                    >
+                      <Icon name="diff" size={15} />
+                    </button>
+                  )}
+                  <BrowserToggle open={browserOpen} refusal={browserRefusal} onToggle={toggleBrowser} />
+                  {workspacePath !== undefined && (
+                    <button
+                      type="button"
+                      className="lc-headicon"
+                      aria-label={`Open ${workspaceName.length === 0 ? 'the folder' : workspaceName} in the file manager`}
+                      title={folderProblem ?? `Open the folder: ${workspacePath}`}
+                      onClick={() => {
+                        void window.desktop?.openWorkspaceFolder().then((answer) => setFolderProblem(answer.ok ? undefined : answer.message)).catch(() => undefined)
+                      }}
+                    >
+                      <Icon name="folder" size={15} />
+                    </button>
                   )}
                   {headerActions.length > 0 && (
                     <button
                       type="button"
-                      className="lc-button"
+                      className="lc-headicon"
                       aria-label="More actions"
                       aria-haspopup="menu"
                       title="More actions"
@@ -9396,68 +9478,9 @@ export default function App(): ReactElement {
                         })
                       }}
                     >
-                      <Icon name="dots" size={13} />
+                      <Icon name="dots" size={15} />
                     </button>
                   )}
-                  {/* The folder's pull request (0.720): only while its branch has one on GitHub. */}
-                  {workspacePath !== undefined && pickedTeammate?.worktree !== true && liveRun !== undefined && <PullRequestChip running={running} />}
-                  {/* Commit (0.680): the folder's own changes. A teammate on its own branch has Review and Land instead. */}
-                  {workspacePath !== undefined && pickedTeammate?.worktree !== true && liveRun !== undefined && (
-                    <CommitChanges
-                      running={running}
-                      {...((liveRun.data?.missionId ?? liveRun.restoredMission?.missionId) === undefined ? {} : { of: (liveRun.data?.missionId ?? liveRun.restoredMission?.missionId)! })}
-                      asks={[...(liveRun.earlierTurns ?? []).map((turn) => turn.prompt), liveRun.prompt].map((prompt) => splitAttachments(prompt).text).slice(-5)}
-                      {...(pickedTeammate === undefined ? {} : { teammate: pickedTeammate.name })}
-                      onCommitted={() => setCommits((count) => count + 1)}
-                    />
-                  )}
-                  {/* Review changes (0.439): only a teammate on its own branch has one to review. */}
-                  {pickedTeammate?.worktree === true && (
-                    <button
-                      type="button"
-                      className={`lc-button${reviewingId === pickedTeammate.teammateId ? ' is-active' : ''}`}
-                      aria-pressed={reviewingId === pickedTeammate.teammateId}
-                      title={`What ${pickedTeammate.name} has saved on its own branch, whole or turn by turn`}
-                      onClick={() => setReviewingId(reviewingId === pickedTeammate.teammateId ? undefined : pickedTeammate.teammateId)}
-                    >
-                      <Icon name="diff" size={13} /> Review changes
-                    </button>
-                  )}
-                  <BrowserToggle open={browserOpen} refusal={browserRefusal} onToggle={toggleBrowser} />
-                  <TerminalToggle open={terminalOpen} refusal={terminalRefusal} onToggle={toggleTerminal} />
-                  {/* The folder's changes, as Claude Code's Changes panel (0.732); a branch of a teammate's own has Review changes. */}
-                  {workspacePath !== undefined && pickedTeammate?.worktree !== true && changesAvailable && (
-                    <button
-                      type="button"
-                      className={`lc-button${changesOpen ? ' is-active' : ''}`}
-                      aria-pressed={changesOpen}
-                      title="Every file this folder's branch changed, against where it left its base"
-                      onClick={() => {
-                        setReviewingId(undefined)
-                        setInspectorOpen(false)
-                        setChangesOpen(!changesOpen)
-                        setTerminalOpen(false)
-                        closeBrowserPanel()
-                      }}
-                    >
-                      <Icon name="diff" size={13} /> Changes
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    className={`lc-button${inspectorOpen ? ' is-active' : ''}`}
-                    aria-pressed={inspectorOpen}
-                    title="Activity: what this conversation's runs did"
-                    onClick={() => {
-                      setReviewingId(undefined)
-                      setChangesOpen(false)
-                      setInspectorOpen(!inspectorOpen)
-                      setTerminalOpen(false)
-                      closeBrowserPanel()
-                    }}
-                  >
-                    <Icon name="activity" size={13} /> Activity
-                  </button>
                 </div>
               </header>
               {/*

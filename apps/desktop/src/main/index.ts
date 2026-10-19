@@ -423,6 +423,7 @@ import {
   PAGE_PICK_CANCEL_CHANNEL,
   RUNTIME_COMMANDS_CHANNEL,
   DIAGNOSTICS_REVEAL_CHANNEL,
+  WORKSPACE_OPEN_CHANNEL,
   FEEDBACK_CHANNEL,
   FEEDBACK_EMAIL_CHANNEL,
   FEEDBACK_SAVE_CHANNEL,
@@ -5519,6 +5520,23 @@ if (!ownsSingleInstanceLock) {
     })
     ipcMain.handle(DIAGNOSTICS_REVEAL_CHANNEL, () => {
       shell.showItemInFolder(errorLog())
+    })
+    /*
+     * THE FOLDER BUTTON in the conversation's header (0.797), as Claude Code's: the folder teammates work in, opened
+     * in the file manager. The window names no path -- this is the host's own folder -- and a folder opens, it cannot
+     * run, so `openPath` is safe here where it is not for a file a model wrote (reveal-file.ts).
+     */
+    ipcMain.handle(WORKSPACE_OPEN_CHANNEL, async () => {
+      if (!workspaceChosen) return { ok: false, message: NO_WORKSPACE_MESSAGE } as const
+      let folder = false
+      try {
+        folder = statSync(workspacePath).isDirectory()
+      } catch {
+        folder = false
+      }
+      if (!folder) return { ok: false, message: 'That folder is not there any more. Choose it again in the chat box.' } as const
+      const failed = await shell.openPath(workspacePath)
+      return failed.length === 0 ? ({ ok: true } as const) : ({ ok: false, message: failed } as const)
     })
     ipcMain.handle(DIAGNOSTICS_REPORT_CHANNEL, () => {
       const path = errorLog()

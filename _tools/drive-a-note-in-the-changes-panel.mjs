@@ -93,7 +93,7 @@ try {
   const opened = String(await drive.capture('the conversation, then Changes', () => drive.evaluate(`(async () => {
     ;[...document.querySelectorAll('.lc-convrow button.lc-conv')].find((r) => /port/i.test(r.innerText))?.click()
     await new Promise((r) => setTimeout(r, 1500))
-    ;[...document.querySelectorAll('button')].find((b) => b.innerText.trim() === 'Changes')?.click()
+    ;[...document.querySelectorAll('button')].find((b) => (b.getAttribute('aria-label') || b.innerText.trim()) === 'Changes')?.click()
     for (let i = 0; i < 40 && !(${LINE}); i += 1) await new Promise((r) => setTimeout(r, 250))
     const line = ${LINE}
     if (!line) return 'no added line in the panel: ' + (document.querySelector('.lc-changes')?.innerText ?? 'no panel').replace(/\\s+/g, ' ').slice(0, 300)
