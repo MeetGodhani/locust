@@ -11,6 +11,14 @@ Settings shows this file as What's new. An entry may group its changes under
 about when they arrive on it carries `<!-- big -->` on the line under its
 heading: the home screen then shows it once, as a splash.
 
+## 0.804.0 - 2026-10-19
+<!-- big -->
+
+### New
+
+- **A conversation can read other folders.** From the folder chip, Add a reference: a folder on this computer, or a GitHub repository, which Locust copies with your own gh sign-in (up to 500 MB). The teammate can read it and is told it is for reading, not changing; your mode stays exactly as you chose it. Where a mode could change the folder, or adding it would allow writes the mode does not, the reference's chip says so. References stay with the conversation, up to five.
+- **A pull request link says how it stands.** A link to a GitHub pull request in a conversation now shows Open, Draft, Merged or Closed beside it, and whether its checks pass, read through your gh sign-in and kept up to date while checks run.
+
 ## 0.803.0 - 2026-10-19
 
 ### Improved
