@@ -30,26 +30,30 @@ if (packaged === undefined || out === undefined) {
 const only = arg('--only')?.split(',').map((name) => name.trim())
 const from = arg('--from')
 /*
- * THE FREE MODELS, IN TURN (2026-10-06). One free model for a whole sweep is a
- * provider asked hundreds of times in a row: Ling 3.0 went "Endpoint is
- * unavailable" and Muse Spark "Rate limit exceeded" under it, and every drive
- * after failed for the provider's reason, not Locust's. Each drive takes the
- * next of the free models the scorecard (_tools/free-model-scorecard.mjs)
- * found answering, so no one provider carries the sweep.
+ * THE FREE MODELS, IN TURN (2026-10-06; list refreshed 2026-10-18). One free
+ * model for a whole sweep is a provider asked hundreds of times in a row:
+ * Ling 3.0 went "Endpoint is unavailable" and Muse Spark "Rate limit
+ * exceeded" under it, and every drive after failed for the provider's
+ * reason, not Locust's. Each drive takes the next of the free models found
+ * answering, so no one provider carries the sweep.
  *
  * The app takes its free models in an order kept from this list since 0.712
- * (renderer status.ts FREE_MODELS_BEST_FIRST: a new person's first message
+ * (shared/free-models.ts FREE_MODELS_BEST_FIRST: a new person's first message
  * goes to the first of them). A model dropped here comes out of that too.
+ * The 2026-10-18 list is that file's list, in its order: read fresh from
+ * OpenCode Zen, then one short question asked of each in a throwaway home,
+ * three tries each (see that file for answers and times). jev-1.13-free is
+ * listed by OpenCode but answered nothing, so it is in neither list.
  */
 const FREE_MODELS = [
-  // Muse Spark left out 2026-10-06: rate-limited all day, each drive on it waited out OpenCode's retries.
-  'opencode/space-bunny-free',
-  'opencode/nemotron-3-ultra-free',
-  // Fledge Alpha left out 2026-10-08: gone from `opencode models`; every drive given it failed first.
-  'opencode/longcat-2.5-preview-free',
   'opencode/nemotron-3.5-lightning-free',
+  'opencode/space-bunny-free',
+  'opencode/nemotron-3.5-super-vl-free',
+  'opencode/deepseek-v4.1-flash-free',
+  'opencode/glm-5.3-flash-free',
   'opencode/mimo-v2.6-flash-free',
-  'opencode/ling-3.1-flash-free'
+  'opencode/beam-free',
+  'opencode/longcat-2.5-preview-free'
 ]
 let freeTurn = 0
 const nextFreeModel = () => FREE_MODELS[freeTurn++ % FREE_MODELS.length]

@@ -15,39 +15,39 @@ import { FREE_MODELS_BEST_FIRST, freeModelsBestFirst, freeStartModel, nextFreeMo
  */
 const model = (id: string): PublicModel =>
   ({ id, runtime: 'opencode', displayName: id, description: '', supportedEfforts: [] }) as unknown as PublicModel
-// What a fresh OpenCode 1.18.35 listed on 2026-10-09, in its order.
+// What OpenCode Zen listed on 2026-10-18, in its order (shared/free-models.ts).
 const FRESH = [
-  'opencode/exo-free', 'opencode/fledge-alpha-free', 'opencode/ling-3.0-flash-fin-free', 'opencode/ling-3.1-flash-free',
-  'opencode/longcat-2.5-preview-free', 'opencode/mimo-v2.6-flash-free', 'opencode/muse-spark-1.3-contributor-free',
-  'opencode/nemotron-3-ultra-free', 'opencode/nemotron-3.5-lightning-free', 'opencode/space-bunny-free', 'opencode/step-5-preview-free'
+  'opencode/beam-free', 'opencode/mimo-v2.6-flash-free', 'opencode/nemotron-3.5-super-vl-free',
+  'opencode/nemotron-3.5-lightning-free', 'opencode/jev-1.13-free', 'opencode/longcat-2.5-preview-free',
+  'opencode/deepseek-v4.1-flash-free', 'opencode/glm-5.3-flash-free', 'opencode/space-bunny-free'
 ].map(model)
 const retired = retiredFreeModels([])
 const shown = FRESH.filter((entry) => !retired.has(entry.id))
 
 describe('a new person starts on the steadiest free model', () => {
   it('not on the first the alphabet lists', () => {
-    expect(freeStartModel('opencode', shown, [])).toBe('opencode/space-bunny-free')
-    expect(freeStartModel('opencode', shown, [])).not.toBe('opencode/ling-3.0-flash-fin-free')
+    expect(freeStartModel('opencode', shown, [])).toBe('opencode/nemotron-3.5-lightning-free')
+    expect(freeStartModel('opencode', shown, [])).not.toBe('opencode/beam-free')
   })
 
   it('and a failure there offers the next steadiest, with the unnamed after all of them', () => {
-    expect(nextFreeModel('opencode', 'opencode/space-bunny-free', shown)?.id).toBe('opencode/longcat-2.5-preview-free')
+    expect(nextFreeModel('opencode', 'opencode/nemotron-3.5-lightning-free', shown)?.id).toBe('opencode/space-bunny-free')
     const order = freeModelsBestFirst(shown).map((entry) => entry.id)
     expect(order.slice(0, FREE_MODELS_BEST_FIRST.length)).toEqual(FREE_MODELS_BEST_FIRST)
-    // Ling 3.0 and Step 5 are not named: after the named ones, in the order OpenCode lists them.
-    expect(order.slice(FREE_MODELS_BEST_FIRST.length)).toEqual(['opencode/ling-3.0-flash-fin-free', 'opencode/step-5-preview-free'])
+    // Jev 1.13 is not named (it answered nothing on 2026-10-18): after the named ones, in the order OpenCode lists them.
+    expect(order.slice(FREE_MODELS_BEST_FIRST.length)).toEqual(['opencode/jev-1.13-free'])
   })
 
   it('and Compare puts the next steadiest beside it', () => {
     const picks = defaultComparePicks({
-      current: { runtime: 'opencode', model: 'opencode/space-bunny-free' },
+      current: { runtime: 'opencode', model: 'opencode/nemotron-3.5-lightning-free' },
       recent: [],
       models: shown,
       ready: () => true,
       refusal: () => undefined,
       label: (choice) => choice.model
     }).map((pick) => pick.model)
-    expect(picks).toEqual(['opencode/space-bunny-free', 'opencode/longcat-2.5-preview-free'])
+    expect(picks).toEqual(['opencode/nemotron-3.5-lightning-free', 'opencode/space-bunny-free'])
   })
 
   it('the order only orders: a name OpenCode no longer lists adds nothing', () => {

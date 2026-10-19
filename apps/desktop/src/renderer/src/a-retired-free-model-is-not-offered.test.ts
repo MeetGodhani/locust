@@ -15,7 +15,7 @@ import { freeStartModel } from './status.js'
  */
 const model = (id: string): PublicModel =>
   ({ id, runtime: 'opencode', displayName: id, description: '', supportedEfforts: [] }) as unknown as PublicModel
-const catalog = ['opencode/exo-free', 'opencode/ling-3.0-flash-fin-free', 'opencode/muse-spark-1.3-contributor-free', 'opencode/zz-later-free'].map(model)
+const catalog = ['opencode/exo-free', 'opencode/ling-3.0-flash-fin-free', 'opencode/space-bunny-free', 'opencode/zz-later-free'].map(model)
 const failedWith = (message: string): NormalizedRuntimeEvent =>
   ({ type: 'run.failed', payload: { message } }) as unknown as NormalizedRuntimeEvent
 const run = (id: string, phase: 'completed' | 'failed', at: string, message?: string) => ({
@@ -39,8 +39,8 @@ describe('a free model OpenCode retired is not offered', () => {
     const retired = retiredFreeModels([])
     expect([...retired]).toEqual(KNOWN_RETIRED_MODELS)
     expect(shown(retired).map((entry) => entry.id)).not.toContain('opencode/exo-free')
-    // Best first since 0.712 (status.FREE_MODELS_BEST_FIRST): Muse is named; Ling 3.0 is not.
-    expect(freeStartModel('opencode', shown(retired), [])).toBe('opencode/muse-spark-1.3-contributor-free')
+    // Best first since 0.712 (status.FREE_MODELS_BEST_FIRST): Space Bunny is named; Ling 3.0 is not.
+    expect(freeStartModel('opencode', shown(retired), [])).toBe('opencode/space-bunny-free')
   })
 
   it('a model whose run ended "has been deprecated" is left out from then on', () => {
@@ -49,22 +49,22 @@ describe('a free model OpenCode retired is not offered', () => {
       run('opencode/ling-3.0-flash-fin-free', 'failed', '2026-10-09T01:00:00Z', 'OpenCode stopped: Model ling-3.0-flash-fin-free has been deprecated.')
     ])
     expect(retired.has('opencode/ling-3.0-flash-fin-free')).toBe(true)
-    expect(freeStartModel('opencode', shown(retired), [])).toBe('opencode/muse-spark-1.3-contributor-free')
+    expect(freeStartModel('opencode', shown(retired), [])).toBe('opencode/space-bunny-free')
   })
 
   it('one that answered again afterwards is back; another failure is not a retirement', () => {
     const retired = retiredFreeModels([
       run('opencode/exo-free', 'completed', '2026-10-20T10:00:00Z'),
-      run('opencode/muse-spark-1.3-contributor-free', 'failed', '2026-10-09T01:00:00Z', 'OpenCode stopped: Endpoint is unavailable.')
+      run('opencode/space-bunny-free', 'failed', '2026-10-09T01:00:00Z', 'OpenCode stopped: Endpoint is unavailable.')
     ])
     expect(retired.has('opencode/exo-free')).toBe(false)
-    expect(retired.has('opencode/muse-spark-1.3-contributor-free')).toBe(false)
+    expect(retired.has('opencode/space-bunny-free')).toBe(false)
   })
 
   it('Compare on a free model puts another WORKING free model beside it', () => {
     const picks = (models: readonly PublicModel[]) =>
       defaultComparePicks({
-        current: { runtime: 'opencode', model: 'opencode/muse-spark-1.3-contributor-free' },
+        current: { runtime: 'opencode', model: 'opencode/space-bunny-free' },
         recent: [],
         models,
         ready: () => true,
@@ -72,7 +72,7 @@ describe('a free model OpenCode retired is not offered', () => {
         label: (choice) => choice.model
       }).map((pick) => pick.model)
     // What 0.709 did: Exo, the first other free model.
-    expect(picks(catalog)).toEqual(['opencode/muse-spark-1.3-contributor-free', 'opencode/exo-free'])
-    expect(picks(shown(retiredFreeModels([])))).toEqual(['opencode/muse-spark-1.3-contributor-free', 'opencode/ling-3.0-flash-fin-free'])
+    expect(picks(catalog)).toEqual(['opencode/space-bunny-free', 'opencode/exo-free'])
+    expect(picks(shown(retiredFreeModels([])))).toEqual(['opencode/space-bunny-free', 'opencode/ling-3.0-flash-fin-free'])
   })
 })

@@ -1,20 +1,30 @@
 /**
- * OpenCode's free models that answered the drive sweeps, steadiest first
- * (0.712): the 2026-10-05 scorecard (three tasks each, in Edit), the sweeps'
- * own turn list since (_tools/sweep-drives.mjs FREE_MODELS), and one word asked
- * of each on 2026-10-09. Kept with that list at each release's sweep. Muse
- * Spark is last: rate-limited for whole days (2026-10-06). Not named: Ling 3.0
- * (failing since 2026-10-05), and any model newer than the last sweep.
+ * OpenCode's free models that answered, steadiest first. Read fresh from
+ * `https://opencode.ai/zen/v1/models` on 2026-10-18 (no sign-in), then one
+ * short question ("What is 2+2? Answer with just the number.") asked of each
+ * free model through OpenCode in a throwaway home, three tries each. Every
+ * model below answered "4" on all three tries; ordered by average answer
+ * time, fastest first: nemotron-3.5-lightning-free ~6.7s, space-bunny-free
+ * ~7.2s, nemotron-3.5-super-vl-free ~7.2s, deepseek-v4.1-flash-free ~7.7s,
+ * glm-5.3-flash-free ~8.2s, mimo-v2.6-flash-free ~8.4s, beam-free ~8.9s,
+ * longcat-2.5-preview-free ~13.5s. Kept with _tools/sweep-drives.mjs
+ * (FREE_MODELS) at each release's sweep.
+ *
+ * Gone from OpenCode's free list since the 2026-10-09 sweep, so dropped:
+ * nemotron-3-ultra-free, ling-3.1-flash-free, muse-spark-1.3-contributor-free.
+ * Not named: jev-1.13-free, listed on 2026-10-18 but answering nothing --
+ * "Unexpected server error" on every one of six tries.
  *
  * Shared since 0.756: the window picks a new person's free model from it, and
  * Scout falls back along it when its free model's provider will not answer.
  */
 export const FREE_MODELS_BEST_FIRST: readonly string[] = [
-  'opencode/space-bunny-free',
-  'opencode/longcat-2.5-preview-free',
-  'opencode/nemotron-3-ultra-free',
   'opencode/nemotron-3.5-lightning-free',
+  'opencode/space-bunny-free',
+  'opencode/nemotron-3.5-super-vl-free',
+  'opencode/deepseek-v4.1-flash-free',
+  'opencode/glm-5.3-flash-free',
   'opencode/mimo-v2.6-flash-free',
-  'opencode/ling-3.1-flash-free',
-  'opencode/muse-spark-1.3-contributor-free'
+  'opencode/beam-free',
+  'opencode/longcat-2.5-preview-free'
 ]

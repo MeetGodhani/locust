@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { stat } from 'node:fs/promises'
 import { delimiter, join, basename, isAbsolute } from 'node:path'
-import { execFile } from 'node:child_process'
+import { execFile, execFileSync } from 'node:child_process'
 import type { IPty } from '@lydell/node-pty'
 import type { TerminalContext, TerminalEvent, TerminalShell, TerminalTab } from '../shared/terminal.js'
 
@@ -10,8 +10,23 @@ interface Shell extends TerminalShell { readonly file: string; readonly args: st
 const onPath = (name: string, env: NodeJS.ProcessEnv): string | undefined =>
   (env.PATH ?? env.Path ?? '').split(delimiter).map(folder => join(folder, name)).find(file => isAbsolute(file) && existsSync(file))
 
+/** Distribution names from `reg.exe query ...\Lxss /s` output: each subkey's `DistributionName`. */
+export function parseWslDistributions(output: string): readonly string[] {
+  const names: string[] = []
+  for (const line of output.split(/\r?\n/)) {
+    const match = /^\s*DistributionName\s+REG_SZ\s+(.+?)\s*$/.exec(line)
+    if (match?.[1] !== undefined && match[1].length > 0 && !names.includes(match[1])) names.push(match[1])
+  }
+  return names
+}
+
+/** One shell per installed distribution, by name; none when there are none. */
+export function wslShells(names: readonly string[], file: string): readonly Shell[] {
+  return names.map(name => ({ id: `wsl:${name}`, name: `${name} (WSL)`, file, args: ['-d', name] }))
+}
+
 /** Fixed executables discovered by the host; the renderer chooses only an id. No probing processes at rest. */
-export function terminalShells(platform = process.platform, env = process.env): readonly Shell[] {
+export function terminalShells(platform = process.platform, env = process.env, readWslRegistry?: () => string): readonly Shell[] {
   if (platform !== 'win32') {
     const file = env.SHELL && isAbsolute(env.SHELL) && existsSync(env.SHELL) ? env.SHELL : '/bin/sh'
     return [{ id: 'login', name: basename(file), file, args: ['-l'] }]
@@ -20,13 +35,20 @@ export function terminalShells(platform = process.platform, env = process.env): 
   const pwsh = onPath('pwsh.exe', env) ?? [join(env.ProgramFiles ?? 'C:\\Program Files', 'PowerShell', '7', 'pwsh.exe')].find(existsSync)
   const git = onPath('git.exe', env)
   const bash = [join(env.ProgramFiles ?? 'C:\\Program Files', 'Git', 'bin', 'bash.exe'), ...(git === undefined ? [] : [join(git, '..', '..', 'bin', 'bash.exe')])].find(existsSync)
-  return [
+  // Read only here, when shells are asked for: the registry, through reg.exe by its full System32
+  // path, so nothing depends on wsl.exe's UTF-16 output. A failed read lists no distributions.
+  const readRegistry = readWslRegistry ?? (() => execFileSync(join(windows, 'System32', 'reg.exe'),
+    ['query', 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Lxss', '/s'], { encoding: 'utf8', windowsHide: true, timeout: 5_000 }))
+  let distributions: readonly string[] = []
+  try { distributions = parseWslDistributions(readRegistry()) } catch { distributions = [] }
+  const base = [
     ...(pwsh === undefined ? [] : [{ id: 'pwsh', name: 'PowerShell 7', file: pwsh, args: ['-NoLogo'] }]),
     { id: 'powershell', name: 'Windows PowerShell', file: join(windows, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'), args: ['-NoLogo'] },
     { id: 'cmd', name: 'Command Prompt', file: join(windows, 'System32', 'cmd.exe'), args: [] },
-    ...(bash === undefined ? [] : [{ id: 'git-bash', name: 'Git Bash', file: bash, args: ['--login', '-i'] }]),
-    { id: 'wsl', name: 'WSL', file: join(windows, 'System32', 'wsl.exe'), args: [] }
+    ...(bash === undefined ? [] : [{ id: 'git-bash', name: 'Git Bash', file: bash, args: ['--login', '-i'] }])
   ].filter(shell => existsSync(shell.file))
+  // A distribution in the registry is itself the evidence WSL can start it; no separate wsl.exe probe.
+  return [...base, ...wslShells(distributions, join(windows, 'System32', 'wsl.exe'))]
 }
 
 /** Jobs can have their own process groups. Snapshot parentage before ending the shell, not after it is reparented. */
