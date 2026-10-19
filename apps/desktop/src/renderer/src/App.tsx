@@ -7373,7 +7373,15 @@ export default function App(): ReactElement {
         // From Home, the Team screen is where the team, and this sentence, are.
         if (fromHome) setScreen('teammates')
         const skipped = answer.skipped.length === 0 ? '' : ` ${answer.skipped.join(', ')} could not be added: the card's details for them did not read.`
-        setTeamNotice(`${added}${skipped}`)
+        // What came with them (0.802): instructions are someone else's words, so where to read them is said.
+        const instructed = answer.instructed.length === 0 ? '' : ` ${answer.instructed.join(', ')} came with instructions: read them in Edit teammate first.`
+        const routines = answer.routines.length === 0
+          ? ''
+          : answer.routines.length === 1
+            ? ` ${answer.routines[0]!} came too, paused: it runs only when you start it, read-only.`
+            : ` ${String(answer.routines.length)} routines came too, paused: ${answer.routines.join(', ')}. They run only when you start them, read-only.`
+        const left = answer.routinesLeft.length === 0 ? '' : ` Not brought: ${answer.routinesLeft.join(', ')}.`
+        setTeamNotice(`${added}${skipped}${instructed}${routines}${left}`)
       })
       .catch(() => setTeamNotice('That image could not be read as a Locust team card.'))
   }

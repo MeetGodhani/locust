@@ -91,7 +91,7 @@ import { boundedApproval, createFileMissionLedger, createFileWorkroom } from '@t
 import { retireSetAsideMessages } from './set-aside-messages.js'
 import { MAC_RELEASES_API, newerMacRelease } from './mac-release.js'
 import { createMacUpdater, macSelfUpdateTarget } from './mac-self-update.js'
-import type { AppChangelog, AppChangelogEntry, CodexMissionStartResponse, TurnUndoState, WorkspaceSettings } from '../shared/ipc.js'
+import type { AppChangelog, AppChangelogEntry, CodexMissionStartResponse, TeammateRoute, TurnUndoState, WorkspaceSettings } from '../shared/ipc.js'
 import type { MissionApproval, MissionLedger, MissionStarter, Workroom } from '@teammate/mission-store'
 import type { ClaudeListedModel, RuntimeDiscovery } from '@teammate/runtime-adapters'
 import { spawn } from 'node:child_process'
@@ -132,7 +132,8 @@ import { createOpenCodeSessionReader, cursorExchanges, listCursorSessions } from
 import type { ImportableSession } from './session-import.js'
 import { readTextChunk, withTextChunk } from './png-text.js'
 import { recordTurns, missionRecordMarkdown, rawRecordJson, recordFileName } from './mission-export.js'
-import { TEAM_CARD_KEYWORD, freeName, readTeamCard, teamCardOf } from '../shared/team-card.js'
+import { TEAM_CARD_KEYWORD, freeName, readTeamCard, readTeamCardRoutines, teamCardOf } from '../shared/team-card.js'
+import { cardRoutineFile, teamCardRoutines } from './team-card-routines.js'
 import { approvalAnswerFrom, createApprovalChannel } from './approval-channel.js'
 import { PeerRecordError } from './peer-exchange.js'
 import { readNpmBinDirectory } from './npm-prefix.js'
@@ -4642,7 +4643,10 @@ if (!ownsSingleInstanceLock) {
       if (window === null) return { ok: false, message: 'That request was rejected.' } as const
       try {
         const photo = await event.sender.capturePage({ x, y, width, height })
-        const card = teamCardOf(await teammates.list())
+        const team = await teammates.list()
+        // The team's routines ride along (0.802), as routine files; a store that will not read leaves them behind, not the card.
+        const carried = teamCardRoutines(team, await routines.list().catch(() => []), { workspaceId: workspaceChosen ? memoryWorkspaceId : undefined, connectorNames: connectorReader.names() })
+        const card = { ...teamCardOf(team), ...(carried.length === 0 ? {} : { routines: carried }) }
         const png = withTextChunk(photo.toPNG(), TEAM_CARD_KEYWORD, JSON.stringify(card))
         const scripted = process.env.LOCUST_TEAM_CARD_PATH
         const target = scripted !== undefined && scripted.length > 0
@@ -4740,28 +4744,59 @@ if (!ownsSingleInstanceLock) {
             filters: [{ name: 'Locust team card', extensions: ['png'] }],
             properties: ['openFile']
           })).filePaths[0]
-      if (picked === undefined) return { ok: true, added: [], skipped: [] } as const
+      if (picked === undefined) return { ok: true, added: [], skipped: [], instructed: [], routines: [], routinesLeft: [] } as const
       try {
         if ((await stat(picked)).size > 20 * 1024 * 1024) return { ok: false, message: 'That image is too large to be a team card.' } as const
         const text = readTextChunk(await readFile(picked), TEAM_CARD_KEYWORD)
-        const entries = text === undefined ? undefined : readTeamCard(JSON.parse(text))
+        const parsed: unknown = text === undefined ? undefined : JSON.parse(text)
+        const entries = parsed === undefined ? undefined : readTeamCard(parsed)
         if (entries === undefined) return { ok: false, message: 'That image is not a Locust team card: it carries no team.' } as const
         const taken = new Set((await teammates.list()).map((teammate) => teammate.name))
         const added: string[] = []
         const skipped: string[] = []
+        const instructed: string[] = []
+        // Who each place on the card became here, for the routines that name them by place.
+        const made: ({ readonly teammateId: string; readonly name: string; readonly route: TeammateRoute | undefined } | undefined)[] = []
         for (const entry of entries) {
           const given = typeof entry.name === 'string' ? entry.name.trim() : ''
           try {
             const name = freeName(given, taken)
-            const teammate = await teammates.create({ name, hue: entry.hue, role: entry.role, roleTitle: entry.roleTitle, avatar: entry.avatar })
-            if (isTeammateRoute(entry.route)) await teammates.rememberRoute(teammate.teammateId, entry.route)
+            const teammate = await teammates.create({ name, hue: entry.hue, role: entry.role, roleTitle: entry.roleTitle, avatar: entry.avatar, instructions: entry.instructions, starters: entry.starters })
+            // A route this folder's policy refuses is left off: the teammate comes, and picks a model it may use (0.802).
+            const route = isTeammateRoute(entry.route) && policyTurnRefusal(organizationPolicy, entry.route) === undefined ? entry.route : undefined
+            if (route !== undefined) await teammates.rememberRoute(teammate.teammateId, route)
             taken.add(name)
             added.push(name)
+            if (typeof entry.instructions === 'string' && entry.instructions.trim().length > 0) instructed.push(name)
+            made.push({ teammateId: teammate.teammateId, name, route })
           } catch {
             skipped.push(given.length > 0 ? given : 'A teammate with no name')
+            made.push(undefined)
           }
         }
-        return { ok: true, added, skipped } as const
+        /*
+         * THE ROUTINES, PAUSED (0.802). Each is read as an imported routine
+         * file is, given to the teammate it belonged to, and made as Import
+         * makes one: on no schedule and read-only until its owner changes
+         * that, in this folder. One that cannot come is named, with why.
+         */
+        const brought: string[] = []
+        const left: string[] = []
+        for (const entry of readTeamCardRoutines(parsed, entries.length)) {
+          const file = cardRoutineFile(entry)
+          const owner = made[entry.teammate]
+          const name = file?.name ?? 'A routine'
+          if (file === undefined || owner === undefined) { left.push(`${name} (it did not read)`); continue }
+          if (!workspaceChosen) { left.push(`${name} (open a project folder for it first)`); continue }
+          if (owner.route === undefined) { left.push(`${name} (${owner.name} has no model yet)`); continue }
+          try {
+            await routines.create({ name: file.name, steps: file.steps, inputs: file.inputs, teammateId: owner.teammateId, route: { ...owner.route, mode: 'ask' }, learnedFrom: [], workspaceId: memoryWorkspaceId })
+            brought.push(file.name)
+          } catch {
+            left.push(`${name} (it could not be saved)`)
+          }
+        }
+        return { ok: true, added, skipped, instructed, routines: brought, routinesLeft: left } as const
       } catch {
         return { ok: false, message: 'That image could not be read as a Locust team card.' } as const
       }

@@ -814,7 +814,18 @@ export interface TeamCardRect {
 /** `path` absent: the person cancelled the save, which is not a failure. */
 export type TeamCardSaveResponse = { readonly ok: true; readonly path?: string } | { readonly ok: false; readonly message: string }
 /** Who was added, and who could not be (by the name the card gave them). Nothing picked: both empty. */
-export type TeamCardAddResponse = { readonly ok: true; readonly added: readonly string[]; readonly skipped: readonly string[] } | { readonly ok: false; readonly message: string }
+export type TeamCardAddResponse =
+  | {
+      readonly ok: true
+      readonly added: readonly string[]
+      readonly skipped: readonly string[]
+      /** Who came with instructions of their own (0.802): someone else's words, so the window says where to read them. */
+      readonly instructed: readonly string[]
+      /** The card's routines made here, paused (0.802), and those that were not, each with why. */
+      readonly routines: readonly string[]
+      readonly routinesLeft: readonly string[]
+    }
+  | { readonly ok: false; readonly message: string }
 
 export interface MissionRecordSaveRequest {
   /** Any turn of the conversation; its parents come with it. */

@@ -78,8 +78,10 @@ export function ShareTeamDialog({ teammates, onClose }: { readonly teammates: re
             <TeamCardView teammates={teammates} />
           </div>
           <p className="lc-shareteam__claim">
-            The image carries each teammate&rsquo;s name, role, look and model, so anyone with Locust can add the team from it with Add team from image.
-            Nothing else goes with it: no conversations, memories, folders, limits or keys, and not a model of your own.
+            The image carries each teammate&rsquo;s name, role, look and model, the instructions they work by and the first messages they offer, and
+            their routines in this folder, so anyone with Locust can add the team from it with Add team from image. Routines arrive paused, and a path on
+            this computer becomes something they fill in. Nothing else goes with it: no conversations, memories, folders, limits, schedules or keys, and
+            not a model of your own.
           </p>
           {said !== undefined && <p className="lc-shareteam__claim lc-shareteam__said" role="status">{said}</p>}
         </div>

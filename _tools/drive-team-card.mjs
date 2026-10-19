@@ -8,6 +8,10 @@
 //      the team written into it, and the model of their own left out.
 //   2. A fresh Locust with nobody in it: Add team from image, the same file.
 //      The same three names, roles and models must appear on the roster.
+// Since 0.802 the card carries what the team knows and does as well: Wren's
+// instructions and starters, and a daily routine of Wren's whose step names a
+// path on this machine. It must arrive as Wren's, paused (no schedule,
+// read-only), with the path made an input, and the notice must say so.
 // The two file dialogs are answered by LOCUST_TEAM_CARD_PATH (a drive cannot
 // press a native dialog); everything else is the app's own.
 
@@ -25,7 +29,7 @@ await mkdir(OUT, { recursive: true })
 const CARD = join(await mkdtemp(join(tmpdir(), 'locust-team-card-')), 'Locust team.png')
 const T0 = '2026-09-27T05:00:00.000Z'
 const TEAM = [
-  { teammateId: 'tm_wren', name: 'Wren', hue: 'lime', role: 'Code & Migrations', createdAt: T0, route: { runtime: 'claude', model: 'opus', mode: 'accept-edits' } },
+  { teammateId: 'tm_wren', name: 'Wren', hue: 'lime', role: 'Code & Migrations', createdAt: T0, route: { runtime: 'claude', model: 'opus', mode: 'accept-edits' }, instructions: 'Write the test before the fix.', starters: ['Find the riskiest file here.'] },
   { teammateId: 'tm_sable', name: 'Sable', hue: 'blue', role: 'Data & Reporting', createdAt: T0, route: { runtime: 'codex', model: 'gpt-5.5-codex', mode: 'ask' } },
   { teammateId: 'tm_juno', name: 'Juno', hue: 'violet', role: 'Custom', roleTitle: 'Release captain', createdAt: T0, route: { runtime: 'opencode', model: 'own-1a2b3c4d/acme-70b', mode: 'accept-edits' } }
 ]
@@ -72,6 +76,9 @@ const teamCardChunk = (png) => {
     await drive.ready()
     await drive.resize(1440, 900)
     check('the Team screen is open', String(await openTeam(drive)) === 'Team')
+    // A routine of Wren's, on a schedule, naming a path on this machine (0.802).
+    const made = String(await drive.evaluate(`window.desktop.createRoutine({ name: 'Weekly notes', teammateId: 'tm_wren', route: { runtime: 'claude', model: 'opus', mode: 'accept-edits' }, steps: ['Summarise C:\\\\Users\\\\someone\\\\notes\\\\week.md in five lines.'], learnedFrom: [], schedule: { kind: 'daily', at: '09:00' } }).then((r) => r.ok ? 'made' : r.error.message)`))
+    check('Wren has a routine on a schedule to share', made === 'made', made)
     check('Share team opens the card', String(await drive.capture('Share team: the card', () => press(drive, 'Share team'))) === 'pressed')
     const shown = String(await drive.evaluate(`document.querySelector('.lc-teamcard')?.innerText.replace(/\\s+/g, ' ') ?? ''`))
     check('the card shows every face, name and role', ['Wren', 'Sable', 'Juno', 'Code & Migrations', 'Data & Reporting', 'Release captain'].every((word) => shown.includes(word)), shown.slice(0, 200))
@@ -82,6 +89,9 @@ const teamCardChunk = (png) => {
     const card = teamCardChunk(png)
     check('the file is a PNG that carries the team', png.subarray(1, 4).toString() === 'PNG' && card?.teammates?.length === 3, JSON.stringify(card).slice(0, 200))
     check('and not the model of their own', !JSON.stringify(card).includes('own-1a2b') && card?.teammates?.[2]?.route === undefined)
+    check('with Wren\'s instructions and starters', card?.teammates?.[0]?.instructions === 'Write the test before the fix.' && card?.teammates?.[0]?.starters?.[0] === 'Find the riskiest file here.', JSON.stringify(card?.teammates?.[0]).slice(0, 200))
+    const carried = card?.routines ?? []
+    check('and Wren\'s routine, with no schedule and the path made an input', carried.length === 1 && carried[0].teammate === 0 && /\{\{path\}\}/.test(carried[0].routine.steps[0]) && !/someone|schedule|09:00/.test(JSON.stringify(carried)), JSON.stringify(carried).slice(0, 240))
   } catch (error) {
     failures += 1
     say(`share failed: ${error instanceof Error ? error.message : String(error)}`)
@@ -108,9 +118,14 @@ const teamCardChunk = (png) => {
     await sleep(800)
     const notice = String(await drive.evaluate(`document.querySelector('.lc-teamnotice')?.textContent ?? ''`))
     check('it says who was added', /Added Wren, Sable, Juno from the team card\./.test(notice), notice)
+    check('and what came with them: Wren\'s instructions, and the routine, paused', /Wren came with instructions: read them in Edit teammate first\./.test(notice) && /Weekly notes came too, paused: it runs only when you start it/.test(notice), notice)
     const roster = JSON.parse(await readFile(join(profile, 'teammates.json'), 'utf8')).teammates
     const read = roster.map((entry) => `${entry.name}|${entry.roleTitle ?? entry.role}|${entry.route?.runtime ?? '-'}|${entry.route?.model ?? '-'}`)
     check('the same three, with their roles and models', JSON.stringify(read) === JSON.stringify(['Wren|Code & Migrations|claude|opus', 'Sable|Data & Reporting|codex|gpt-5.5-codex', 'Juno|Release captain|-|-']), JSON.stringify(read))
+    check('Wren works by the same instructions and offers the same starter', roster[0]?.instructions === 'Write the test before the fix.' && roster[0]?.starters?.[0] === 'Find the riskiest file here.', JSON.stringify({ instructions: roster[0]?.instructions, starters: roster[0]?.starters }))
+    const listed = JSON.parse(String(await drive.evaluate(`window.desktop.listRoutines().then((r) => JSON.stringify(r.ok ? r.data.routines : []))`)))
+    const weekly = listed.find((entry) => entry.name === 'Weekly notes')
+    check('the routine is Wren\'s here, on no schedule, read-only, asking for the path', weekly !== undefined && weekly.teammateId === roster[0]?.teammateId && weekly.schedule === undefined && weekly.route?.mode === 'ask' && (weekly.inputs ?? []).some((input) => input.key === 'path'), JSON.stringify(weekly).slice(0, 300))
     await drive.capture('the team, added', () => drive.evaluate(`[...document.querySelectorAll('.lc-rostercard__name')].map((entry) => entry.textContent).join(', ')`))
   } catch (error) {
     failures += 1

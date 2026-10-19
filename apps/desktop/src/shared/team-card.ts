@@ -17,9 +17,21 @@ import type { PublicTeammate, TeammateHue, TeammateRole, TeammateRoute } from '.
  * route in Auto -- the mode that runs without asking and outside the folder
  * -- comes in as Edit: a picture from someone else never widens what a
  * teammate may do.
+ *
+ * WHAT THEY KNOW AND DO, TOO (0.802). A card made the same faces and nothing
+ * else: the instructions a teammate works by, the first messages it offers
+ * and the routines it runs stayed behind, so the team that arrived was a cast
+ * with no parts (Orca and Paperclip both pass a whole team around; the rival
+ * scan of 2026-10-19). Now each teammate's instructions and starters come
+ * along, and the team's routines with them -- each a routine file
+ * (main/routine-file.ts), so it is read on the way in by the reader a
+ * `.locust-routine.json` is, and comes in paused: on no schedule, read-only,
+ * as an imported routine always does. Still schema 1: a Locust from before
+ * reads the teammates and passes over what it does not know.
  */
 export const TEAM_CARD_KEYWORD = 'locust-team'
 export const MAX_TEAM_CARD_TEAMMATES = 12
+export const MAX_TEAM_CARD_ROUTINES = 24
 
 export interface TeamCardTeammate {
   readonly name: string
@@ -28,11 +40,22 @@ export interface TeamCardTeammate {
   readonly hue: TeammateHue
   readonly avatar?: AvatarSpec
   readonly route?: TeammateRoute
+  /** The instructions it works by, in the person's own words (0.802). */
+  readonly instructions?: string
+  /** The first messages it offers on an empty conversation (0.802). */
+  readonly starters?: readonly string[]
+}
+
+/** One of the team's routines (0.802): whose it is, by place on the card, and the routine as a routine file. */
+export interface TeamCardRoutine {
+  readonly teammate: number
+  readonly routine: unknown
 }
 
 export interface TeamCard {
   readonly schema: 1
   readonly teammates: readonly TeamCardTeammate[]
+  readonly routines?: readonly TeamCardRoutine[]
 }
 
 const ownModel = (model: string): boolean => /^own-[a-z0-9]+\//i.test(model)
@@ -49,9 +72,27 @@ export function teamCardOf(teammates: readonly PublicTeammate[]): TeamCard {
       ...(teammate.avatar === undefined ? {} : { avatar: teammate.avatar }),
       ...(teammate.route === undefined || ownModel(teammate.route.model)
         ? {}
-        : { route: { runtime: teammate.route.runtime, model: teammate.route.model, mode: teammate.route.mode, ...(teammate.route.effort === undefined ? {} : { effort: teammate.route.effort }) } })
+        : { route: { runtime: teammate.route.runtime, model: teammate.route.model, mode: teammate.route.mode, ...(teammate.route.effort === undefined ? {} : { effort: teammate.route.effort }) } }),
+      ...(teammate.instructions === undefined || teammate.instructions.trim().length === 0 ? {} : { instructions: teammate.instructions }),
+      ...(teammate.starters === undefined || teammate.starters.length === 0 ? {} : { starters: [...teammate.starters] })
     }))
   }
+}
+
+/**
+ * The card's routines, as far as they can be read: each names a teammate on
+ * the card by its place and carries something to read as a routine file.
+ * Shape only, as for the teammates.
+ */
+export function readTeamCardRoutines(value: unknown, teammates: number): readonly TeamCardRoutine[] {
+  if (typeof value !== 'object' || value === null) return []
+  const routines = (value as Record<string, unknown>).routines
+  if (!Array.isArray(routines)) return []
+  return routines
+    .slice(0, MAX_TEAM_CARD_ROUTINES)
+    .filter((entry): entry is Record<string, unknown> => typeof entry === 'object' && entry !== null)
+    .filter((entry) => Number.isInteger(entry.teammate) && (entry.teammate as number) >= 0 && (entry.teammate as number) < Math.min(teammates, MAX_TEAM_CARD_TEAMMATES))
+    .map((entry) => ({ teammate: entry.teammate as number, routine: entry.routine }))
 }
 
 /**
