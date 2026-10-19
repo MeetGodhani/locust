@@ -73,7 +73,7 @@ interface Harness {
   readonly reads: string[]
 }
 
-function harness(options: { host?: AntigravityHost | undefined; lines?: string[]; statTranscript?: (path: string) => Promise<{ size: number; mtimeMs: number } | undefined>; idleTimeoutMs?: number; askingNoticeMs?: number; refuseAppend?: boolean; ended?: string[]; spendRefusal?: (teammateId: string) => Promise<string | undefined>; observeDisk?: AntigravityMissionOptions['observeDisk']; observePatches?: AntigravityMissionOptions['observePatches'] } = {}): Harness {
+function harness(options: { host?: AntigravityHost | undefined; lines?: string[]; statTranscript?: (path: string) => Promise<{ size: number; mtimeMs: number } | undefined>; idleTimeoutMs?: number; askingNoticeMs?: number; notStartedNoticeMs?: number; refuseAppend?: boolean; ended?: string[]; spendRefusal?: (teammateId: string) => Promise<string | undefined>; observeDisk?: AntigravityMissionOptions['observeDisk']; observePatches?: AntigravityMissionOptions['observePatches'] } = {}): Harness {
   const { ledger, created, appended } = fakeLedger(options.refuseAppend === true)
   const api = { calls: [] as { kind: string; input: unknown }[] }
   const transcript = { lines: options.lines ?? [] }
@@ -110,6 +110,7 @@ function harness(options: { host?: AntigravityHost | undefined; lines?: string[]
     ...(options.ended === undefined ? {} : { onRunEnded: async ({ missionId }) => { options.ended!.push(missionId) } }),
     ...(options.idleTimeoutMs === undefined ? {} : { idleTimeoutMs: options.idleTimeoutMs }),
     ...(options.askingNoticeMs === undefined ? {} : { askingNoticeMs: options.askingNoticeMs }),
+    ...(options.notStartedNoticeMs === undefined ? {} : { notStartedNoticeMs: options.notStartedNoticeMs }),
     ...(options.spendRefusal === undefined ? {} : { spendRefusal: options.spendRefusal }),
     ...(options.observeDisk === undefined ? {} : { observeDisk: options.observeDisk }),
     ...(options.observePatches === undefined ? {} : { observePatches: options.observePatches })
@@ -304,6 +305,29 @@ describe('a mission through Antigravity', () => {
     // NOT an ending: the run is still being watched.
     expect(h.service.has(mission.runId)).toBe(true)
     expect(h.emitted.map((event) => event.type)).not.toContain('run.failed')
+  })
+
+  /*
+   * NOT STARTED (0.800): Antigravity took the turn -- it answered "new conversation" -- and wrote nothing for it.
+   * 2026-10-19, after its window crashed: four turns sat "running" 150s each, and the only word was the ending.
+   */
+  it('says a turn Antigravity took has not started, once, without ending the run', async () => {
+    const h = harness({ lines: [], notStartedNoticeMs: 15, idleTimeoutMs: 100_000 })
+    const mission = await h.service.start('hi', undefined, {})
+    await vi.waitFor(() => {
+      expect(h.notices.map((notice) => notice.message).join(' | ')).toMatch(/has not started it.*open it again/i)
+    })
+    await settle(5)
+    expect(h.notices).toHaveLength(1)
+    expect(h.service.has(mission.runId)).toBe(true)
+    expect(h.emitted.map((event) => event.type)).not.toContain('run.failed')
+  })
+
+  it('says nothing of the kind once the turn has written a line', async () => {
+    const h = harness({ lines: WRITE_LINES.slice(0, 1), notStartedNoticeMs: 15, askingNoticeMs: 100_000, idleTimeoutMs: 400_000 })
+    await h.service.start('hi', undefined, {})
+    await settle(10)
+    expect(h.notices.map((notice) => notice.message).join(' | ')).not.toMatch(/has not started/i)
   })
 
   it('says it once, not on every tick', async () => {

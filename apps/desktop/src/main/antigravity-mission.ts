@@ -79,6 +79,12 @@ export const ANTIGRAVITY_POLL_MS = 250
  */
 export const ANTIGRAVITY_ASKING_NOTICE_MS = 90_000
 /**
+ * HOW LONG A TURN ANTIGRAVITY TOOK MAY SHOW NOTHING AT ALL before the person is told (0.800). Antigravity answers
+ * "new conversation" and then, with its agent crashed, writes not one line: on 2026-10-19 four turns sat "running" for
+ * 150s each with nothing in its record, and the only word was the ten-minute ending. A first step comes in seconds.
+ */
+export const ANTIGRAVITY_NOT_STARTED_NOTICE_MS = 60_000
+/**
  * How many looks, one a poll, for the step that waits on a question's answer
  * before the card goes up without it -- saying to answer in Antigravity. The
  * step is written a moment after the call that asks (two seconds, measured).
@@ -122,6 +128,8 @@ export interface AntigravityMissionOptions {
   readonly idleTimeoutMs?: number
   /** How long an open tool may be silent before the person is told. Test seam. */
   readonly askingNoticeMs?: number
+  /** How long a turn may show nothing at all before the person is told it has not started. Test seam. */
+  readonly notStartedNoticeMs?: number
   /** A note into the mission's own thread; absent means the notice is not drawn. */
   readonly notify?: (input: { runId: string; missionId: string; message: string }) => void
   /**
@@ -261,6 +269,8 @@ export function createAntigravityMissionService(options: AntigravityMissionOptio
     // rather than silently losing it.
     Math.floor(idleTimeoutMs / 2)
   )
+  // Before the ending, as the asking notice is, so a shortened ending never makes it dead code.
+  const notStartedNoticeMs = Math.min(options.notStartedNoticeMs ?? ANTIGRAVITY_NOT_STARTED_NOTICE_MS, Math.floor(idleTimeoutMs / 2))
   const questionLookups = Math.max(1, options.questionLookups ?? ANTIGRAVITY_QUESTION_LOOKUPS)
   const peerExchange: PeerExchange | undefined =
     options.workroom === undefined ? undefined : createPeerExchange({
@@ -301,6 +311,10 @@ export function createAntigravityMissionService(options: AntigravityMissionOptio
     readonly startedAt: string
     /** Lines already handed to the normalizer; a follow-up starts past the prior turns. */
     fed: number
+    /** Where `fed` stood when this turn began: no line past it means Antigravity has not started the turn. */
+    readonly fedAtStart: number
+    /** Whether the person has been told this turn has not started (0.800). Once. */
+    saidNotStarted: boolean
     lastProgressAt: number
     /** Whether the person has already been told this silence looks like a question. */
     saidItMightBeAsking: boolean
@@ -698,6 +712,19 @@ export function createAntigravityMissionService(options: AntigravityMissionOptio
           message: `Antigravity has been on its own "${pendingNow}" step for ${String(Math.round(silentFor / 60_000) || 1)} minute${Math.round(silentFor / 60_000) === 1 ? '' : 's'} without reporting anything. It asks questions in its own window, not here -- if it is waiting on you, answer it there.`
         })
       }
+      /*
+       * NOT STARTED, SAID AT A MINUTE (0.800). Antigravity took the turn and has written nothing for it: its agent
+       * is not running, most often because Antigravity's window was closed or crashed. Said once, as a note, and the
+       * run is not ended: a slow start that then speaks carries on as ever.
+       */
+      if (!waitingOnPerson && run.fed === run.fedAtStart && silentFor > notStartedNoticeMs && silentFor <= idleTimeoutMs && !run.saidNotStarted) {
+        run.saidNotStarted = true
+        options.notify?.({
+          runId: run.runId,
+          missionId: run.missionId,
+          message: `Antigravity took this turn but has not started it: after ${String(Math.round(silentFor / 60_000) || 1)} minute${Math.round(silentFor / 60_000) <= 1 ? '' : 's'} nothing has reached its own record. If Antigravity's window was closed or crashed, open it again and send this again; Stop ends this turn now.`
+        })
+      }
       if (!waitingOnPerson && Date.now() - run.lastProgressAt > idleTimeoutMs) {
         // Say WHY, and do not blame the model for a silence this app caused.
         //
@@ -914,6 +941,8 @@ export function createAntigravityMissionService(options: AntigravityMissionOptio
           transcriptPath: transcriptPathFor(home, conversationId),
           startedAt: createdAt,
           fed,
+          fedAtStart: fed,
+          saidNotStarted: false,
           lastProgressAt: Date.now(),
           timer: undefined,
           saidItMightBeAsking: false,
