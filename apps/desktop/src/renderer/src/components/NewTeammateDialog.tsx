@@ -25,6 +25,7 @@ import { dollars, isMonthlyLimit } from '../../../shared/spend.js'
 import type { Spend } from '../../../shared/spend.js'
 import { agentNamed } from '../../../shared/runtimes.js'
 import { CHATGPT_VOICES, isChatGptVoice, voiceName } from '../../../shared/voice-call.js'
+import { Select } from './Select.js'
 import { VoicePlay } from './VoicePlay.js'
 
 /** What the dialog hands back. A limit is `null` when an edit removes one. */
@@ -888,10 +889,10 @@ export function NewTeammateDialog({
           <label className="lc-field">
             <span className="lc-fieldlabel lc-mono">Voice</span>
             <span className="lc-voicepick">
-              <select className="lc-input" aria-label="Voice for this teammate" value={voice} onChange={(event) => setVoice(event.target.value)}>
-                <option value="">Talk’s own voice, from Settings</option>
-                {CHATGPT_VOICES.map((entry) => <option key={entry.id} value={entry.id}>{voiceName(entry.id)} — {entry.about}</option>)}
-              </select>
+              <Select className="lc-input" aria-label="Voice for this teammate" value={voice} onChange={setVoice} options={[
+                { value: '', label: 'Talk’s own voice, from Settings' },
+                ...CHATGPT_VOICES.map((entry) => ({ value: entry.id, label: `${voiceName(entry.id)} — ${entry.about}` }))
+              ]} />
               {/* Hear it before choosing it (0.751). */}
               <VoicePlay voice={isChatGptVoice(voice) ? voice : undefined} />
             </span>

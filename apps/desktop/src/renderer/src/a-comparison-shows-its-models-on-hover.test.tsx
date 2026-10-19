@@ -16,8 +16,10 @@ describe('comparison controls', () => {
   it('draws the judge as a styled select with a decorative standard chevron and all model options', () => {
     const columns: CompareColumnView[] = (['a', 'b'] as const).map((slot) => ({ slot, name: slot, runtime: 'opencode', runtimeName: 'OpenCode', turns: [], running: false, keepable: true, retryable: false, answer: 'Answer', state: 'done' }))
     const html = renderToStaticMarkup(<CompareView compare={{ compareId: 'cmp_test', prompt: 'Question', createdAt: '2026-10-03T00:00:00.000Z', slots: [] }} changeLines={{}} prompts={[]} columns={columns} owner={undefined} workspacePath={undefined} keeping={false} retrying={undefined} onKeep={() => undefined} onRetry={() => undefined} onBack={undefined} onJudge={() => undefined} judgeChoices={[{ key: 'free', label: 'Free judge' }, { key: 'other', label: 'Another judge', group: 'OpenCode' }]} />)
-    expect(html).toMatch(/class="lc-compare__select"><select[^>]*aria-label="The model that judges"/)
+    expect(html).toMatch(/class="lc-compare__select">[\s\S]*?role="combobox"[\s\S]*?aria-label="The model that judges"/)
     expect(html).toContain('class="lc-chevron"')
-    expect(html).toContain('<optgroup label="OpenCode">')
+    expect(html).toContain('role="group" aria-label="OpenCode"')
+    expect(html).toContain('Free judge')
+    expect(html).toContain('Another judge')
   })
 })

@@ -50,8 +50,8 @@ describe('the editor, opened on a chain', () => {
     expect(html.match(/aria-label="Who takes step \d"/g)).toHaveLength(3)
     // Atlas runs it (the cause), Wren takes the fix, Sable checks.
     expect(html).toContain('Atlas (runs it)')
-    expect(html).toMatch(/aria-label="Who takes step 2"[^>]*>.*?<option value="tm_wren" selected="">Wren<\/option>/)
-    expect(html).toMatch(/aria-label="Who takes step 3"[^>]*>.*?<option value="tm_sable" selected="">Sable<\/option>/)
+    expect(html).toMatch(/aria-label="Who takes step 2"[\s\S]*?lc-select__value">Wren</)
+    expect(html).toMatch(/aria-label="Who takes step 3"[\s\S]*?lc-select__value">Sable</)
     expect(html.match(/type="checkbox" checked=""/g)).toHaveLength(1)
     expect(html).toContain('In a copy, you keep')
     expect(html).toMatch(/aria-checked="true"[^>]*>In a copy, you keep/)

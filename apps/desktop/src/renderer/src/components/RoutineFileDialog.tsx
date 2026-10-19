@@ -3,6 +3,7 @@ import type { ReactElement } from 'react'
 import type { PublicTeammate, RoutineFlaggedPath, RoutineImportPreview } from '../../../shared/ipc.js'
 import { isMissionRuntime, runtimeDisplayName } from '../../../shared/runtimes.js'
 import { useModal } from '../useModal.js'
+import { Select } from './Select.js'
 
 /**
  * The import preview, for a routine file and for a starter routine alike (0.615): a template is a
@@ -22,7 +23,7 @@ export function RoutineImportDialog({ preview, team, onImport, onCancel, fromTem
       <span className="lc-fieldlabel">Inputs</span>{preview.inputs.length === 0 ? <p>None</p> : <ul>{preview.inputs.map((input) => <li key={input.key}>{input.label} · {input.kind}{input.required ? ' · required' : ''}{input.default === undefined ? '' : ` · default: ${input.default}`}{input.choices === undefined ? '' : ` · choices: ${input.choices.join(', ')}`}</li>)}</ul>}
       {!(fromTemplate && preview.connectors.length === 0) && <span className="lc-fieldlabel">Connectors it needs</span>}{fromTemplate && preview.connectors.length === 0 ? null : preview.connectors.length === 0 ? <p>None named</p> : <ul>{preview.connectors.map((entry) => <li key={entry.name}>{entry.name} · {entry.present ? 'present' : 'missing'}</li>)}</ul>}
       {preview.runtime && <p className="lc-dialog__note">Made for {isMissionRuntime(preview.runtime) ? runtimeDisplayName(preview.runtime) : preview.runtime}. It will use your selected teammate’s route.</p>}
-      <label>Give it to<select className="lc-input" aria-label="Give routine to" value={owner} onChange={(event) => setOwner(event.target.value)}><option value="">Choose a teammate</option>{team.map((mate) => <option key={mate.teammateId} value={mate.teammateId}>{mate.name}</option>)}</select></label>
+      <label>Give it to<Select className="lc-input" aria-label="Give routine to" value={owner} onChange={setOwner} options={[{ value: '', label: 'Choose a teammate' }, ...team.map((mate) => ({ value: mate.teammateId, label: mate.name }))]} /></label>
       <p className="lc-dialog__note">{fromTemplate ? 'Every step goes to this teammate. It is added read-only, with no schedule, and runs nothing until you press Run.' : 'Every step goes to this teammate. Import saves it read-only, with no schedule, and runs nothing.'}</p>
       {error && <p className="lc-dialog__error">{error}</p>}
     </div><div className="lc-dialog__foot"><button className="lc-ghostbutton" onClick={onCancel}>Cancel</button><button className="lc-primarybutton" disabled={busy || !owner} onClick={() => {

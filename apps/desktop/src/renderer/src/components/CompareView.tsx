@@ -10,7 +10,8 @@ import { PagePreview } from './DocPreview.js'
 import { ApprovalCard } from './ApprovalCard.js'
 import type { MissionApprovalDecision, MissionApprovalRequest, MissionMode } from '../../../shared/ipc.js'
 import { Icon } from './Icon.js'
-import { ChevronGlyph } from './ChatGlyphs.js'
+import { Select } from './Select.js'
+import type { SelectOption } from './Select.js'
 import { RuntimeMark } from './RuntimeMark.js'
 import { ThreadItems } from './Thread.js'
 import { WorkingSpark } from './WorkingSpark.js'
@@ -579,8 +580,10 @@ function useChosenModel(choices: readonly ModelChoice[]): readonly [string, (key
  * -- sixteen fit, and the free OpenCode ones filled most of them. The one
  * offered stays first; the rest follow under their agent's name.
  */
-function ModelOptions({ choices }: { readonly choices: readonly ModelChoice[] }): ReactElement {
+function modelMenuOptions(choices: readonly ModelChoice[]): readonly SelectOption[] {
   const [first, ...rest] = choices
+  const options: SelectOption[] = []
+  if (first !== undefined) options.push({ value: first.key, label: first.label })
   const groups: { readonly name: string; readonly members: ModelChoice[] }[] = []
   for (const one of rest) {
     const name = one.group ?? ''
@@ -588,20 +591,14 @@ function ModelOptions({ choices }: { readonly choices: readonly ModelChoice[] })
     if (group === undefined) groups.push({ name, members: [one] })
     else group.members.push(one)
   }
-  return (
-    <>
-      {first !== undefined && <option value={first.key}>{first.label}</option>}
-      {groups.map((group) =>
-        group.name.length === 0 ? (
-          group.members.map((one) => <option key={one.key} value={one.key}>{one.label}</option>)
-        ) : (
-          <optgroup key={group.name} label={group.name}>
-            {group.members.map((one) => <option key={one.key} value={one.key}>{one.short ?? one.label}</option>)}
-          </optgroup>
-        )
-      )}
-    </>
-  )
+  for (const group of groups) {
+    for (const one of group.members) {
+      options.push(group.name.length === 0
+        ? { value: one.key, label: one.label }
+        : { value: one.key, label: one.short ?? one.label, group: group.name })
+    }
+  }
+  return options
 }
 
 /**
@@ -661,10 +658,7 @@ function JudgeAsk({ choices, compared = [], again, busy, onJudge, onDraftPoints 
   // Each label written out where it is used: the harness check reads labels from the attribute itself.
   const pickerOf = (index: number, value: string, onPick: (key: string) => void): ReactElement => (
     <span className="lc-compare__select" key={`judge:${String(index)}`}>
-      <select className="lc-input lc-compare__judgepick" aria-label={index === 0 ? (three ? 'The first judge' : 'The model that judges') : index === 1 ? 'The second judge' : 'The third judge'} value={value} onChange={(event) => onPick(event.target.value)}>
-        <ModelOptions choices={choices.filter((one) => one.key === value || !judges.includes(one.key))} />
-      </select>
-      <ChevronGlyph />
+      <Select className="lc-input lc-compare__judgepick" aria-label={index === 0 ? (three ? 'The first judge' : 'The model that judges') : index === 1 ? 'The second judge' : 'The third judge'} value={value} onChange={onPick} options={modelMenuOptions(choices.filter((one) => one.key === value || !judges.includes(one.key)))} />
     </span>
   )
   return (
@@ -863,9 +857,7 @@ function AddModelAsk({ choices, busy, onAdd }: {
     <div className="lc-compare__judgeask">
       <span className="lc-compare__recordlabel lc-mono">ASK ANOTHER MODEL</span>
       <div className="lc-compare__judgerow">
-        <select className="lc-input lc-compare__judgepick" aria-label="The model to ask too" value={choice} onChange={(event) => setChoice(event.target.value)}>
-          <ModelOptions choices={choices} />
-        </select>
+        <Select className="lc-input lc-compare__judgepick" aria-label="The model to ask too" value={choice} onChange={setChoice} options={modelMenuOptions(choices)} />
         <button type="button" className="lc-button" disabled={busy || choice.length === 0} onClick={() => onAdd(choice)}>
           {busy ? 'Asking…' : 'Ask it too'}
         </button>

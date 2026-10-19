@@ -19,8 +19,10 @@ const ownScratch = (): { readonly env: NodeJS.ProcessEnv; readonly done: () => v
 describe('the drive polish', () => {
   it('replaces the judge native arrow with a chevron that cannot intercept selection', () => {
     const css = readFileSync(new URL('../renderer/src/shell.css', import.meta.url), 'utf8')
-    expect(css).toMatch(/\.lc-compare__select select\s*\{[^}]*appearance: none/)
-    expect(css).toMatch(/\.lc-compare__select > svg\s*\{[^}]*pointer-events: none/)
+    const glyph = readFileSync(new URL('../renderer/src/components/ChatGlyphs.tsx', import.meta.url), 'utf8')
+    expect(css).toMatch(/\.lc-compare__select \.lc-select__button\s*\{[^}]*cursor: pointer/)
+    expect(css).not.toMatch(/\.lc-compare__select select\b/)
+    expect(glyph).toMatch(/className="lc-chevron"[^>]*aria-hidden="true"/)
   })
   it('prints the missing-control probe to stdout', () => {
     const module = new URL('../../../../_tools/drive-lib.mjs', import.meta.url).href

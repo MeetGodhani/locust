@@ -12489,6 +12489,87 @@ textarea {
   text-wrap: pretty;
 }
 
+/* A select's list, the same menu as the composer's, placed on the button. */
+.lc-select {
+  position: relative;
+  display: inline-flex;
+  max-width: 100%;
+  min-width: 0;
+  vertical-align: middle;
+}
+
+.lc-select__button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  max-width: 100%;
+  min-width: 0;
+  text-align: left;
+  cursor: pointer;
+}
+
+.lc-select__button:focus-visible {
+  outline: none;
+  border-color: var(--lc-focus-edge);
+  box-shadow: 0 0 0 3px var(--lc-focus-glow);
+}
+
+.lc-select__button:disabled {
+  cursor: default;
+}
+
+.lc-select__value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lc-select__menu.lc-menu {
+  position: fixed;
+  top: 0;
+  bottom: auto;
+  left: 0;
+  width: max-content;
+  min-width: 12rem;
+  max-width: min(360px, calc(100vw - 16px));
+  max-height: min(320px, 50vh);
+  overflow: auto;
+  z-index: 40;
+}
+
+.lc-select__menu .lc-menu__item {
+  width: max-content;
+  min-width: 100%;
+  white-space: nowrap;
+}
+
+.lc-menu__item.is-active {
+  background: var(--lc-hover-surface-strong);
+}
+
+.lc-select__group {
+  padding: 8px 12px 2px;
+  font-family: var(--lc-font-mono);
+  font-size: var(--lc-text-mono-label);
+  letter-spacing: var(--lc-tracking-label-wide);
+  text-transform: uppercase;
+  color: var(--lc-text-muted);
+}
+
+.lc-voice-settings > .lc-select {
+  width: 100%;
+}
+
+.lc-voice-settings > .lc-select > .lc-select__button {
+  width: 100%;
+}
+
+.lc-voicepick > .lc-select > .lc-select__button {
+  width: 100%;
+}
+
 /* --- Command output ----------------------------------------------------- */
 
 /*
@@ -13553,21 +13634,9 @@ textarea {
   max-width: 100%;
 }
 
-.lc-compare__select select {
-  appearance: none;
-  padding-right: 30px;
+.lc-compare__select .lc-select__button {
   max-width: 100%;
-  font-family: inherit;
   cursor: pointer;
-}
-
-.lc-compare__select > svg {
-  position: absolute;
-  right: 10px;
-  top: 50%;
-  transform: translateY(-50%) rotate(90deg);
-  color: var(--lc-text-muted);
-  pointer-events: none;
 }
 
 .lc-compare__judgecriteria {
@@ -18806,7 +18875,7 @@ textarea.lc-compare__judgecriteria {
 }
 /* A voice picker with its Hear it beside it (0.751): the picker takes the room, the button its own width. */
 .lc-voicepick { display: flex; align-items: center; gap: var(--lc-space-3); min-width: 0; }
-.lc-voicepick > select { flex: 1; min-width: 0; }
+.lc-voicepick > .lc-select { flex: 1; min-width: 0; }
 .lc-voiceplay { display: inline-flex; align-items: center; gap: var(--lc-space-3); flex: none; }
 .lc-voiceplay > button { white-space: nowrap; }
 .lc-voiceplay__note { font-size: var(--lc-text-description); color: var(--lc-text-muted); }

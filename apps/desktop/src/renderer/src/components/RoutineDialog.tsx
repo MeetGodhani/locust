@@ -7,6 +7,7 @@ import type { PublicTeammate, RoutineHandOff, RoutineSchedule } from '../../../s
 import { EVERY_HOURS_CHOICES, onceMoment, watchedFolderValid, WEEKDAYS_ONLY } from '../../../shared/routine-schedule.js'
 import { stepTooLongNotice } from '../../../shared/step-budget.js'
 import { MAX_ROUTINE_STEPS } from '../routines.js'
+import { Select } from './Select.js'
 import { TeammateBot } from './TeammateBot.js'
 import { RoutineInputEditor } from './RoutineInputs.js'
 import { inputsRefusal } from '../../../shared/routine-inputs.js'
@@ -296,11 +297,7 @@ export function RoutineDialog({
                   {goalTries !== undefined && (
                     <label className="lc-routinesched__detail lc-mono">
                       at most
-                      <select className="lc-input lc-routinesched__pick" aria-label="Fixes at most" value={goalTries} onChange={(event) => setGoalTries(Number(event.target.value))}>
-                        {[1, 2, 3, 4, 5].map((count) => (
-                          <option key={count} value={count}>{count}</option>
-                        ))}
-                      </select>
+                      <Select className="lc-input lc-routinesched__pick" aria-label="Fixes at most" value={goalTries} onChange={(next) => setGoalTries(Number(next))} options={[1, 2, 3, 4, 5].map((count) => ({ value: String(count), label: String(count) }))} />
                       {goalTries === 1 ? 'fix' : 'fixes'}
                     </label>
                   )}
@@ -354,19 +351,16 @@ export function RoutineDialog({
               <label className="lc-fieldlabel lc-mono" htmlFor="routine-runner">
                 Who runs it
               </label>
-              <select
+              <Select
                 id="routine-runner"
                 className="lc-input"
                 value={runner}
-                onChange={(event) => setRunner(event.target.value)}
-              >
-                <option value="">Pick a teammate</option>
-                {chooseFrom?.map((entry) => (
-                  <option key={entry.teammateId} value={entry.teammateId}>
-                    {entry.name}
-                  </option>
-                ))}
-              </select>
+                onChange={setRunner}
+                options={[
+                  { value: '', label: 'Pick a teammate' },
+                  ...(chooseFrom ?? []).map((entry) => ({ value: entry.teammateId, label: entry.name }))
+                ]}
+              />
               <p className="lc-dialog__note lc-mono">
                 This conversation was not assigned to anyone. It replays on the teammate you pick, on their route.
               </p>
@@ -444,24 +438,21 @@ export function RoutineDialog({
                     */}
                   {canHandOff && (
                     <div className="lc-routinestep__who">
-                      <select
+                      <Select
                         className="lc-input lc-routinestep__pick"
                         aria-label={`Who takes step ${String(index + 1)}`}
                         value={handOffs[index]?.teammateId ?? ''}
-                        onChange={(event) => {
+                        onChange={(next) => {
                           const { teammateId: _was, ...rest } = handOffs[index] ?? {}
-                          setHandOff(index, event.target.value === '' ? rest : { ...rest, teammateId: event.target.value })
+                          setHandOff(index, next === '' ? rest : { ...rest, teammateId: next })
                         }}
-                      >
-                        <option value="">{ownerName === undefined ? 'The teammate who runs it' : `${ownerName} (runs it)`}</option>
-                        {team
-                          .filter((entry) => entry.teammateId !== ownerId)
-                          .map((entry) => (
-                            <option key={entry.teammateId} value={entry.teammateId}>
-                              {entry.name}
-                            </option>
-                          ))}
-                      </select>
+                        options={[
+                          { value: '', label: ownerName === undefined ? 'The teammate who runs it' : `${ownerName} (runs it)` },
+                          ...team
+                            .filter((entry) => entry.teammateId !== ownerId)
+                            .map((entry) => ({ value: entry.teammateId, label: entry.name }))
+                        ]}
+                      />
                       <label className="lc-routinestep__check lc-mono">
                         <input
                           type="checkbox"
@@ -554,18 +545,13 @@ export function RoutineDialog({
               {schedule?.kind === 'every' && (
                 <label className="lc-routinesched__detail lc-mono">
                   every
-                  <select
+                  <Select
                     className="lc-input lc-routinesched__pick"
                     aria-label="Hours between runs"
                     value={String(schedule.hours)}
-                    onChange={(event) => setSchedule({ kind: 'every', hours: Number(event.target.value) })}
-                  >
-                    {EVERY_HOURS_CHOICES.map((hours) => (
-                      <option key={hours} value={String(hours)}>
-                        {hours === 1 ? '1 hour' : `${String(hours)} hours`}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={(next) => setSchedule({ kind: 'every', hours: Number(next) })}
+                    options={EVERY_HOURS_CHOICES.map((hours) => ({ value: String(hours), label: hours === 1 ? '1 hour' : `${String(hours)} hours` }))}
+                  />
                 </label>
               )}
               {schedule?.kind === 'daily' && (

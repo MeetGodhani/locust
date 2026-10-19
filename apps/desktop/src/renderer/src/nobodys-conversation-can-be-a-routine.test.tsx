@@ -66,8 +66,9 @@ describe('saving a conversation nobody owns', () => {
     // The control. Defaulting to the first teammate would make this save
     // silently, under a name that had nothing to do with the work.
     const html = drawn({ chooseFrom: [WREN] })
-    expect(html).toContain('Pick a teammate')
-    expect(html).not.toMatch(/<option value="tm_wren" selected/)
+    const control = html.slice(html.indexOf('id="routine-runner"'), html.indexOf('id="routine-runner"') + 1200)
+    expect(control).toContain('lc-select__value">Pick a teammate<')
+    expect(control).not.toContain('lc-select__value">Wren<')
   })
 
   it('says so plainly when there is nobody to pick', () => {

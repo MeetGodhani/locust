@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 
 import { SCOUT_EVERY_MINUTES, type ScoutApi, type ScoutEvery, type ScoutState, type ScoutWatches } from '../../../shared/scout.js'
 import { ago } from './ScoutCards.js'
+import { Select } from './Select.js'
 
 /**
  * SCOUT IN SETTINGS (0.756, shared/scout.ts): on or off, what it watches, how often it looks, and whether a card that
@@ -84,10 +85,9 @@ export function ScoutSetting({ heading, state, model, route, onChangeModel, api 
           <h3 className="lc-settings__heading">How often it looks</h3>
           <p className="lc-settings__lede">Only while Locust is running. Its model is asked only when something is new.</p>
         </div>
-        <select className="lc-control" aria-label="How often Scout looks" disabled={busy} value={state.settings.everyMinutes}
-          onChange={(event) => { const next = Number(event.target.value) as ScoutEvery; void act(() => api.set({ everyMinutes: next })) }}>
-          {SCOUT_EVERY_MINUTES.map((minutes) => <option key={minutes} value={minutes}>{minutes === 60 ? 'Every hour' : `Every ${String(minutes)} minutes`}</option>)}
-        </select>
+        <Select className="lc-control" aria-label="How often Scout looks" disabled={busy} value={state.settings.everyMinutes}
+          onChange={(next) => { void act(() => api.set({ everyMinutes: Number(next) as ScoutEvery })) }}
+          options={SCOUT_EVERY_MINUTES.map((minutes) => ({ value: String(minutes), label: minutes === 60 ? 'Every hour' : `Every ${String(minutes)} minutes` }))} />
       </div>
       <div className="lc-settingline lc-settingline--sub">
         <div className="lc-settingline__text">

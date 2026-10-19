@@ -4,6 +4,7 @@ import type { RoutineInput, RoutineInputKind, RoutineValues } from '../../../sha
 import { MAX_INPUTS, MAX_INPUT_VALUE, resolveValues } from '../../../shared/routine-inputs.js'
 import type { PublicRoutine } from '../../../shared/ipc.js'
 import { useModal } from '../useModal.js'
+import { Select } from './Select.js'
 
 /** W7: declarations are edited with the steps; defaults are plain text, never folder paths. */
 export function RoutineInputEditor({ inputs, onChange }: { readonly inputs: readonly RoutineInput[]; readonly onChange: (inputs: readonly RoutineInput[]) => void }): ReactElement {
@@ -15,15 +16,15 @@ export function RoutineInputEditor({ inputs, onChange }: { readonly inputs: read
       <legend>Input {at + 1}</legend>
       <label>Key<input className="lc-input" aria-label={`Input ${at + 1} key`} maxLength={32} value={input.key} onChange={(event) => change(at, { ...input, key: event.target.value })} /></label>
       <label>Label<input className="lc-input" aria-label={`Input ${at + 1} label`} maxLength={80} value={input.label} onChange={(event) => change(at, { ...input, label: event.target.value })} /></label>
-      <label>Kind<select className="lc-input" aria-label={`Input ${at + 1} kind`} value={input.kind} onChange={(event) => {
-        const kind = event.target.value as RoutineInputKind
+      <label>Kind<Select className="lc-input" aria-label={`Input ${at + 1} kind`} value={input.kind} onChange={(next) => {
+        const kind = next as RoutineInputKind
         const { default: _default, choices: _choices, ...base } = input
         change(at, { ...base, kind, ...(kind === 'choice' ? { choices: ['First', 'Second'] } : {}), ...(kind === 'folder' || input.kind === 'choice' || kind === 'choice' || input.default === undefined ? {} : { default: input.default }) })
-      }}><option value="text">Text</option><option value="long-text">Long text</option><option value="choice">Choice</option><option value="folder">Folder</option></select></label>
+      }} options={[{ value: 'text', label: 'Text' }, { value: 'long-text', label: 'Long text' }, { value: 'choice', label: 'Choice' }, { value: 'folder', label: 'Folder' }]} /></label>
       <label><input type="checkbox" checked={input.required} onChange={(event) => change(at, { ...input, required: event.target.checked })} /> Required</label>
       {input.kind === 'choice' && <label>Choices, one per line<textarea className="lc-input" aria-label={`Input ${at + 1} choices`} value={(input.choices ?? []).join('\n')} onChange={(event) => change(at, { ...input, choices: event.target.value.split('\n') })} /></label>}
       {input.kind !== 'folder' && <label>Default{input.kind === 'choice'
-        ? <select className="lc-input" aria-label={`Input ${at + 1} default`} value={input.default ?? ''} onChange={(event) => change(at, { ...input, default: event.target.value })}><option value="">No default</option>{input.choices?.map((choice, index) => <option key={index}>{choice}</option>)}</select>
+        ? <Select className="lc-input" aria-label={`Input ${at + 1} default`} value={input.default ?? ''} onChange={(next) => change(at, { ...input, default: next })} options={[{ value: '', label: 'No default' }, ...(input.choices ?? []).map((choice) => ({ value: choice, label: choice }))]} />
         : input.kind === 'long-text' ? <textarea className="lc-input" aria-label={`Input ${at + 1} default`} maxLength={MAX_INPUT_VALUE} value={input.default ?? ''} onChange={(event) => change(at, { ...input, default: event.target.value })} />
         : <input className="lc-input" aria-label={`Input ${at + 1} default`} maxLength={MAX_INPUT_VALUE} value={input.default ?? ''} onChange={(event) => change(at, { ...input, default: event.target.value })} />}</label>}
       {input.kind === 'folder' && <p className="lc-dialog__note">Chosen with the folder picker when you run; no default.</p>}
@@ -55,7 +56,7 @@ export function RoutineRunDialog({ routine, onRun, onCancel }: { readonly routin
             else if (answer.error.code !== 'CANCELLED') setError(answer.error.message)
           }).catch(() => setError('The folder picker could not be opened. Choose the folder again before running.'))
         }}>Choose {input.label}</button></>
-          : input.kind === 'choice' ? <select className="lc-input" aria-label={`Value for ${input.label}`} value={values[input.key]} onChange={(event) => setValues({ ...values, [input.key]: event.target.value })}><option value="">Choose an answer</option>{input.choices?.map((choice) => <option key={choice}>{choice}</option>)}</select>
+          : input.kind === 'choice' ? <Select className="lc-input" aria-label={`Value for ${input.label}`} value={values[input.key]} onChange={(next) => setValues({ ...values, [input.key]: next })} options={[{ value: '', label: 'Choose an answer' }, ...(input.choices ?? []).map((choice) => ({ value: choice, label: choice }))]} />
           : input.kind === 'long-text' ? <textarea className="lc-input" aria-label={`Value for ${input.label}`} maxLength={MAX_INPUT_VALUE} value={values[input.key]} onChange={(event) => setValues({ ...values, [input.key]: event.target.value })} />
           : <input className="lc-input" aria-label={`Value for ${input.label}`} maxLength={MAX_INPUT_VALUE} value={values[input.key]} onChange={(event) => setValues({ ...values, [input.key]: event.target.value })} />}
       </label>)}

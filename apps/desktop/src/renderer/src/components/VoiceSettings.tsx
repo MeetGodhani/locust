@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { isVoiceMode, type VoiceApi, type VoiceSettings as Settings, type VoiceSettingsChange } from '../../../shared/voice.js'
+import { Select } from './Select.js'
 
 export function VoiceSettings({ api = typeof window === 'undefined' ? undefined : window.desktop?.voice }: { readonly api?: VoiceApi }) {
   const [settings, setSettings] = useState<Settings>()
@@ -22,11 +23,11 @@ export function VoiceSettings({ api = typeof window === 'undefined' ? undefined 
     finally { setKey(''); setBusy(false) }
   }
   return <div className="lc-voice-settings">
-    <select className="lc-control" aria-label="Voice typing model" disabled={!settings || busy} value={settings?.mode ?? 'fast'} onChange={(event) => { if (isVoiceMode(event.target.value)) void save({ mode: event.target.value }) }}>
-      <option value="fast">Fast — 41 MB</option>
-      <option value="accurate">Accurate — 69 MB, slower</option>
-      <option value="openai">Your OpenAI account</option>
-    </select>
+    <Select className="lc-control" aria-label="Voice typing model" disabled={!settings || busy} value={settings?.mode ?? 'fast'} onChange={(next) => { if (isVoiceMode(next)) void save({ mode: next }) }} options={[
+      { value: 'fast', label: 'Fast — 41 MB' },
+      { value: 'accurate', label: 'Accurate — 69 MB, slower' },
+      { value: 'openai', label: 'Your OpenAI account' }
+    ]} />
     {settings?.mode === 'openai' && <div>
       <p className="lc-settings__note">{settings.hasKey ? 'API key saved. It is locked to your Windows account.' : 'Add your OpenAI API key. A ChatGPT subscription does not include API usage.'}</p>
       <input className="lc-input" type="password" aria-label="OpenAI voice API key" autoComplete="off" spellCheck={false} value={key} disabled={busy} onChange={(event) => { setKey(event.target.value) }} placeholder={settings.hasKey ? 'Replace saved key' : 'API key'} />

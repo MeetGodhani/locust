@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 
 import { CHATGPT_VOICES, isChatGptVoice, voiceName, type ChatGptVoice, type VoiceCallApi } from '../../../shared/voice-call.js'
+import { Select } from './Select.js'
 import { VoicePlay } from './VoicePlay.js'
 
 /**
@@ -25,20 +26,18 @@ export function TalkVoice({ api = typeof window === 'undefined' ? undefined : wi
       <p className="lc-settings__lede">The voice ChatGPT speaks in when you press Talk. The next call uses it; a call already on keeps its voice.</p>
       {message && <p className="lc-settings__note" role="status">{message}</p>}
     </div>
-    <span className="lc-voicepick"><select
+    <span className="lc-voicepick"><Select
       className="lc-control"
       aria-label="Talk’s voice"
       disabled={voice === undefined}
       value={voice ?? ''}
-      onChange={(event) => {
-        const next = event.target.value
+      onChange={(next) => {
         if (!isChatGptVoice(next)) return
         setVoice(next)
         void api.setVoice(next).then(setVoice).catch(() => { setMessage('That voice could not be kept. Try again.') })
       }}
-    >
-      {CHATGPT_VOICES.map((entry) => <option key={entry.id} value={entry.id}>{voiceName(entry.id)} — {entry.about}</option>)}
-    </select>
+      options={CHATGPT_VOICES.map((entry) => ({ value: entry.id, label: `${voiceName(entry.id)} — ${entry.about}` }))}
+    />
     {/* Hear it before choosing it (0.751). */}
     <VoicePlay voice={voice} api={api} /></span>
   </div></section>

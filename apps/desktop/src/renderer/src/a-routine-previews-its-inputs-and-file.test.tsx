@@ -22,7 +22,7 @@ describe('routine inputs and files are reviewable before work starts', () => {
     const html = renderToStaticMarkup(<RoutineRunDialog routine={routine} onRun={async () => undefined} onCancel={nothing} />)
     expect(html).toContain('aria-label="Run routine"')
     expect(html).toContain('value="Daily notes"')
-    expect(html).toContain('selected="">Brief')
+    expect(html).toMatch(/aria-label="Value for Tone"[\s\S]*?lc-select__value">Brief</)
     expect(html).toContain('two\nlines</textarea>')
     expect(html).toContain('Choose Folder')
     expect(html).not.toContain('aria-label="Folder"')
