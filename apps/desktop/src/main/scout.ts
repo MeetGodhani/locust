@@ -57,6 +57,8 @@ export interface ScoutDeps {
   readonly waiting: () => Promise<readonly WaitingCard[]>
   /** A run that ended, as a failed turn when it failed; undefined otherwise. */
   readonly failedTurn: (missionId: string) => Promise<FailedTurn | undefined>
+  /** The turn this one went on from, when it continued a conversation. */
+  readonly continuesFrom?: (missionId: string) => Promise<string | undefined>
   /** The team Scout may hand work to, without Scout. */
   readonly team: () => Promise<readonly ScoutTeammate[]>
   /** Starts one look on Scout's route -- or on this free model in its place: its turn, or why it did not start. */
@@ -363,7 +365,20 @@ export function createScout(deps: ScoutDeps) {
         return
       }
       const from = await load()
-      if (!from.settings.on || !from.settings.watches.teammates || from.lookIds.includes(mission.missionId)) return
+      if (from.lookIds.includes(mission.missionId)) return
+      /*
+       * A CONVERSATION THAT WENT ON IS NOT STUCK (0.797). When a later turn of it ends -- the person's reply, or Locust
+       * carrying the work on when a plan ran out -- the failure before it is no longer news: it leaves the next look,
+       * and a card already showing it goes. Colin, 2026-10-19, on a card drafting a handoff to redo work Claude Code
+       * had already finished after Codex's limit: "outdated?"
+       */
+      const earlier = await deps.continuesFrom?.(mission.missionId).catch(() => undefined)
+      if (earlier !== undefined) {
+        for (let index = failedSince.length - 1; index >= 0; index -= 1) if (failedSince[index]!.missionId === earlier) failedSince.splice(index, 1)
+        const key = `failed:${earlier}`
+        if (from.cards.some((card) => card.key === key)) await mutate((latest) => ({ ...latest, cards: latest.cards.filter((card) => card.key !== key) }))
+      }
+      if (!from.settings.on || !from.settings.watches.teammates) return
       const failed = await deps.failedTurn(mission.missionId).catch(() => undefined)
       if (failed !== undefined && failed.teammateId !== from.settings.teammateId) failedSince.push(failed)
     },

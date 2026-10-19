@@ -218,6 +218,22 @@ describe('a look', () => {
     expect((await h.scout.state()).cards.map((card) => card.said)).toEqual(["Wren's turn failed: The model is overloaded."])
   })
 
+  it('drops a failed turn whose conversation went on, from its next look and from a card it already showed', async () => {
+    // Colin, 2026-10-19, on a card drafting a handoff to redo work Claude Code had finished after Codex's limit: "outdated?"
+    const h = await harness({ continuesFrom: async (missionId) => (missionId === 'carried_on' ? 'failed_9' : missionId === 'carried_on_2' ? 'failed_10' : undefined) })
+    await h.scout.turnOn({ runtime: 'opencode', model: 'opencode/space-bunny-free' })
+    await h.scout.onRunEnded({ missionId: 'failed_9' })
+    await h.scout.onRunEnded({ missionId: 'carried_on' })
+    await h.scout.look()
+    expect((await h.scout.state()).cards).toEqual([])
+    // Shown before the conversation went on: the card goes when the later turn ends.
+    await h.scout.onRunEnded({ missionId: 'failed_10' })
+    await h.scout.look()
+    expect((await h.scout.state()).cards.map((card) => card.key)).toEqual(['failed:failed_10'])
+    await h.scout.onRunEnded({ missionId: 'carried_on_2' })
+    expect((await h.scout.state()).cards).toEqual([])
+  })
+
   it('watches only what it is set to watch', async () => {
     const h = await harness()
     await h.scout.turnOn({ runtime: 'opencode', model: 'opencode/space-bunny-free' })

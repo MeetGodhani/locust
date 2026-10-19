@@ -7429,6 +7429,7 @@ if (!ownsSingleInstanceLock) {
           ...(owner === undefined ? {} : { teammateId: owner }), ...(name === undefined ? {} : { name }), ...(why === undefined ? {} : { why })
         }
       },
+      continuesFrom: async (missionId) => (await missionLedger.getMission(missionId).catch(() => undefined))?.metadata.continuesFrom?.missionId,
       team: async () => (await teammates.list()).map((mate) => ({ teammateId: mate.teammateId, name: mate.name, role: mate.roleTitle ?? mate.role })),
       ask: async (teammateId, prompt, model) => {
         if (!workspaceChosen) return { refused: NO_WORKSPACE_MESSAGE }
