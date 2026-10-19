@@ -256,6 +256,43 @@ continue; report exact validation results, and say what was not run.
 - Not run: Mac/Linux execution or remote CI, other shell variants, native OS clipboard round trips. Packaged
   native-module checks are prepared in the public CI workflow.
 
+### 2026-10-19 — opt-in OpenCode ACP preparation
+
+- Scope: `feat/opencode-2-acp`, independently based on upstream `main`
+  at `f9c8657da8510cb364b421ae8adccfaa6317cd3a` (desktop 0.802.0).
+  Tool-step replay is already merged upstream as PR #5. This branch adds
+  only the separate ACP preparation.
+- The package exposes an OpenCode profile for `opencode acp`, ACP version 1
+  over stdio. It reuses the shared handshake, session loading, permissions,
+  tool updates, usage and event normalizer. The desktop's existing OpenCode
+  route remains selected as before; enabling the profile is separate work.
+- Only pre-prompt transport failures may restart the owned process: two
+  retries by default, capped at three, with bounded exponential backoff and
+  one sixty-second startup budget. Prompt admission is marked before write;
+  an uncertain prompt or permission response is never resent. Hard agent,
+  protocol, authentication and required-setting errors do not retry.
+- The optional stdout-close signal preserves older process implementations.
+  Shared ACP runs settle on EOF/error, retain a last-chunk final reply, and
+  cannot continue a stopped handshake. Finish cancels permission waits and
+  clears abort listeners and timers. A failed native tree-release promise
+  falls back to ending the child.
+- The profile waits at most one second by default for parent-process exit
+  before replacing it or reporting cleanup. Missing acknowledgement is
+  recorded as unconfirmed and prevents replacement. This does not prove
+  arbitrary descendant termination: the native tree primitive remains best
+  effort, particularly POSIX children that ignore SIGTERM.
+- Explicit profile configuration must be advertised and accepted; legacy
+  ACP callers retain their existing optional-setting behavior. Runtime
+  identity remains OpenCode throughout, without an automatic route switch,
+  new telemetry, credential access, dependencies, version or changelog edit.
+- Both the live record queue and pre-prompt receipt staging are bounded;
+  overflow stops the run without replacing the process or leaking abandoned
+  startup receipts into the ledger.
+- Controlled fake-agent tests, dedicated mutation controls and the local
+  gate are recorded in the accompanying ACP handoff. Live OpenCode 2 turns,
+  packaged UI, macOS/Linux execution and arbitrary descendant cleanup are
+  not claimed by that validation. Desktop routing needs its own integration.
+
 ### 2026-10-18 — machine-wide organization policy
 
 - Scope: `exec/org-policy`, based on `c3174add`. No version, changelog,

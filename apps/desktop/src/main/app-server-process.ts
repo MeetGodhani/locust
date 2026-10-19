@@ -30,6 +30,7 @@ export interface AppServerProcess {
   readonly kill: () => void
   readonly onData: (listener: (chunk: string) => void) => void
   readonly onExit: (listener: () => void) => void
+  readonly onStdoutClose?: (listener: (error?: Error) => void) => void
   /** The end of the server's stderr (N10): kept small, and always drained. */
   readonly stderrTail: () => string
 }
@@ -51,7 +52,11 @@ export interface AppServerProcessDeps {
 export interface AppServerChild {
   readonly pid?: number
   readonly stdin: { write(line: string): unknown; on?(event: 'error', listener: () => void): unknown }
-  readonly stdout: { on(event: 'data', listener: (chunk: Buffer | string) => void): unknown }
+  readonly stdout: {
+    on(event: 'data', listener: (chunk: Buffer | string) => void): unknown
+    /** Optional for older process doubles that only expose data. */
+    once?(event: 'end' | 'close' | 'error', listener: (error?: Error) => void): unknown
+  }
   readonly stderr?: { on(event: 'data', listener: (chunk: Buffer | string) => void): unknown } | null
   on(event: 'exit' | 'error', listener: () => void): unknown
   kill(): unknown
@@ -100,6 +105,23 @@ export function startAppServerProcess(
     tail = `${tail}${String(chunk)}`.slice(-STDERR_TAIL_CHARS)
   })
   let stopping = false
+  let stdoutEnded = false
+  let stdoutError: Error | undefined
+  const stdoutListeners = new Set<(error?: Error) => void>()
+  const flushDecoders: Array<() => void> = []
+  const endStdout = (error?: Error): void => {
+    if (stdoutEnded) return
+    stdoutEnded = true
+    stdoutError = error
+    // Flush the decoder before announcing EOF, so the last framed reply is
+    // consumed before a runtime decides whether the turn was interrupted.
+    for (const flush of flushDecoders) flush()
+    for (const listener of stdoutListeners) listener(error)
+    stdoutListeners.clear()
+  }
+  child.stdout.once?.('end', () => endStdout())
+  child.stdout.once?.('close', () => endStdout())
+  child.stdout.once?.('error', (error) => endStdout(error))
   const killChild = (): void => {
     try {
       child.kill()
@@ -119,7 +141,7 @@ export function startAppServerProcess(
       if (child.pid !== undefined) {
         void deps.releaseTree(child.pid).then((released) => {
           if (!released) killChild()
-        })
+        }).catch(killChild)
         return
       }
       killChild()
@@ -129,10 +151,19 @@ export function startAppServerProcess(
       // reads was decoded half at a time, into replacement characters that
       // still parsed as JSON and went into the ledger.
       const decoder = new StringDecoder('utf8')
+      flushDecoders.push(() => {
+        const remaining = decoder.end()
+        if (remaining.length > 0) listener(remaining)
+      })
       child.stdout.on('data', (chunk) => {
+        if (stdoutEnded) return
         const text = typeof chunk === 'string' ? chunk : decoder.write(chunk)
         if (text.length > 0) listener(text)
       })
+    },
+    onStdoutClose: (listener) => {
+      if (stdoutEnded) listener(stdoutError)
+      else stdoutListeners.add(listener)
     },
     onExit: (listener) => {
       // A spawn that fails emits 'error' and never 'exit': it had no listener,

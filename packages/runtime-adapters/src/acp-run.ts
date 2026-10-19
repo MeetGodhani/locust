@@ -104,6 +104,8 @@ export interface AcpRunOptions {
    * offers and will not set refuses the run.
    */
   readonly requiredConfig?: Readonly<Record<string, string>>;
+  /** Refuse a requested setting the agent does not advertise (opt-in profiles). */
+  readonly strictConfig?: boolean;
   /** Who answers. Absent: every request is refused, never approved. */
   readonly onPermission?: (request: AcpPermissionRequest) => Promise<AcpPermissionAnswer>;
   readonly signal?: AbortSignal;
@@ -227,6 +229,10 @@ export function startAcpRun(options: AcpRunOptions): AcpRun {
   /** This run's updates begin with its first prompt; before that is the past. */
   let recording = false;
   let prompting = false;
+  let transportEnded = false;
+  let killed = false;
+  let handshakeTimer: ReturnType<typeof setTimeout> | undefined;
+  let cancelTimer: ReturnType<typeof setTimeout> | undefined;
   /** What is waiting to be said once the prompt running now ends. */
   const queued: string[] = [];
   /**
@@ -256,13 +262,22 @@ export function startAcpRun(options: AcpRunOptions): AcpRun {
   });
 
   const child = options.spawn(options.command.executablePath, options.command.args, options.command.env, options.command.cwd);
+  const killOnce = (): void => {
+    if (killed) return;
+    killed = true;
+    child.kill();
+  };
 
   const finish = (): void => {
     if (settled) return;
     settled = true;
+    markStopped();
+    clearTimeout(handshakeTimer);
+    clearTimeout(cancelTimer);
+    options.signal?.removeEventListener("abort", stop);
     records.end();
     try {
-      child.kill();
+      client.dispose("The turn ended.");
     } catch {
       // Already gone; the receipt below is what the mission reads.
     }
@@ -314,7 +329,7 @@ export function startAcpRun(options: AcpRunOptions): AcpRun {
       return option === undefined ? { outcome: { outcome: "cancelled" } } : { outcome: { outcome: "selected", optionId: option.optionId } };
     };
     return await oneAtATime(signature, async (): Promise<JsonValue> => {
-      if (cancelled) return { outcome: { outcome: "cancelled" } };
+      if (settled || cancelled) return { outcome: { outcome: "cancelled" } };
       let given: AcpPermissionAnswer | undefined = "reject_once";
       if (options.onPermission !== undefined) {
         try {
@@ -324,7 +339,7 @@ export function startAcpRun(options: AcpRunOptions): AcpRun {
         }
       }
       // Stopped while the card was up: ACP asks for exactly this answer.
-      if (given === undefined || cancelled) return { outcome: { outcome: "cancelled" } };
+      if (given === undefined || settled || cancelled) return { outcome: { outcome: "cancelled" } };
       // Remembered by the host, never by the agent: "once" to the agent.
       if (given === "allow_always") return choose("allow_once");
       return choose(given);
@@ -334,7 +349,7 @@ export function startAcpRun(options: AcpRunOptions): AcpRun {
   const client = createAppServerClient({
     transport: {
       send: (line: string) => child.write(line),
-      close: () => child.kill(),
+      close: killOnce,
     },
     requestTimeoutMs: PROMPT_TIMEOUT_MS,
     onNotification: (notification) => {
@@ -358,8 +373,21 @@ export function startAcpRun(options: AcpRunOptions): AcpRun {
   child.onExit(() => {
     lose("The agent exited before its turn finished.");
   });
+  child.onStdoutClose?.((error) => {
+    transportEnded = true;
+    // A final response was accepted synchronously from the last data chunk.
+    // Let its awaiting prompt consume it before treating EOF as a lost turn.
+    queueMicrotask(() => lose(error === undefined
+      ? "The agent's output stream closed before its turn finished."
+      : "The agent's output stream failed before its turn finished."));
+  });
+
+  const requireLive = (): void => {
+    if (settled || cancelled || transportEnded) throw new Error("The agent's turn has already ended.");
+  };
 
   const handshake = async (): Promise<void> => {
+    requireLive();
     const init = objectOf(
       await client.request("initialize", {
         protocolVersion: ACP_PROTOCOL_VERSION,
@@ -367,6 +395,7 @@ export function startAcpRun(options: AcpRunOptions): AcpRun {
         clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false },
       }),
     );
+    requireLive();
     if (init.protocolVersion !== ACP_PROTOCOL_VERSION) {
       throw new Error(`The agent speaks version ${String(init.protocolVersion)} of the Agent Client Protocol, and Locust speaks ${String(ACP_PROTOCOL_VERSION)}.`);
     }
@@ -375,6 +404,7 @@ export function startAcpRun(options: AcpRunOptions): AcpRun {
     } catch {
       // What it can do is shown in Settings; a listener's failure never stops the turn.
     }
+    requireLive();
     const cwd = options.command.cwd;
     const mcpServers: JsonValue[] = (options.mcpServers ?? []).map((server) => ({
       name: server.name,
@@ -385,12 +415,14 @@ export function startAcpRun(options: AcpRunOptions): AcpRun {
     let session: JsonObject;
     if (options.resumeSessionId === undefined) {
       session = objectOf(await client.request("session/new", { cwd, mcpServers }));
+      requireLive();
       sessionId = text(session.sessionId);
       if (sessionId === undefined) throw new Error("The agent did not start a session.");
     } else {
       if (objectOf(init.agentCapabilities).loadSession !== true) throw new Error("The agent cannot continue an earlier session.");
       sessionId = options.resumeSessionId;
       session = objectOf(await client.request("session/load", { sessionId, cwd, mcpServers }));
+      requireLive();
     }
     push(ACP_SESSION, { sessionId });
 
@@ -398,22 +430,28 @@ export function startAcpRun(options: AcpRunOptions): AcpRun {
       const modes = objectOf(session.modes);
       const offered = (Array.isArray(modes.availableModes) ? modes.availableModes : []).map((mode) => text(objectOf(mode).id));
       if (!offered.includes(options.modeId)) throw new Error("The agent did not offer the mode this run needs, so it was not started.");
-      if (modes.currentModeId !== options.modeId) await client.request("session/set_mode", { sessionId, modeId: options.modeId });
+      if (modes.currentModeId !== options.modeId) {
+        await client.request("session/set_mode", { sessionId, modeId: options.modeId });
+        requireLive();
+      }
     }
     for (const [configId, value] of Object.entries(options.requiredConfig ?? {})) {
       const current = configValue(session.configOptions, configId);
+      if (current === undefined && options.strictConfig === true) throw new Error(`The agent did not offer the required ${configId} setting, so it was not started.`);
       if (current === undefined || current === value) continue;
       const set = objectOf(await client.request("session/set_config_option", { sessionId, configId, value }));
+      requireLive();
       if (configValue(set.configOptions, configId) !== value) throw new Error(`The agent would not set ${configId} to ${value}, so it was not started.`);
     }
   };
 
   const converse = async (): Promise<void> => {
     let next: string | undefined = options.prompt;
-    while (next !== undefined && !settled) {
+    while (next !== undefined && !settled && !cancelled && !transportEnded) {
       recording = true;
       prompting = true;
       const ended = objectOf(await client.request("session/prompt", { sessionId: sessionId!, prompt: [{ type: "text", text: next }] }));
+      if (settled) return;
       prompting = false;
       push(ACP_PROMPT_RESULT, { stopReason: text(ended.stopReason) ?? null, ...(isObject(ended.usage) ? { usage: ended.usage } : {}) });
       // A turn cut off at a limit still sends what was queued during it: steer() said it would (2026-10-10 sweep).
@@ -423,21 +461,7 @@ export function startAcpRun(options: AcpRunOptions): AcpRun {
     finish();
   };
 
-  const handshakeTimer = setTimeout(() => lose("The agent did not answer in time."), options.handshakeTimeoutMs ?? DEFAULT_HANDSHAKE_TIMEOUT_MS);
-  void (async () => {
-    await handshake();
-    clearTimeout(handshakeTimer);
-    await converse();
-  })().catch((error: unknown) => {
-    lose(error instanceof Error && error.message.length > 0 ? error.message : "The agent could not start its turn.");
-  });
-
-  void completion.finally(() => {
-    clearTimeout(handshakeTimer);
-    client.dispose("The turn ended.");
-  });
-
-  const stop = (): void => {
+  function stop(): void {
     if (settled || cancelled) return;
     cancelled = true;
     markStopped();
@@ -447,17 +471,33 @@ export function startAcpRun(options: AcpRunOptions): AcpRun {
     }
     // ACP's own stop: the prompt then answers "cancelled" and the run ends
     // there. An agent that does not is ended anyway.
-    client.notify("session/cancel", { sessionId });
-    const grace = setTimeout(finish, options.cancelGraceMs ?? DEFAULT_CANCEL_GRACE_MS);
-    if (typeof grace === "object" && grace !== null && "unref" in grace) grace.unref();
-  };
+    try {
+      client.notify("session/cancel", { sessionId });
+    } catch {
+      finish();
+      return;
+    }
+    cancelTimer = setTimeout(finish, options.cancelGraceMs ?? DEFAULT_CANCEL_GRACE_MS);
+    if (typeof cancelTimer === "object" && cancelTimer !== null && "unref" in cancelTimer) cancelTimer.unref();
+  }
   if (options.signal !== undefined) {
     if (options.signal.aborted) stop();
     else options.signal.addEventListener("abort", stop, { once: true });
   }
 
+  if (!settled) {
+    handshakeTimer = setTimeout(() => lose("The agent did not answer in time."), options.handshakeTimeoutMs ?? DEFAULT_HANDSHAKE_TIMEOUT_MS);
+    void (async () => {
+      await handshake();
+      clearTimeout(handshakeTimer);
+      if (!settled && !cancelled && !transportEnded) await converse();
+    })().catch((error: unknown) => {
+      lose(error instanceof Error && error.message.length > 0 ? error.message : "The agent could not start its turn.");
+    });
+  }
+
   const steer = async (said: string): Promise<boolean> => {
-    if (settled || cancelled || said.trim().length === 0) return false;
+    if (settled || cancelled || transportEnded || said.trim().length === 0) return false;
     queued.push(said);
     return true;
   };
