@@ -81,7 +81,10 @@ const unitTests = () => {
 
 console.log('\nGates')
 
-// 1. The real gate, both configs, exactly as CI would run it.
+// 1. The real gate, both configs, exactly as CI would run it. The app's typecheck and tests read the workspace
+//    packages' BUILT types (their dist/), so the packages are built first: the 0.796.0 ship read the 0.795 build of
+//    runtime-adapters, which had none of the browser's types, and failed a typecheck that passed on a fresh build.
+run('pnpm', ['--filter', './packages/*', 'build'], 'build the workspace packages the app reads')
 run('pnpm', ['typecheck'], 'pnpm typecheck (node AND web configs)')
 unitTests()
 
