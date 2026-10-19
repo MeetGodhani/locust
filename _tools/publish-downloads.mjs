@@ -44,8 +44,19 @@ const typeOf = (name) => TYPES[Object.keys(TYPES).find((ending) => name.endsWith
 
 // No shell: wrangler is run by node from npx's own script, with fixed arguments.
 function put(key, file, { fresh = false } = {}) {
-  const run = spawnSync(process.execPath, [npxCli(), '--yes', 'wrangler@4', 'r2', 'object', 'put', `${BUCKET}/${key}`, '--file', file, '--remote', '--content-type', typeOf(key), ...(fresh ? ['--cache-control', 'no-cache'] : [])], { encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 })
-  if (run.status !== 0) fail(`uploading ${key} failed (exit ${String(run.status)}): ${(run.stderr || run.stdout || '').trim().slice(-400)}`)
+  for (let attempt = 1; ; attempt += 1) {
+    const run = spawnSync(process.execPath, [npxCli(), '--yes', 'wrangler@4', 'r2', 'object', 'put', `${BUCKET}/${key}`, '--file', file, '--remote', '--content-type', typeOf(key), ...(fresh ? ['--cache-control', 'no-cache'] : [])], { encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 })
+    if (run.status === 0) return
+    const said = (run.stderr || run.stdout || '').trim()
+    // Cloudflare's API answered a 134 MB upload with its "502: Bad gateway" page twice (0.793.0 and 0.794.0, both in
+    // the Linux attach's promote): a gateway or connection failure is tried twice more; anything else stops here.
+    if (attempt < 3 && /\b50[234]\b|Bad Gateway|Service Unavailable|Gateway Time-?out|ECONNRESET|ETIMEDOUT/i.test(said)) {
+      say(`  ${key}: Cloudflare's gateway failed (try ${String(attempt)} of 3); again in ${String(attempt * 15)} s`)
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, attempt * 15_000)
+      continue
+    }
+    fail(`uploading ${key} failed (exit ${String(run.status)}): ${said.slice(-400)}`)
+  }
 }
 function npxCli() {
   const cli = join(process.execPath, '..', 'node_modules', 'npm', 'bin', 'npx-cli.js')
@@ -137,7 +148,16 @@ if (macDir !== undefined) {
   if (!existsSync(local)) fail(`${installer} is not in ${RELEASE}; the site's Locust-Setup.exe is uploaded from it`)
   const dir = scratch()
   writeFileSync(join(dir, 'latest.yml'), feed)
-  await upload('Locust-Setup.exe', local, { fresh: true })
+  // A promote run again -- the Mac and Linux attaches each promote after the first -- finds this version's installer
+  // already up: the first promote put it there before latest.yml, which goes last. Sending the same 134 MB again only
+  // gave Cloudflare's API the chance to fail it (above), so a copy this version already holds is left as it is.
+  const tester = await fetchText('latest.yml')
+  const holding = await fetch(`${DOWNLOADS}Locust-Setup.exe?check=${String(Date.now())}`, { method: 'HEAD', headers: { 'Accept-Encoding': 'identity' } }).catch(() => undefined)
+  if (tester !== undefined && tester.includes(`version: ${version}`) && holding?.ok === true && Number(holding.headers.get('content-length')) === statSync(local).size) {
+    say(`  Locust-Setup.exe  already ${version}'s, left as it is`)
+  } else {
+    await upload('Locust-Setup.exe', local, { fresh: true })
+  }
   // The Mac release list, newest first, in the shape GitHub's releases API answered in (src/main/mac-release.ts).
   const mac = await fetchText(`Locust-${version}-mac.json`)
   // The Linux packages and their feed, when the CI run has put them up (0.789).
