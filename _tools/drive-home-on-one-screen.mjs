@@ -57,7 +57,7 @@ const MEASURE = `(() => {
     starters: top('.lc-homestarts'),
     scoutLine: document.querySelector('section[aria-label="Scout keeps watch"]') !== null,
     scoutCard,
-    look: document.querySelector('button[aria-label="Scout: look now"]') !== null,
+    look: document.querySelector('.lc-hometeam__slot .lc-hometeam__look') !== null,
     tight: pane.classList.contains('is-tight'),
     coverK: getComputedStyle(pane.querySelector('.lc-cover') ?? pane).getPropertyValue('--lc-cover-k'),
     coverGrow: getComputedStyle(pane.querySelector('.lc-cover') ?? pane).getPropertyValue('--lc-cover-grow'),
