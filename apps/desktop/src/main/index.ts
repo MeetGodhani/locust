@@ -2608,13 +2608,13 @@ if (!ownsSingleInstanceLock) {
     })
     let claudeContextReader: ClaudeContextReader | undefined
     const codexMissions = createCodexMissionService({
+      references,
+      organizationPolicy,
+      workspacePath,
       claudeContext: {
         beforeStart: async () => { await claudeContextReader?.beforeStart() },
         remember: async (id, launch) => { await claudeContextReader?.remember(id, launch) }
       },
-      references,
-      organizationPolicy,
-      workspacePath,
       // 0.458: the window's folder now, and a conversation's own folder by id.
       currentFolder: () => workspacePath,
       folderOf: workableFolderOf,
