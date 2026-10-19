@@ -2713,7 +2713,7 @@ export function Composer({
                       if (account !== undefined) return <>{runtimeLabel}{` · ${accountName(account)}`}</>
                       return defaultModelName === undefined ? runtimeLabel : (
                         <>
-                          {runtimeLabel}
+                          <span className="lc-control__runtime">{runtimeLabel}</span>
                           <span className="lc-separator">/</span>
                           <span className="lc-control__mono lc-control__model">{defaultModelName}</span>
                         </>
@@ -2723,7 +2723,7 @@ export function Composer({
                     <>
                       {!ownModel && (
                         <>
-                          {runtimeLabel}
+                          <span className="lc-control__runtime">{runtimeLabel}</span>
                           <span className="lc-separator">/</span>
                         </>
                       )}

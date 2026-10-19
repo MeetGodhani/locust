@@ -21,24 +21,35 @@ export function ChatCommands(): ReactElement {
   const global = commands.filter((command) => command.source === 'global')
   const project = commands.filter((command) => command.source === 'project')
   const rows = (list: readonly ListedCommand[], empty: string) => list.length === 0
-    ? <p className="lc-settings__note">{empty}</p>
+    ? <span className="lc-settings__note">{empty}</span>
     : list.map((command) => (
-        <p key={`${command.source}:${command.name}`} className="lc-commandlist__name">
+        <span key={`${command.source}:${command.name}`} className="lc-commandlist__name">
           <span className="lc-mono">/{command.name}</span>
           {command.description !== undefined && <span className="lc-settings__note">{command.description}</span>}
-        </p>
+        </span>
       ))
+  /*
+   * A ROW EACH, AS EVERY OTHER SETTINGS PAGE DRAWS ITS PLACES (0.800): the two places were headings in the code
+   * face at nearly a heading's size, with an Open folder button under each, on the one page that looked like that.
+   * Now each is a row of the page's own box: where, what is there, and Open folder at its end.
+   */
   return (
     <div className="lc-commandlist">
-      <div className="lc-commandlist__item">
-        <span className="lc-mono">On this computer</span>
-        {rows(global, 'No commands yet. Open the folder and add a Markdown file.')}
-        <button type="button" className="lc-button" aria-label="Open your commands folder" onClick={() => open('global')}>Open folder</button>
-      </div>
-      <div className="lc-commandlist__item">
-        <span className="lc-mono">This folder</span>
-        {rows(project, 'No commands in this folder yet.')}
-        <button type="button" className="lc-button" aria-label="Open this folder's commands" onClick={() => open('project')}>Open folder</button>
+      <div className="lc-settingrows">
+        <div className="lc-settingrow">
+          <div className="lc-settingline__text">
+            <span className="lc-commandlist__where">On this computer</span>
+            {rows(global, 'None yet. Add a Markdown file to the folder.')}
+          </div>
+          <button type="button" className="lc-button" aria-label="Open your commands folder" onClick={() => open('global')}>Open folder</button>
+        </div>
+        <div className="lc-settingrow">
+          <div className="lc-settingline__text">
+            <span className="lc-commandlist__where">This folder</span>
+            {rows(project, 'None in this folder yet.')}
+          </div>
+          <button type="button" className="lc-button" aria-label="Open this folder's commands" onClick={() => open('project')}>Open folder</button>
+        </div>
       </div>
       {note !== undefined && <p className="lc-settings__note">{note}</p>}
     </div>

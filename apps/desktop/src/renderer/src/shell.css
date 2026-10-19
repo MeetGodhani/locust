@@ -8526,6 +8526,28 @@ textarea {
   .lc-composer__controls .lc-control__model {
     max-width: 9ch;
   }
+
+  /*
+   * TWO ROWS, SEND AT THE END OF THE SECOND (0.800). With the browser open the box is ~380px, and the right group
+   * wrapped inside itself: the model, voice typing and Talk on one line and Send alone on a third, under them
+   * (point-at-the-browser frames, 0.798). The group is the second row, whole, and the model chip's Free tag gives
+   * way so it fits on it; the model menu still says which models are free.
+   */
+  .lc-composer__controls .lc-composer__group + .lc-composer__group:not(:has(.lc-compare-slots)) {
+    flex-basis: 100%;
+    flex-wrap: nowrap;
+  }
+
+  .lc-composer__controls .lc-control__free {
+    display: none;
+  }
+
+  /* "OpenCode / Deepseek..." is the mark and the model here: the mark already says the runtime, and the chip's hover
+     says the whole route. A chip that is the runtime alone ("Claude") keeps its name. */
+  .lc-composer__controls .lc-control__runtime:has(+ .lc-separator),
+  .lc-composer__controls .lc-control__runtime + .lc-separator {
+    display: none;
+  }
 }
 
 .lc-composer__group + .lc-composer__group {
@@ -23657,17 +23679,20 @@ textarea.lc-compare__judgecriteria {
   flex-direction: column;
   gap: var(--lc-space-5);
 }
-.lc-commandlist__item {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--lc-space-3);
+/* Where a command's file lives, as a row's name reads on every Settings page (0.800). */
+.lc-commandlist__where {
+  color: var(--lc-text-primary);
+  font-weight: 500;
 }
 .lc-commandlist__name {
   display: flex;
-  flex-direction: column;
-  gap: var(--lc-space-2);
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--lc-space-2) var(--lc-space-4);
   margin: 0;
+}
+.lc-commandlist .lc-settingrow > .lc-button {
+  flex: none;
 }
 
 .lc-browser__point { display: grid; place-items: center; flex: none; padding: 3px; border: 0; border-radius: var(--lc-radius-control); background: transparent; color: var(--lc-text-muted); cursor: pointer; transition: color var(--lc-motion-hover) var(--lc-ease), background var(--lc-motion-hover) var(--lc-ease); }
