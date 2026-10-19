@@ -112,6 +112,11 @@ try {
   check('each dropdown sets its own column: the two free models', started.labels.map(asId).join('|') === PICKS.join('|'), JSON.stringify(started.labels))
 
   const built = JSON.parse(String(await drive.capture('Both pages running side by side, each built in its own copy', () => drive.evaluate(`(async () => {
+    // The row's words end "It is for: " (2026-10-19): the person says what the page is for, so the drive does.
+    const field = document.querySelector('form.command-dock textarea')
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(field, field.value + 'a small coffee shop called Ember.')
+    field.dispatchEvent(new Event('input', { bubbles: true }))
+    await new Promise((r) => setTimeout(r, 300))
     document.querySelector('button[aria-label="Send"]')?.click()
     for (let i = 0; i < 1600; i += 1) {
       await new Promise((r) => setTimeout(r, 500))

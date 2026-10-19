@@ -20,6 +20,9 @@ describe('the Home starter that builds a page', () => {
       expect(starter.compareChanges).toBe(true)
       expect(starter.prompt).toMatch(/^Make [a-z]+\.html: /)
       expect(starter.prompt).toMatch(/One file/)
+      // For anything the person is making, not one example business (2026-10-19): they finish the words.
+      expect(starter.prompt.endsWith(': ')).toBe(true)
+      expect(`${starter.line} ${starter.prompt}`).not.toMatch(/coffee/i)
     }
   })
 })

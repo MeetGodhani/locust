@@ -126,7 +126,7 @@ try {
   await sleep(1200)
   const after = await read()
   await drive.capture('after pressing the landing page row', async () => JSON.stringify({ composer: after.composer.slice(0, 120) }))
-  check('pressing the landing page row fills the box with that ask', /coffee shop/.test(after.composer), after.composer.slice(0, 120))
+  check('pressing the landing page row fills the box with that ask', /landing page/.test(after.composer), after.composer.slice(0, 120))
   // Direct, Compare or Blind lives in the chat mode chip (0.451), as drive-build-and-compare reads it.
   const chatMode = async () => String(await drive.evaluate(`document.querySelector('.lc-control--chatmode')?.getAttribute('aria-label')?.replace('Chat mode: ', '') ?? ''`))
   const direct = await chatMode()
@@ -137,7 +137,7 @@ try {
   const compared = await read()
   const compareMode = await chatMode()
   await drive.capture('after pressing the landing page row\'s Compare', async () => JSON.stringify({ composer: compared.composer.slice(0, 120), mode: compareMode }))
-  check('its Compare turns Compare on, with the same ask in the box', /compare|blind/i.test(compareMode) && /coffee shop/.test(compared.composer), `chat mode: ${compareMode}`)
+  check('its Compare turns Compare on, with the same ask in the box', /compare|blind/i.test(compareMode) && /landing page/.test(compared.composer), `chat mode: ${compareMode}`)
   say(failures === 0 ? '\nHOME SAYS CONNECTED ACCOUNTS PASSED' : `\nHOME SAYS CONNECTED ACCOUNTS: ${String(failures)} FAILED`)
 } catch (error) {
   failures += 1

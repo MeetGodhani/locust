@@ -28,7 +28,7 @@ export const STARTERS: readonly Starter[] = [
   { id: 'plan', label: 'Plan before building', line: 'Agree on the approach before anything changes', icon: 'route', mode: 'plan', compareChanges: false, prompt: 'Read the code first, change nothing, and plan how to: ' },
   { id: 'debug', label: 'Debug an issue', line: 'Find the root cause and fix it', icon: 'target', compareChanges: true, prompt: 'Find the root cause of this bug, fix it, and show what you changed: ' },
   { id: 'review', label: 'Review my changes', line: 'Read this branch’s changes like a careful reviewer', icon: 'eye', mode: 'ask', compareChanges: false, prompt: 'Review the changes on this branch as a careful reviewer. List bugs and risks by severity, each with its file and line. Change nothing.' },
-  { id: 'page', label: 'Build a landing page', line: 'For a coffee shop, built and running', icon: 'page', compareChanges: true, prompt: 'Make index.html: a one-page landing page for a small coffee shop, with a headline, three menu items with prices, and opening hours. One file, all CSS inside it.' }
+  { id: 'page', label: 'Build a landing page', line: 'For whatever you’re launching, built and running', icon: 'page', compareChanges: true, prompt: 'Make index.html: a one-page landing page with a headline, what it offers, and a clear way to get in touch. One file, all CSS inside it. It is for: ' }
 ]
 
 /** The landing page drawn as itself (the 0.461 drawing): a browser window with a headline. */
