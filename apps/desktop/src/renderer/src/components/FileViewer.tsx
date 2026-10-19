@@ -13,6 +13,7 @@ import { DocumentView } from './DocumentView.js'
 import { fileAsItWas } from '../fileVersions.js'
 import { documentChanges } from '../documentChange.js'
 import { DocumentChange } from './DocumentChange.js'
+import { ZoomableImage } from './ZoomableImage.js'
 import type { OfficeDocument } from '../../../shared/office-document.js'
 import type { Workbook } from '../../../shared/sheet.js'
 import { quoteOfPagePick, VIEWER_FRAME_NAME } from '../../../shared/page-pick.js'
@@ -323,11 +324,7 @@ export function FileViewer({
            * on purpose, because an SVG is a document that can carry script.
            * It opens as code instead, which is the honest way to show one.
            */
-          <img
-            className="lc-viewer__image"
-            src={text}
-            alt={path.replace(/\\/g, '/').split('/').pop() ?? 'image'}
-          />
+          <ZoomableImage src={text} alt={path.replace(/\\/g, '/').split('/').pop() ?? 'image'} />
         ) : mode === 'pdf' && pdf !== undefined ? (
           // Its pages as Locust drew them for the agent (0.714): pictures, never the file run.
           <PdfPages name={fileName} pages={pdf.pages} pictures={pdf.pictures} folder={pdf.folder} />
