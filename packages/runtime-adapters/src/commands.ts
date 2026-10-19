@@ -539,14 +539,18 @@ export function createClaudeCommandListCommand(
   ], { stdin: "protocol", sandbox: "read-only" });
 }
 
-/** `--allowedTools` and its rules, or nothing at all when there are none. */
-function connectorRules(names: readonly string[] | undefined): readonly string[] {
-  if (names === undefined || names.length === 0) return [];
-  const rules: string[] = [];
-  for (const name of names) {
+/**
+ * `--allowedTools` and its rules, or nothing at all when there are none: the connectors a person ticked, and Locust's
+ * own browser (`mcp__locust_browser__*`) when the run has it. ONE flag (2026-10-19): the browser's rule arrived as a
+ * second `--allowedTools`, and whether the CLI keeps both lists or the last is a guess nobody measured.
+ */
+function connectorRules(names: readonly string[] | undefined, browser = false): readonly string[] {
+  const rules: string[] = []
+  for (const name of names ?? []) {
     const rule = allowRuleFor(name);
     if (rule !== undefined && !rules.includes(rule)) rules.push(rule);
   }
+  if (browser) rules.push("mcp__locust_browser__*");
   return rules.length === 0 ? [] : ["--allowedTools", rules.join(",")];
 }
 
@@ -951,8 +955,7 @@ export function createClaudePrintCommand(
      * that would produce `mcp____*`, which the CLI ACCEPTS and which widens
      * a scope nobody chose. Failing closed there is deliberate.
      */
-    ...(auto ? [] : connectorRules(options.connectors)),
-    ...(auto || options.browserMcp === undefined ? [] : ["--allowedTools", "mcp__locust_browser__*"]),
+    ...(auto ? [] : connectorRules(options.connectors, options.browserMcp !== undefined)),
     /*
      * And somewhere to ASK, for everything the rules above did not cover.
      *
@@ -966,20 +969,22 @@ export function createClaudePrintCommand(
      */
     // No teammate ends the person's browser (0.717, main/command-guard.ts).
     ...(options.commandGuard === undefined ? [] : ["--settings", requireText(options.commandGuard.settingsPath, "Command guard settings")]),
-    ...(auto || options.permissionBridge === undefined
-      ? []
-      : [
-          "--mcp-config",
-          requireText(options.permissionBridge.configPath, "Permission bridge config"),
-          "--permission-prompt-tool",
-          requireText(options.permissionBridge.toolName, "Permission tool"),
-        ]),
-    ...(options.browserMcp === undefined
-      ? []
-      : [
-          "--mcp-config",
-          requireText(options.browserMcp.configPath, "Browser MCP config"),
-        ]),
+    /*
+     * ONE `--mcp-config` naming every server file this run takes (2026-10-19): the permission bridge outside Auto,
+     * and Locust's browser when the run has it. The browser's file arrived as a second `--mcp-config`, and if the CLI
+     * kept only the last, the bridge -- and with it every connector's question to the person -- would be gone.
+     */
+    ...((): readonly string[] => {
+      const bridge = auto || options.permissionBridge === undefined ? undefined : options.permissionBridge
+      const files = [
+        ...(bridge === undefined ? [] : [requireText(bridge.configPath, "Permission bridge config")]),
+        ...(options.browserMcp === undefined ? [] : [requireText(options.browserMcp.configPath, "Browser MCP config")])
+      ]
+      return [
+        ...(files.length === 0 ? [] : ["--mcp-config", ...files]),
+        ...(bridge === undefined ? [] : ["--permission-prompt-tool", requireText(bridge.toolName, "Permission tool")])
+      ]
+    })(),
   ];
   // `--add-dir` too outside Auto: `--restricted` confines the file tools to
   // the working directories, and a skill reads the files kept beside its
