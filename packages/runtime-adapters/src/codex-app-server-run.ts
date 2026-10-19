@@ -45,6 +45,8 @@ export interface AppServerRunProcess {
   kill(): void;
   onData(listener: (chunk: string) => void): void;
   onExit(listener: () => void): void;
+  /** The output transport ended, even if the process itself is still alive. */
+  onStdoutClose?(listener: (error?: Error) => void): void;
   /**
    * The end of what the server wrote to stderr, when it is kept (QA-2026-09-29
    * round 2, N10): a server that dies says why there, and the card showed the
