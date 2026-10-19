@@ -11,6 +11,12 @@ Settings shows this file as What's new. An entry may group its changes under
 about when they arrive on it carries `<!-- big -->` on the line under its
 heading: the home screen then shows it once, as a splash.
 
+## 0.793.0 - 2026-10-19
+
+### Fixed
+
+- **An OpenCode turn that loses its connection keeps every step, not just its answer.** When OpenCode's live connection closed before a turn finished, Locust kept only the final answer: the commands the teammate ran, the files it read and what came back were missing from the conversation. Locust now reads the whole turn back from OpenCode and shows each step once, in the order it happened, before the answer. Found and fixed by Mit Godhani.
+
 ## 0.792.0 - 2026-10-18
 
 ### Improved
