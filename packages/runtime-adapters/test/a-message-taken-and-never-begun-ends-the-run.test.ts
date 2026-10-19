@@ -659,8 +659,8 @@ describe("an OpenCode follow-up recovered by its prompt ID", () => {
   });
 });
 
-describe("an OpenCode recovery that is still working after ten seconds", () => {
-  it.each(["busy", "working", "retry"])("keeps polling %s beyond ten seconds and then recovers", async (type) => {
+describe("an OpenCode recovery that is still active after ten seconds", () => {
+  it.each(["busy", "retry"])("keeps polling %s beyond ten seconds and then recovers", async (type) => {
     vi.useFakeTimers();
     let active = true;
     const server = fakeClosedServer({ events: [promptMessage()], statusResponse: () => Response.json(active ? { [SESSION]: { type } } : {}), messages: [answerTo()] });
@@ -771,5 +771,260 @@ describe("an OpenCode recovery that is still working after ten seconds", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+type ReplayPart = Record<string, unknown>;
+type ReplayRecord = { type: string; part: ReplayPart };
+
+function toolStep(id: string, created: number, toolId = `${id}_002`) {
+  return {
+    info: { id, role: "assistant", sessionID: SESSION, parentID: "msg_current_prompt", finish: "tool-calls", time: { created, completed: created + 1 } },
+    parts: [
+      { id: `${id}_001`, type: "step-start", messageID: id, sessionID: SESSION },
+      { id: toolId, type: "tool", messageID: id, sessionID: SESSION, tool: "bash", callID: `call_${id}`, state: { status: "completed", input: { command: `echo ${id}` }, output: `output ${id}`, time: { start: created, end: created + 1 } } },
+      { id: `${id}_003`, type: "step-finish", messageID: id, sessionID: SESSION, reason: "tool-calls", cost: 0, tokens: { input: 2, output: 1, reasoning: 0, cache: { read: 0, write: 0 } } },
+    ] satisfies ReplayPart[],
+  };
+}
+
+function finalStep(created = 100) {
+  const message = answerTo();
+  return {
+    ...message,
+    info: { ...message.info, time: { created, completed: created + 1 } },
+    parts: message.parts.map((part, index) => ({ ...part, id: `prt_final_00${String(index + 1)}` })),
+  };
+}
+
+const messageEvent = (info: object) => ({ type: "message.updated", properties: { sessionID: SESSION, info } });
+const partEvent = (part: ReplayPart) => ({ type: "message.part.updated", properties: { sessionID: SESSION, part } });
+const rawReplay = (run: Run) => run.records.drainAvailable().map((record) => JSON.parse(record.raw) as ReplayRecord);
+
+describe("an OpenCode recovery that replays the current turn's tool steps", () => {
+  it("replays both disconnected tool steps in order before the final answer and completion", async () => {
+    const first = toolStep("msg_step_1", 10);
+    const second = toolStep("msg_step_2", 20);
+    const final = finalStep();
+    const server = fakeClosedServer({ events: [promptMessage()], messages: [first, second, final] });
+    await inspect(server, async (run) => {
+      const completion = await completionWithin(run);
+      expect(completion).toMatchObject({ exitCode: 0, cancelled: false, stderr: "" });
+      const records = run.records.drainAvailable();
+      const raw = records.map((record) => JSON.parse(record.raw) as ReplayRecord);
+      expect(raw.map((record) => [record.type, record.part.messageID])).toEqual([
+        ["step_start", first.info.id], ["tool_use", first.info.id], ["step_finish", first.info.id],
+        ["step_start", second.info.id], ["tool_use", second.info.id], ["step_finish", second.info.id],
+        ["text", final.info.id], ["step_finish", final.info.id],
+      ]);
+      const normalizer = createOpenCodeEventNormalizer({ runId: "run_replay", missionId: "mission_replay", cliVersion: "1.18.27" });
+      const events = records.flatMap((record) => normalizer.accept(record));
+      events.push(...normalizer.finish(completion));
+      expect(events.filter((event) => event.type === "tool.completed").map((event) => event.payload.itemId)).toEqual([`call_${first.info.id}`, `call_${second.info.id}`]);
+      const finalTextAt = events.findIndex((event) => event.type === "message.delta");
+      expect(finalTextAt).toBeGreaterThan(events.map((event) => event.type).lastIndexOf("tool.completed"));
+      expect(events.at(-1)?.type).toBe("run.completed");
+      expect(server.calls.filter((call) => call.path.endsWith("/prompt_async"))).toHaveLength(1);
+    }, { resumeSessionId: SESSION });
+  });
+
+  it("does not replay a tool step already settled on the live stream", async () => {
+    const first = toolStep("msg_streamed_step", 10);
+    const second = toolStep("msg_missing_step", 20);
+    const final = finalStep();
+    const server = fakeClosedServer({
+      events: [promptMessage(), messageEvent(first.info), ...first.parts.map(partEvent)],
+      messages: [first, second, final],
+    });
+    await inspect(server, async (run) => {
+      expect((await completionWithin(run)).exitCode).toBe(0);
+      const records = rawReplay(run);
+      expect(records.map((record) => [record.type, record.part.messageID])).toEqual([
+        ["step_start", first.info.id], ["tool_use", first.info.id], ["step_finish", first.info.id],
+        ["step_start", second.info.id], ["tool_use", second.info.id], ["step_finish", second.info.id],
+        ["text", final.info.id], ["step_finish", final.info.id],
+      ]);
+      expect(records.filter((record) => record.type === "tool_use").map((record) => record.part.callID)).toEqual([`call_${first.info.id}`, `call_${second.info.id}`]);
+    }, { resumeSessionId: SESSION });
+  });
+
+  it("replays a tool that was still running when the stream disconnected exactly once", async () => {
+    const step = toolStep("msg_running_step", 10);
+    const completed = step.parts[1]!;
+    const running = { ...completed, state: { status: "running", input: { command: "echo msg_running_step" }, time: { start: 10 } } };
+    const server = fakeClosedServer({
+      events: [promptMessage(), messageEvent(step.info), partEvent(step.parts[0]!), partEvent(running), partEvent(running)],
+      messages: [step, finalStep()],
+    });
+    await inspect(server, async (run) => {
+      expect((await completionWithin(run)).exitCode).toBe(0);
+      const records = rawReplay(run);
+      expect(records.filter((record) => record.type === "tool_use").map((record) => record.part)).toEqual([completed]);
+      expect(records.filter((record) => record.type === "step_start")).toHaveLength(1);
+      expect(records.map((record) => record.type)).toEqual(["step_start", "tool_use", "step_finish", "text", "step_finish"]);
+    }, { resumeSessionId: SESSION });
+  });
+
+  it("orders recovered messages by creation time and then message ID instead of response order", async () => {
+    const first = toolStep("msg_earliest", 10);
+    const second = toolStep("msg_same_time_a", 20);
+    const third = toolStep("msg_same_time_b", 20);
+    const server = fakeClosedServer({ events: [promptMessage()], messages: [finalStep(), third, first, second] });
+    await inspect(server, async (run) => {
+      expect((await completionWithin(run)).exitCode).toBe(0);
+      const records = rawReplay(run);
+      expect(records.filter((record) => record.type === "tool_use").map((record) => record.part.messageID)).toEqual([first.info.id, second.info.id, third.info.id]);
+      expect(records.at(-2)?.type).toBe("text");
+      expect(records.at(-1)?.part.reason).toBe("stop");
+    }, { resumeSessionId: SESSION });
+  });
+
+  it("orders shuffled step markers and tools by their chronological part IDs", async () => {
+    const step = toolStep("msg_shuffled_parts", 10);
+    const start = { ...step.parts[0]!, id: "prt_001" };
+    const tool = { ...step.parts[1]!, id: "prt_002" };
+    const end = { ...step.parts[2]!, id: "prt_003" };
+    const server = fakeClosedServer({ events: [promptMessage()], messages: [{ ...step, parts: [end, tool, start] }, finalStep()] });
+    await inspect(server, async (run) => {
+      expect((await completionWithin(run)).exitCode).toBe(0);
+      expect(rawReplay(run).slice(0, 3).map((record) => [record.type, record.part.id])).toEqual([
+        ["step_start", "prt_001"], ["tool_use", "prt_002"], ["step_finish", "prt_003"],
+      ]);
+    }, { resumeSessionId: SESSION });
+  });
+
+  it("uses tool timestamps to order recovered parts when their IDs are absent", async () => {
+    const step = toolStep("msg_no_part_ids", 10);
+    const { id: _id, ...first } = step.parts[1]!;
+    const second = { ...first, callID: "call_second_no_id", state: { status: "completed", input: { command: "echo second" }, output: "second output", time: { start: 20, end: 21 } } };
+    const server = fakeClosedServer({ events: [promptMessage()], messages: [{ ...step, parts: [second, first] }, finalStep()] });
+    await inspect(server, async (run) => {
+      expect((await completionWithin(run)).exitCode).toBe(0);
+      expect(rawReplay(run).filter((record) => record.type === "tool_use").map((record) => record.part.callID)).toEqual([first.callID, second.callID]);
+    }, { resumeSessionId: SESSION });
+  });
+
+  it("keeps multiple imported step boundaries in order while recovering one assistant message", async () => {
+    const step = toolStep("msg_imported_steps", 10);
+    const firstStart = { ...step.parts[0]!, id: "imported_start_1" };
+    const firstTool = { ...step.parts[1]!, id: "imported_tool_1" };
+    const firstEnd = { ...step.parts[2]!, id: "imported_finish_1", tokens: { input: 2, output: 3, reasoning: 0, cache: { read: 0, write: 0 } } };
+    const secondStart = { ...step.parts[0]!, id: "imported_start_2" };
+    const secondTool = { ...step.parts[1]!, id: "imported_tool_2", callID: "call_second_imported", state: { status: "completed", input: { command: "echo second" }, output: "second output", time: { start: 20, end: 21 } } };
+    const secondEnd = { ...step.parts[2]!, id: "imported_finish_2", tokens: { input: 5, output: 7, reasoning: 0, cache: { read: 0, write: 0 } } };
+    const ordered = [firstStart, firstTool, firstEnd, secondStart, secondTool, secondEnd];
+    const server = fakeClosedServer({ events: [promptMessage()], messages: [{ ...step, parts: ordered }, finalStep()] });
+    await inspect(server, async (run) => {
+      const completion = await completionWithin(run);
+      expect(completion.exitCode).toBe(0);
+      const records = run.records.drainAvailable();
+      const raw = records.map((record) => JSON.parse(record.raw) as ReplayRecord);
+      expect(raw.slice(0, 6).map((record) => [record.type, record.part.id])).toEqual([
+        ["step_start", firstStart.id], ["tool_use", firstTool.id], ["step_finish", firstEnd.id],
+        ["step_start", secondStart.id], ["tool_use", secondTool.id], ["step_finish", secondEnd.id],
+      ]);
+      const normalizer = createOpenCodeEventNormalizer({ runId: "run_imported_steps", cliVersion: "1.18.27" });
+      const events = records.flatMap((record) => normalizer.accept(record));
+      events.push(...normalizer.finish(completion));
+      expect(events.filter((event) => event.type === "step.started")).toHaveLength(2);
+      expect(events.filter((event) => event.type === "step.completed")).toHaveLength(2);
+      expect(events.at(-1)).toMatchObject({ type: "run.completed", payload: { usage: { inputTokens: 8, outputTokens: 11 } } });
+    }, { resumeSessionId: SESSION });
+  });
+
+  it("replays a failed tool with its complete diagnostics before the final answer", async () => {
+    const step = toolStep("msg_failed_tool", 10);
+    const error = `Build failed: src/widgets.ts:27\nTypeError: unexpected response\n${"diagnostic detail ".repeat(100)}`;
+    const failed = { ...step.parts[1]!, state: { status: "error", input: { command: "npm run build" }, error, metadata: { exit: 2 }, time: { start: 10, end: 11 } } };
+    const server = fakeClosedServer({ events: [promptMessage()], messages: [{ ...step, parts: [step.parts[0], failed, step.parts[2]] }, finalStep()] });
+    await inspect(server, async (run) => {
+      const completion = await completionWithin(run);
+      expect(completion.exitCode).toBe(0);
+      const records = run.records.drainAvailable();
+      const raw = records.map((record) => JSON.parse(record.raw) as ReplayRecord);
+      expect(raw.find((record) => record.type === "tool_use")?.part).toEqual(failed);
+      expect(raw.findIndex((record) => record.type === "tool_use")).toBeLessThan(raw.findIndex((record) => record.type === "text"));
+      const normalizer = createOpenCodeEventNormalizer({ runId: "run_failed_tool_replay", cliVersion: "1.18.27" });
+      const events = records.flatMap((record) => normalizer.accept(record));
+      events.push(...normalizer.finish(completion));
+      expect(events.filter((event) => event.type === "tool.failed")).toHaveLength(1);
+      expect(events.at(-1)?.type).toBe("run.completed");
+    }, { resumeSessionId: SESSION });
+  });
+
+  it("excludes historical turns, foreign sessions and mismatched parts from tool replay", async () => {
+    const current = toolStep("msg_current_tool", 10);
+    const historical = toolStep("msg_old_tool", 1);
+    const foreign = toolStep("msg_foreign_tool", 2);
+    const final = finalStep();
+    const server = fakeClosedServer({ events: [promptMessage(), messageEvent({ id: "msg_other", role: "assistant", sessionID: SESSION, parentID: "msg_previous_prompt" })], messages: [
+      { ...historical, info: { ...historical.info, parentID: "msg_previous_prompt" } },
+      { ...foreign, info: { ...foreign.info, sessionID: "ses_other" } },
+      { ...historical, info: { ...historical.info, role: "user" } },
+      { ...current, parts: [...current.parts, { ...current.parts[1], id: "foreign_session_part", sessionID: "ses_other" }, { ...current.parts[1], id: "foreign_message_part", messageID: "msg_other" }] },
+      null, 42, { info: null, parts: [] }, { info: { ...current.info, id: undefined }, parts: current.parts },
+      final,
+    ] });
+    await inspect(server, async (run) => {
+      expect((await completionWithin(run)).exitCode).toBe(0);
+      const records = rawReplay(run);
+      expect(records.filter((record) => record.type === "tool_use").map((record) => record.part)).toEqual([current.parts[1]]);
+      expect(records.map((record) => record.part.messageID)).toEqual([current.info.id, current.info.id, current.info.id, final.info.id, final.info.id]);
+    }, { resumeSessionId: SESSION });
+  });
+
+  it("emits duplicate recovered messages and parts only once", async () => {
+    const step = toolStep("msg_duplicated_tool", 10);
+    const final = finalStep();
+    const repeated = { ...step, parts: [...step.parts, ...step.parts] };
+    const server = fakeClosedServer({ events: [promptMessage()], messages: [repeated, step, final, final] });
+    await inspect(server, async (run) => {
+      const completion = await completionWithin(run);
+      expect(completion.exitCode).toBe(0);
+      const records = run.records.drainAvailable();
+      expect(records.map((record) => JSON.parse(record.raw) as ReplayRecord).map((record) => [record.type, record.part.id])).toEqual([
+        ["step_start", step.parts[0]!.id], ["tool_use", step.parts[1]!.id], ["step_finish", step.parts[2]!.id],
+        ["text", final.parts[0]!.id], ["step_finish", final.parts[1]!.id],
+      ]);
+      const normalizer = createOpenCodeEventNormalizer({ runId: "run_duplicate_steps", cliVersion: "1.18.27" });
+      for (const record of records) normalizer.accept(record);
+      expect(normalizer.finish(completion).at(-1)).toMatchObject({ type: "run.completed", payload: { usage: { inputTokens: 3, outputTokens: 2 } } });
+    }, { resumeSessionId: SESSION });
+  });
+
+  it("keeps distinct no-ID tool payloads beyond the old 80-character prefix and deduplicates equivalent payloads", async () => {
+    const step = toolStep("msg_payload_fallback", 10);
+    const command = `echo ${"shared long prefix ".repeat(20)}`;
+    const first = { type: "tool", messageID: step.info.id, sessionID: SESSION, tool: "bash", state: { status: "completed", input: { command }, output: "first output", time: { start: 10, end: 11 } }, callID: "call_no_id_first" };
+    const second = { ...first, state: { ...first.state, output: "second output", time: { start: 20, end: 21 } }, callID: "call_no_id_second" };
+    const duplicate = { callID: first.callID, state: { time: first.state.time, output: first.state.output, input: first.state.input, status: first.state.status }, tool: first.tool, sessionID: first.sessionID, messageID: first.messageID, type: first.type };
+    const server = fakeClosedServer({ events: [promptMessage(), messageEvent(step.info), partEvent(first)], messages: [{ ...step, parts: [duplicate, second, first] }, finalStep()] });
+    await inspect(server, async (run) => {
+      expect((await completionWithin(run)).exitCode).toBe(0);
+      const records = rawReplay(run);
+      expect(records.filter((record) => record.type === "tool_use").map((record) => record.part.callID)).toEqual([first.callID, second.callID]);
+      expect(records.filter((record) => record.type === "tool_use").map((record) => (record.part.state as { output: string }).output)).toEqual(["first output", "second output"]);
+    }, { resumeSessionId: SESSION });
+  });
+
+  it("rejects the unsupported working status instead of polling it as active", async () => {
+    const server = fakeClosedServer({ events: [promptMessage()], status: { [SESSION]: { type: "working" } }, messages: [finalStep()] });
+    await inspect(server, async (run) => {
+      expect((await completionWithin(run)).exitCode).toBe(1);
+      expect(server.calls.filter((call) => call.path === "/session/status")).toHaveLength(1);
+      expect(server.calls.some((call) => call.path.endsWith("/message"))).toBe(false);
+      expect(run.records.drainAvailable()).toEqual([]);
+    }, { resumeSessionId: SESSION, streamCloseTimeoutMs: 100, streamClosePollMs: 1 });
+  });
+
+  it("does not settle on an earlier stop while the latest matching message is unfinished", async () => {
+    const earlier = finalStep(10);
+    const latest = toolStep("msg_newer_incomplete", 20);
+    const server = fakeClosedServer({ events: [promptMessage()], messages: [latest, earlier] });
+    await inspect(server, async (run) => {
+      expect((await completionWithin(run)).exitCode).toBe(1);
+      expect(server.kill).toHaveBeenCalledOnce();
+      expect(server.calls.filter((call) => call.path.endsWith("/prompt_async"))).toHaveLength(1);
+    }, { resumeSessionId: SESSION });
   });
 });

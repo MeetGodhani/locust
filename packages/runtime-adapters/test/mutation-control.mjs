@@ -13,10 +13,12 @@
 
 import { execFileSync } from 'node:child_process'
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)))
+const VITEST = join(dirname(createRequire(import.meta.url).resolve('vitest/package.json')), 'vitest.mjs')
 const CLIENT = join(ROOT, 'src', 'app-server.ts')
 const EVENTS = join(ROOT, 'src', 'app-server-events.ts')
 const COMMANDS = join(ROOT, 'src', 'commands.ts')
@@ -34,6 +36,97 @@ const PROCESS_RUNNER = join(ROOT, 'src', 'process-runner.ts')
 const ANTIGRAVITY_EVENTS = join(ROOT, 'src', 'antigravity-events.ts')
 
 const MUTATIONS = [
+  {
+    file: OPENCODE_SERVE,
+    name: 'opencode-replay: only the final assistant message is recovered',
+    from: '      for (const message of turnMessages) {',
+    to: '      for (const message of turnMessages.slice(-1)) {',
+    expect: 'replays both disconnected tool steps in order before the final answer and completion'
+  },
+  {
+    file: OPENCODE_SERVE,
+    name: 'opencode-replay: messages keep the server response order',
+    from: '    return createdA - createdB || compareIds(text(a.info.id)!, text(b.info.id)!);',
+    to: '    return 0;',
+    expect: 'orders recovered messages by creation time and then message ID instead of response order'
+  },
+  {
+    file: OPENCODE_SERVE,
+    name: 'opencode-replay: messages created at the same time lose their ID ordering',
+    from: '    return createdA - createdB || compareIds(text(a.info.id)!, text(b.info.id)!);',
+    to: '    return createdA - createdB;',
+    expect: 'orders recovered messages by creation time and then message ID instead of response order'
+  },
+  {
+    file: OPENCODE_SERVE,
+    name: 'opencode-replay: shuffled part IDs are not ordered chronologically',
+    from: '    return parts.sort((a, b) => compareIds(text(a.id)!, text(b.id)!));',
+    to: '    return parts;',
+    expect: 'orders shuffled step markers and tools by their chronological part IDs'
+  },
+  {
+    file: OPENCODE_SERVE,
+    name: 'opencode-replay: no-ID part timestamps are ignored',
+    from: '      ? timed.sort((a, b) => a.at! - b.at!).map((entry) => entry.part) : span));',
+    to: '      ? span : span));',
+    expect: 'uses tool timestamps to order recovered parts when their IDs are absent'
+  },
+  {
+    file: OPENCODE_SERVE,
+    name: 'opencode-replay: imported step markers are grouped ahead of their tools',
+    from: '  return ordered;',
+    to: '  return [...ordered.filter((part) => part.type === "step-start"), ...ordered.filter((part) => part.type !== "step-start" && part.type !== "step-finish"), ...ordered.filter((part) => part.type === "step-finish")];',
+    expect: 'keeps multiple imported step boundaries in order while recovering one assistant message'
+  },
+  {
+    file: OPENCODE_SERVE,
+    name: 'opencode-replay: a streamed settled tool is emitted a second time',
+    from: '      if (emitted.has(key)) return;',
+    to: '      if (false) return;',
+    expect: 'does not replay a tool step already settled on the live stream'
+  },
+  {
+    file: OPENCODE_SERVE,
+    name: 'opencode-replay: distinct no-ID tools share their first eighty characters',
+    from: 'text(part.id) ?? partSignature(part)',
+    to: 'text(part.id) ?? JSON.stringify(part).slice(0, 80)',
+    expect: 'keeps distinct no-ID tool payloads beyond the old 80-character prefix and deduplicates equivalent payloads'
+  },
+  {
+    file: OPENCODE_SERVE,
+    name: 'opencode-replay: equivalent no-ID payload key ordering bypasses deduplication',
+    from: 'text(part.id) ?? partSignature(part)',
+    to: 'text(part.id) ?? JSON.stringify(part)',
+    expect: 'keeps distinct no-ID tool payloads beyond the old 80-character prefix and deduplicates equivalent payloads'
+  },
+  {
+    file: OPENCODE_SERVE,
+    name: 'opencode-replay: failed tool steps are discarded',
+    from: '(status === "completed" || status === "error")',
+    to: 'status === "completed"',
+    expect: 'replays a failed tool with its complete diagnostics before the final answer'
+  },
+  {
+    file: OPENCODE_SERVE,
+    name: 'opencode-replay: parts from a different message are replayed',
+    from: '          && part.messageID === message.info.id && part.sessionID === sessionId);',
+    to: '          && part.sessionID === sessionId);',
+    expect: 'excludes historical turns, foreign sessions and mismatched parts from tool replay'
+  },
+  {
+    file: OPENCODE_SERVE,
+    name: 'opencode-replay: an earlier stop hides a later unfinished message',
+    from: '      const completed = turnMessages.at(-1);',
+    to: '      const completed = turnMessages.find((message) => message.info.finish === "stop");',
+    expect: 'does not settle on an earlier stop while the latest matching message is unfinished'
+  },
+  {
+    file: OPENCODE_SERVE,
+    name: 'opencode-replay: unsupported working status is accepted',
+    from: 'kind !== "busy" && kind !== "retry" && kind !== "idle"',
+    to: 'kind !== "busy" && kind !== "retry" && kind !== "idle" && kind !== "working"',
+    expect: 'rejects the unsupported working status instead of polling it as active'
+  },
   {
     file: OPENCODE_SERVE,
     name: 'opencode-multiturn: the streamed prompt receipt is discarded',
@@ -58,7 +151,7 @@ const MUTATIONS = [
   {
     file: OPENCODE_SERVE,
     name: 'opencode-multiturn: a recovered unobserved answer loses its role',
-    from: '      accept({ type: "message.updated", properties: { sessionID: sessionId, info: completed.info } });\n',
+    from: '        accept({ type: "message.updated", properties: { sessionID: sessionId, info: message.info } });\n',
     to: '',
     expect: 'recovers a resumed turn by parentID even when its assistant event was lost'
   },
@@ -71,10 +164,10 @@ const MUTATIONS = [
   },
   {
     file: OPENCODE_SERVE,
-    name: 'opencode-multiturn: working status is mistaken for idle',
-    from: 'busy = kind === "busy" || kind === "working" || kind === "retry";',
-    to: 'busy = kind === "busy" || kind === "retry";',
-    expect: 'keeps polling working beyond ten seconds and then recovers'
+    name: 'opencode-multiturn: retry status is mistaken for idle',
+    from: 'busy = kind === "busy" || kind === "retry";',
+    to: 'busy = kind === "busy";',
+    expect: 'keeps polling retry beyond ten seconds and then recovers'
   },
   {
     file: OPENCODE_SERVE,
@@ -184,7 +277,7 @@ const MUTATIONS = [
   {
     file: CLAUDE_EVENTS,
     name: 'the completing assistant record replaces an assumed block_0, so an answer streamed elsewhere renders twice',
-    from: '          itemId: textBlockId ?? "block_0",',
+    from: '          itemId: streamedHere ? textBlockId! : `${messageId ?? `m${String(messageOrdinal)}`}:text`,',
     to: '          itemId: "block_0",',
     expect: 'replaces the block the text actually streamed into, not an assumed block_0'
   },
@@ -205,7 +298,7 @@ const MUTATIONS = [
   {
     file: CLAUDE_EVENTS,
     name: "the cost Claude Code reported never reaches the receipt",
-    from: '          ...(completedUsage === undefined ? {} : { usage: completedUsage }),\n',
+    from: '          ...(usage === undefined ? {} : { usage }),\n',
     to: '',
     expect: 'carries the dollar figure and the token counts from the result record onto the receipt'
   },
@@ -233,7 +326,7 @@ const MUTATIONS = [
   {
     file: ANTIGRAVITY_EVENTS,
     name: 'a step Antigravity has not finished writing is normalized anyway',
-    from: '    if (stringValue(parsed.status) !== "DONE") return [];',
+    from: '    if (stringValue(parsed.status) !== "DONE" && !handedOff) return [];',
     to: '    void parsed.status;',
     expect: 'holds it: nothing is emitted, and nothing claims the turn is over'
   },
@@ -268,8 +361,8 @@ const MUTATIONS = [
   {
     file: COMMANDS,
     name: 'a read-only OpenCode mission runs with no permission config at all',
-    from: '    ...(sandboxArgument(options.sandbox) === "read-only"\n      ? { env: { OPENCODE_CONFIG_CONTENT: OPENCODE_READ_ONLY_CONFIG } }\n      : {}),',
-    to: '',
+    from: '    OPENCODE_CONFIG_CONTENT: configured,',
+    to: '    OPENCODE_CONFIG_CONTENT: "{}",',
     expect: 'holds a read-only OpenCode mission with the permission config that actually enforces it'
   },
   {
@@ -324,29 +417,29 @@ const MUTATIONS = [
   {
     file: OPENCODE_EVENTS,
     name: 'an OpenCode tool status this build has never seen is treated as success',
-    from: '  if (status === "completed") return { failed: false };\n  return { failed: true, status: status ?? "unknown" };',
-    to: '  if (status === "error") return { failed: true, status };\n  return { failed: false };',
+    from: '  return { failed: true, status: status ?? "unknown" };',
+    to: '  return { failed: false };',
     expect: 'treats anything but `completed` as a failure, including nothing at all'
   },
   {
     file: OPENCODE_EVENTS,
     name: 'only the last OpenCode step is counted, so a run looks cheaper than it was',
-    from: '        inputTokens += tokens.input;',
-    to: '        inputTokens = tokens.input;',
+    from: '        inputTokens += counted(tokens.input)!;',
+    to: '        inputTokens = counted(tokens.input)!;',
     expect: 'adds up what every step cost, rather than reporting the last step as the total'
   },
   {
     file: OPENCODE_EVENTS,
     name: 'a run that stopped mid-tool-call is reported as completed',
-    from: '      if (!sawStop || completion.exitCode !== 0) {',
-    to: '      if (completion.exitCode !== 0) {',
+    from: '      if (!sawStop || (completion.exitCode !== 0 && !recoveredExit)) {',
+    to: '      if (completion.exitCode !== 0 && !recoveredExit) {',
     expect: 'is a failure when the stream stops mid-tool-call, however cleanly the process exited'
   },
   {
     file: PROCESS_RUNNER,
     name: 'a prompt already in argv is written to stdin as well',
-    from: '      if (terminationRequested || spec.stdin === "none") {',
-    to: '      if (terminationRequested) {',
+    from: '      if (terminationRequested || spec.stdin === "none" || spec.stdin === "prompt-file") {',
+    to: '      if (terminationRequested || spec.stdin === "prompt-file") {',
     expect: 'writes nothing to stdin for a runtime whose prompt is already in its argv'
   },
   {
@@ -373,15 +466,15 @@ const MUTATIONS = [
   {
     file: CODEX_EVENTS,
     name: 'file headers are counted as changed lines',
-    from: '    if (line.startsWith("+++") || line.startsWith("---")) continue;\n',
-    to: '',
+    from: '    if (line.startsWith("--- ") && (lines[at + 1] ?? "").startsWith("+++ ")) { open = false; at += 1; continue; }',
+    to: '    if (line.startsWith("--- ") && (lines[at + 1] ?? "").startsWith("+++ ")) { added += 1; removed += 1; open = false; at += 1; continue; }',
     expect: 'does not count the file headers as changed lines'
   },
   {
     file: CURSOR_EVENTS,
     name: 'a truncated final message takes back text already delivered',
-    from: '      if (bounded.length < alreadyDelivered) return [];',
-    to: '      void alreadyDelivered;',
+    from: '      if (bounded.length < alreadyDelivered) {',
+    to: '      if (false) {',
     expect: 'never takes back text the fragments already delivered'
   },
   {
@@ -394,21 +487,21 @@ const MUTATIONS = [
   {
     file: DISCOVERY,
     name: 'a model list is read from stdout alone',
-    from: '        `${modelsOutcome.result.stdout}\\n${modelsOutcome.result.stderr}`,',
-    to: '        modelsOutcome.result.stdout,',
+    from: '        ? definition.parseModels?.(`${outcome.result.stdout}\\n${outcome.result.stderr}`)',
+    to: '        ? definition.parseModels?.(outcome.result.stdout)',
     expect: 'reads a model list the CLI printed on stderr, and says so when it cannot read one'
   },
   {
     file: DISCOVERY,
     name: 'a model list nobody could read is passed off as no models',
-    from: '      if (modelHints === undefined) {',
-    to: '      if (false) {',
+    from: '    } else if (modelsOutcome !== undefined && succeeded(modelsOutcome)) {',
+    to: '    } else if (false) {',
     expect: 'says a model list it cannot read is unreadable, rather than leaving the picker silently empty'
   },
   {
     file: COMMANDS,
     name: 'a Codex resume is given flags that subcommand rejects',
-    from: '        "-c",\n        `sandbox_mode=${sandboxArgument(options.sandbox)}`,',
+    from: '        "-c",\n        `sandbox_mode=${codexSandboxArgument(options.sandbox)}`,',
     to: '        "--sandbox",\n        sandboxArgument(options.sandbox),\n        "-C",\n        options.workspacePath,',
     expect: 'resumes a Codex session with only the arguments that subcommand accepts'
   },
@@ -449,16 +542,16 @@ const MUTATIONS = [
   },
   {
     file: COMMANDS,
-    name: 'a read-only Cursor mission asks for plan mode without the sandbox that enforces it',
-    from: '    args.push("--mode", "plan", "--sandbox", "enabled");',
+    name: 'a read-only Cursor mission asks for plan mode rather than ask mode',
+    from: '    args.push("--mode", "ask");',
     to: '    args.push("--mode", "plan");',
-    expect: 'runs a read-only Cursor mission in plan mode and never forces commands'
+    expect: 'runs a read-only Cursor mission in ask mode, with the sandbox where it runs, and never forces commands'
   },
   {
     file: DISCOVERY,
     name: "Cursor's model list is never read",
-    from: '      modelHints = definition.parseModels?.(',
-    to: '      modelHints = undefined; void String(',
+    from: '        ? definition.parseModels?.(`${outcome.result.stdout}\\n${outcome.result.stderr}`)',
+    to: '        ? undefined',
     expect: 'reports a signed-in Cursor Agent ready and reads its models off --list-models'
   },
   {
@@ -478,8 +571,8 @@ const MUTATIONS = [
   {
     file: DISCOVERY,
     name: 'Copilot is offered a model list it has no way to have read',
-    from: '  if (definition.fixedModelHints !== undefined && readiness === "ready") {\n    modelHints = definition.fixedModelHints;\n  }\n',
-    to: '',
+    from: '  if (definition.fixedModelHints !== undefined && readiness === "ready") {',
+    to: '  if (false) {',
     expect: 'offers Copilot only the route where the CLI picks, because it names no models before a run'
   },
   {
@@ -505,10 +598,10 @@ const MUTATIONS = [
   },
   {
     file: CURSOR_EVENTS,
-    name: "Cursor's reasoning text is written into the ledger",
-    from: '      const scrubbed = { type, subtype: parsed.subtype, text: "[redacted]" };',
-    to: '      const scrubbed = parsed;',
-    expect: 'shows reasoning as a step and never lets its text into the ledger'
+    name: "Cursor's visible reasoning text is discarded from the closing step",
+    from: '            ...(said.length === 0 ? {} : { message: said }),',
+    to: '',
+    expect: 'carries the reasoning on the step that closes, not on every fragment'
   },
   {
     file: CURSOR_EVENTS,
@@ -527,8 +620,8 @@ const MUTATIONS = [
   {
     file: DISCOVERY,
     name: 'a logged-out Cursor Agent is reported ready',
-    from: '    if (succeeded(readinessOutcome) && (definition.readyWhen?.(readinessOutcome.result) ?? true)) {',
-    to: '    if (succeeded(readinessOutcome)) {',
+    from: '    } else if (succeeded(readinessOutcome) && (definition.readyWhen?.(readinessOutcome.result) ?? true)) {',
+    to: '    } else if (succeeded(readinessOutcome)) {',
     expect: 'reads a logged-out Cursor Agent from its text, because its status command exits 0 either way'
   },
   {
@@ -536,7 +629,7 @@ const MUTATIONS = [
     name: 'a read-only Cursor mission runs with edits allowed',
     from: '  if (sandboxArgument(options.sandbox) === "read-only") {',
     to: '  if (!sandboxArgument(options.sandbox)) {',
-    expect: 'runs a read-only Cursor mission in plan mode and never forces commands'
+    expect: 'runs a read-only Cursor mission in ask mode, with the sandbox where it runs, and never forces commands'
   },
   {
     file: LOCATOR,
@@ -562,7 +655,7 @@ const MUTATIONS = [
   {
     file: COMMANDS,
     name: 'a Claude follow-up silently starts a new conversation',
-    from: '  if (options.resumeThreadId !== undefined) {\n    args.push("--resume", requireText(options.resumeThreadId, "Session id"));\n  }',
+    from: '  if (options.resumeThreadId !== undefined) {\n    args.push("--resume", requireText(options.resumeThreadId, "Session id"));\n    if (options.forkSession === true) args.push("--fork-session");\n  }',
     to: '',
     expect: 'resumes a Claude session by id'
   },
@@ -611,8 +704,8 @@ const MUTATIONS = [
   {
     file: CLIENT,
     name: 'a handler failure leaves the server waiting forever',
-    from: '          if (disposed) return\n          options.transport.send(\n            `${JSON.stringify({\n              jsonrpc: \'2.0\',\n              id: request.id,\n              error: { code: -32_000, message: \'The client could not answer this request.\' }\n            })}\\n`\n          )',
-    to: '          void 0',
+    from: '        .catch((error: unknown) => {\n          // Always answer.',
+    to: '        .catch((error: unknown) => { return;\n          // Always answer.',
     expect: 'still answers when the handler throws'
   },
   {
@@ -667,8 +760,8 @@ const MUTATIONS = [
   {
     file: EVENTS,
     name: 'a non-zero exit is not treated as a failure',
-    from: 'const failed = status === "failed" || status === "error" || (exitCode !== undefined && exitCode !== 0);',
-    to: 'const failed = status === "failed" || status === "error";',
+    from: 'const failed = (status !== undefined && status !== "completed") || (exitCode !== undefined && exitCode !== 0);',
+    to: 'const failed = status !== undefined && status !== "completed";',
     expect: 'treats a non-zero exit as a failure even when the status says otherwise'
   },
   {
@@ -688,8 +781,8 @@ const MUTATIONS = [
   {
     file: EVENTS,
     name: 'the same limit is announced on every push',
-    from: '          if (limit === undefined || announcedLimit) return [];',
-    to: '          if (limit === undefined) return [];',
+    from: '          if (limit === undefined || announcedLimits.has(limit.kind)) return out;',
+    to: '          if (limit === undefined) return out;',
     expect: 'announces a limit once rather than on every push'
   },
   {
@@ -709,32 +802,39 @@ if (filter !== undefined) console.error(`filtered to ${selected.length} of ${MUT
 
 const REPORT = join(ROOT, 'mutation-result.json')
 
-function runSuite() {
+function runSuite(files = [], title) {
   // Delete the report FIRST: a run that dies before writing one would leave the
   // previous report in place, and a stale green would read as "this mutation
   // broke nothing" -- a check that cannot go red, inside the tool that exists
   // to prove checks can.
   rmSync(REPORT, { force: true })
+  let exitedSuccessfully = true
   try {
-    execFileSync('npx', ['vitest', 'run', '--reporter', 'json', '--outputFile', 'mutation-result.json'], {
+    const pattern = title === undefined ? [] : ['--testNamePattern', `${title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`]
+    execFileSync(process.execPath, [VITEST, 'run', ...files, ...pattern, '--reporter', 'json', '--outputFile', 'mutation-result.json'], {
       cwd: ROOT,
-      stdio: 'pipe',
-      shell: true
+      stdio: 'pipe'
     })
   } catch {
     // A red suite exits non-zero; the report is what we read, not the status.
+    exitedSuccessfully = false
   }
-  if (!existsSync(REPORT)) return { failed: [], unparseable: true, total: -1 }
+  if (!existsSync(REPORT)) return { failed: [], files: [], unparseable: true, success: false, total: -1 }
   const report = JSON.parse(readFileSync(REPORT, 'utf8'))
   const failed = []
-  let unparseable = false
+  const collected = []
+  let unparseable = (report.numRuntimeErrorTestSuites ?? 0) > 0
   for (const file of report.testResults ?? []) {
     if (file.status === 'failed' && (file.assertionResults ?? []).length === 0) unparseable = true
+    collected.push({
+      name: file.name,
+      titles: (file.assertionResults ?? []).map(assertion => assertion.title)
+    })
     for (const assertion of file.assertionResults ?? []) {
       if (assertion.status === 'failed') failed.push(assertion.title)
     }
   }
-  return { failed, unparseable, total: report.numTotalTests ?? 0 }
+  return { failed, files: collected, unparseable, success: report.success === true && exitedSuccessfully, total: report.numTotalTests ?? 0 }
 }
 
 const originals = new Map([
@@ -757,13 +857,23 @@ let problems = 0
 
 try {
   const baseline = runSuite()
-  if (baseline.unparseable || baseline.total <= 0 || baseline.failed.length > 0) {
+  if (!baseline.success || baseline.unparseable || baseline.total <= 0 || baseline.failed.length > 0) {
     console.error(`baseline is not green or did not fully load: ${baseline.failed.join(', ') || 'inspect test collection errors (build the packages first)'}`)
     process.exit(1)
   }
   console.error(`baseline green (${baseline.total} tests)\n`)
 
   for (const mutation of selected) {
+    // The full baseline proves every suite loads. A control then runs the
+    // file(s) containing its literal named assertion, with the SAME collection count:
+    // a broken import or a deleted test must never count as a caught mutation.
+    const affected = baseline.files.filter(file => file.titles.includes(mutation.expect))
+    if (affected.length === 0) {
+      console.error(`  [INVALID] ${mutation.name} -- named assertion is absent from the baseline`)
+      problems += 1
+      continue
+    }
+    const expectedTotal = affected.reduce((total, file) => total + file.titles.length, 0)
     const target = mutation.file
     const original = originals.get(target)
     if (!original.includes(mutation.from)) {
@@ -772,10 +882,10 @@ try {
       continue
     }
     writeFileSync(target, original.replace(mutation.from, mutation.to), 'utf8')
-    const result = runSuite()
+    const result = runSuite(affected.map(file => file.name), mutation.expect)
     writeFileSync(target, original, 'utf8')
 
-    if (result.unparseable || result.total !== baseline.total) {
+    if (result.unparseable || result.total !== expectedTotal || result.files.length !== affected.length) {
       console.error(`  [INVALID] ${mutation.name} -- the file stopped running, so this red means nothing`)
       problems += 1
       continue

@@ -1,4 +1,4 @@
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 
 import { NotificationQueue } from "./codex-app-server-run.js";
 import type { AppServerRunProcess } from "./codex-app-server-run.js";
@@ -96,6 +96,52 @@ const LISTENING = /listening on (http:\/\/127\.0\.0\.1:\d+)/;
 type JsonObject = Record<string, unknown>;
 const isObject = (value: unknown): value is JsonObject => typeof value === "object" && value !== null && !Array.isArray(value);
 const text = (value: unknown): string | undefined => (typeof value === "string" && value.length > 0 ? value : undefined);
+
+type SessionMessage = { info: JsonObject; parts: unknown[] };
+const finite = (value: unknown): number | undefined => typeof value === "number" && Number.isFinite(value) ? value : undefined;
+const compareIds = (a: string, b: string): number => a < b ? -1 : a > b ? 1 : 0;
+
+/** OpenCode orders messages by creation time, then id; its part ids carry their creation order. */
+function chronologicalMessages(messages: SessionMessage[]): SessionMessage[] {
+  return messages.sort((a, b) => {
+    const createdA = finite(isObject(a.info.time) ? a.info.time.created : undefined) ?? 0;
+    const createdB = finite(isObject(b.info.time) ? b.info.time.created : undefined) ?? 0;
+    return createdA - createdB || compareIds(text(a.info.id)!, text(b.info.id)!);
+  });
+}
+
+function chronologicalParts(parts: JsonObject[]): JsonObject[] {
+  if (parts.every((part) => text(part.id)?.startsWith("prt_") === true)) {
+    return parts.sort((a, b) => compareIds(text(a.id)!, text(b.id)!));
+  }
+  // Imported/id-less parts may still carry a clock. Sort within each step;
+  // untimed markers stay in place, including multiple steps in one message.
+  const ordered: JsonObject[] = [];
+  let span: JsonObject[] = [];
+  const flush = (): void => {
+    const timed = span.map((part) => {
+      const time = isObject(part.time) ? part.time : isObject(part.state) && isObject(part.state.time) ? part.state.time : {};
+      return { part, at: finite(time.start) };
+    });
+    ordered.push(...(timed.every((entry) => entry.at !== undefined)
+      ? timed.sort((a, b) => a.at! - b.at!).map((entry) => entry.part) : span));
+    span = [];
+  };
+  for (const part of parts) {
+    if (part.type === "step-start" || part.type === "step-finish") {
+      flush();
+      ordered.push(part);
+    } else span.push(part);
+  }
+  flush();
+  return ordered;
+}
+
+/** Full, key-order-independent fallback: two long tool results must not share an 80-character prefix key. */
+function partSignature(part: JsonObject): string {
+  return createHash("sha256").update(JSON.stringify(part, (_key, value: unknown) => isObject(value)
+    ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => compareIds(a, b))) : value)).digest("hex");
+}
 
 /**
  * The `run --format json` record for one settled part, or undefined.
@@ -316,8 +362,8 @@ export function startOpenCodeServeRun(options: OpenCodeServeRunOptions): Runtime
       if (!isObject(statuses)) throw new Error("OpenCode's session status was not readable.");
       const status = statuses[sessionId];
       const kind = isObject(status) ? text(status.type) : undefined;
-      if (status !== undefined && kind !== "busy" && kind !== "working" && kind !== "retry" && kind !== "idle") throw new Error("OpenCode's session status could not be identified.");
-      busy = kind === "busy" || kind === "working" || kind === "retry";
+      if (status !== undefined && kind !== "busy" && kind !== "retry" && kind !== "idle") throw new Error("OpenCode's session status could not be identified.");
+      busy = kind === "busy" || kind === "retry";
       if (busy) return void scheduleBeginCheck();
       const messagesResponse = await request(`${base}/session/${encodeURIComponent(sessionId)}/message`, { headers: auth, signal });
       if (settled || cancelled) return;
@@ -333,26 +379,33 @@ export function startOpenCodeServeRun(options: OpenCodeServeRunOptions): Runtime
       }
       // The streamed prompt's id ties even an unobserved answer to this turn.
       // Without that receipt only a fresh session's observed reply is safe.
-      const completed = messages.find((message: unknown) => {
+      const turnMessages = chronologicalMessages(messages.filter((message: unknown): message is SessionMessage => {
         if (!isObject(message) || !isObject(message.info) || !Array.isArray(message.parts)) return false;
         const info = message.info;
         const id = text(info.id);
         const current = promptId !== undefined ? info.parentID === promptId
           : options.resumeSessionId === undefined && id !== undefined && roles.get(id) === "assistant";
         return id !== undefined && current && info.role === "assistant"
-          && info.sessionID === sessionId && info.finish === "stop" && info.error === undefined
-          && isObject(info.time) && typeof info.time.completed === "number" && Number.isFinite(info.time.completed)
-          && message.parts.some((part: unknown) => isObject(part) && part.messageID === id
-            && part.sessionID === sessionId && part.type === "step-finish" && part.reason === "stop");
-      }) as JsonObject | undefined;
-      if (completed === undefined || !isObject(completed.info) || !Array.isArray(completed.parts)) {
+          && info.sessionID === sessionId;
+      }));
+      // An earlier stop cannot prove completion while a later step is unfinished.
+      const completed = turnMessages.at(-1);
+      if (completed === undefined || completed.info.finish !== "stop" || completed.info.error !== undefined
+        || !isObject(completed.info.time) || finite(completed.info.time.completed) === undefined
+        || !completed.parts.some((part: unknown) => isObject(part) && part.messageID === completed.info.id
+          && part.sessionID === sessionId && part.type === "step-finish" && part.reason === "stop")) {
         lose(`${closedReason} The session is no longer busy, but this turn's completion could not be confirmed.`);
         return;
       }
-      const id = text(completed.info.id)!;
-      accept({ type: "message.updated", properties: { sessionID: sessionId, info: completed.info } });
-      for (const part of completed.parts) {
-        if (isObject(part) && part.messageID === id && part.sessionID === sessionId) {
+      // Replay every step of this prompt, through the live path's settled-part
+      // deduplication. Step finishes also carry the turn's token/cost receipts.
+      for (const message of turnMessages) {
+        if (settled || cancelled) return;
+        accept({ type: "message.updated", properties: { sessionID: sessionId, info: message.info } });
+        const ownedParts = message.parts.filter((part: unknown): part is JsonObject => isObject(part)
+          && part.messageID === message.info.id && part.sessionID === sessionId);
+        for (const part of chronologicalParts(ownedParts)) {
+          if (settled || cancelled) return;
           accept({ type: "message.part.updated", properties: { sessionID: sessionId, part } });
         }
       }
@@ -443,7 +496,7 @@ export function startOpenCodeServeRun(options: OpenCodeServeRunOptions): Runtime
         if (partId !== undefined) sendPartial(partId);
         return;
       }
-      const key = `${record.type}:${text(part.id) ?? JSON.stringify(part).slice(0, 80)}`;
+      const key = `${record.type}:${text(part.id) ?? partSignature(part)}`;
       if (emitted.has(key)) return;
       if (record.type === "tool_use" || record.type === "step_finish") flushPartials();
       emitted.add(key);

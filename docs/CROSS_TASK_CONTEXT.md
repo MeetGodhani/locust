@@ -203,6 +203,35 @@ continue; report exact validation results, and say what was not run.
 - Not run: live or paid agent turns, real policy deployment, packaged UI,
   macOS or Linux execution. No subscription credentials were inspected.
 
+### 2026-10-19 — OpenCode chronological tool-step recovery
+
+- Scope: `feat/opencode-tool-steps-replay`, based on upstream `main` at
+  `e90b079611efe68372924b3c77847980622b5373` (desktop 0.789.0, including PR #4).
+- EOF recovery reuses `checkBegun`, collects all assistant messages tied to
+  the streamed prompt by `parentID`, and validates the latest message's stop
+  before replay. Messages follow creation time then ID; OpenCode parts follow
+  ID order. Imported parts use available timestamps within step boundaries,
+  retaining response order where ordering evidence is absent.
+- Replay uses the live `accept` path, so tools, failures, text and step
+  token/cost receipts are recorded once. ID-less parts use a full stable
+  payload hash, replacing the colliding 80-character fallback. History and
+  foreign-session/message parts remain excluded.
+- Status polling recognizes only `idle`, `busy` and `retry`. The existing
+  ten-second request bound, five-minute recovery bound, cancellation and
+  process-exit handling remain in force. No prompt replay or automatic retry.
+- The full gate exposed an upstream scanner false positive in the release
+  formatter's raw-backtick regex. A one-line equivalent `\x60` escape fixes
+  it without exempting the file; all seven formatter tests pass unchanged.
+- Validation: focused recovery suite 67/67 with no skips; workspace
+  typechecks and package builds passed; all 108 runtime-adapter mutation
+  controls caught (95 existing, 13 new), none skipped or invalid. Full gate
+  exit 0: 956 adapter tests passed (five existing optional skips), 168 store,
+  32 CLI and 11,068 desktop tests passed; all application bundles built.
+  The gate used scratch outside Git, two Vitest workers, CI timeouts and a
+  process-local en-US locale preload. Reproductions, logs and limits are in
+  `PR_TOOL_STEPS_REPLAY.md` outside the source tree.
+- No version or changelog change, paid/live provider turn, push or PR.
+
 ### 2026-10-18 — OpenCode multi-turn recovery
 
 - Scope: `feat/opencode-multiturn-recovery`, based on upstream `main` at
