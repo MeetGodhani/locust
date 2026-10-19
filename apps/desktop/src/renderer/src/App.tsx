@@ -188,6 +188,7 @@ import { Sidebar } from './components/Sidebar.js'
 import type { SidebarMission } from './components/Sidebar.js'
 import { ContextMenu } from './components/ContextMenu.js'
 import type { ContextMenuItem, ContextMenuState } from './components/ContextMenu.js'
+import { reviewMenuItem } from './reviewMenu.js'
 import { Thread } from './components/Thread.js'
 import { AgentAvatar, REGISTER_WORD } from './components/ThreadItems.js'
 import { TitleBar } from './components/TitleBar.js'
@@ -256,7 +257,7 @@ import { addCallHandOff, addLiveCallTurn, liveCall, useCallHandOffs, useCallsSav
 import { CallTodosContext, callTodoState, type CallTodoState, type CallTodos } from './callTodos.js'
 import { pressTalk } from './talkPress.js'
 import { useScoutState } from './scoutState.js'
-import { ScoutCards, ScoutInvite, ScoutWatching } from './components/ScoutCards.js'
+import { ScoutCards, ScoutInvite, ScoutLooked, ScoutWatching } from './components/ScoutCards.js'
 import type { ScoutDraft, ScoutOpen } from '../../shared/scout.js'
 import type { TalkShortcutPress } from '../../shared/talk-shortcut.js'
 import type { SavedCall } from '../../shared/calls.js'
@@ -8091,20 +8092,16 @@ export default function App(): ReactElement {
   if (cloudTasks.length > 0 || claudeCloud.length > 0) {
     headerActions.push({ label: 'Cloud tasks', onSelect: () => setCloudPanel(true) })
   }
+  // Ask for a review (0.799): one row that opens the reviewers beside it (reviewMenu.ts).
   if (liveRun !== undefined && !running) {
-    for (const reviewer of reviewersFor(liveRun)) {
-      headerActions.push({
-        label: `Ask ${reviewer.name} for a review`,
-        onSelect: () => askForReview(liveRun, reviewer)
-      })
-    }
-    const pair = reviewPairFor(liveRun)
-    if (pair !== undefined) {
-      headerActions.push({
-        label: `Ask ${pair[0].name} (${runtimeDisplayName(pair[0].runtime as MissionRuntimeId)}) and ${pair[1].name} (${runtimeDisplayName(pair[1].runtime as MissionRuntimeId)}) for a review`,
-        onSelect: () => askTwoForReview(liveRun, pair)
-      })
-    }
+    const asks = reviewMenuItem(
+      reviewersFor(liveRun),
+      reviewPairFor(liveRun),
+      (teammate) => runtimeDisplayName(teammate.runtime as MissionRuntimeId),
+      (reviewer) => askForReview(liveRun, reviewer),
+      (pair) => askTwoForReview(liveRun, pair)
+    )
+    if (asks !== undefined) headerActions.push(asks)
   }
   if (saveAsRoutineId !== undefined) {
     headerActions.push({ label: 'Save conversation as routine', onSelect: () => openSaveRoutine(saveAsRoutineId) })
@@ -9208,7 +9205,11 @@ export default function App(): ReactElement {
                   if (runtimeState.phase !== 'ready' || scout === undefined || teammates.length === 0) return undefined
                   if (scout.settings.on) {
                     // Nothing needs the person: one quiet line that says it keeps watch, not nothing at all (0.768).
-                    if (scout.cards.length === 0) return <ScoutWatching state={scout} scout={teammates.find((one) => one.teammateId === scout.settings.teammateId)} onLookNow={lookWithScout} looking={scoutLooking} />
+                    // On its own team card when it is on the team (0.799, HomeTeam's `watch`); the line only if it is not.
+                    if (scout.cards.length === 0) {
+                      const onTeam = teammates.some((one) => one.teammateId === scout.settings.teammateId)
+                      return onTeam ? undefined : <ScoutWatching state={scout} scout={undefined} onLookNow={lookWithScout} looking={scoutLooking} />
+                    }
                     return <ScoutCards state={scout} scout={teammates.find((one) => one.teammateId === scout.settings.teammateId)} onOpen={openScoutCard}
                       onSend={sendScoutDraft} onDraftIntoBox={draftScoutIntoBox}
                       onDismiss={(cardId) => { void window.desktop?.scout?.dismiss(cardId).catch(() => undefined) }} />
@@ -9218,6 +9219,12 @@ export default function App(): ReactElement {
                   return <ScoutInvite model={scoutModelWords({ runtime: 'opencode', model: scoutModel })} onTurnOn={() => { void turnOnScout() }} onNotNow={scoutNotNowPressed} busy={scoutBusy}
                     {...(scoutMessage === undefined ? {} : { message: scoutMessage })} />
                 })())}
+                {...(() => {
+                  // Scout keeping watch with nothing to say: its line on its own team card (0.799).
+                  const scoutId = scout?.settings.on === true && scout.cards.length === 0 ? scout.settings.teammateId : undefined
+                  if (scout === undefined || scoutId === undefined || !teammates.some((one) => one.teammateId === scoutId)) return {}
+                  return { teamWatch: { teammateId: scoutId, line: <ScoutLooked state={scout} looking={scoutLooking} />, looking: scoutLooking, onLookNow: lookWithScout } }
+                })()}
                 onAddTeamFromCard={() => addTeamFromCard(true)}
                 rosterUnreadable={unreadableStores.includes('teammates')}
                 runtimes={runtimes}

@@ -59,9 +59,14 @@ try {
     if (!more) return 'no More actions button'
     more.click()
     await new Promise((r) => setTimeout(r, 500))
+    // 0.799: the reviewers open beside one "Ask for a review" row, the pair below a hairline.
+    const row = [...document.querySelectorAll('[role=menu] button, [role=menuitem]')].find((b) => b.innerText.trim() === 'Ask for a review')
+    if (!row) return 'NO Ask for a review ROW'
+    row.click()
+    await new Promise((r) => setTimeout(r, 400))
     const items = [...document.querySelectorAll('[role=menu] button, [role=menuitem]')]
     const menu = items.map((b) => b.innerText.split(/\\s+/).join(' ').trim()).join(' / ')
-    const pair = items.find((b) => /^Ask \\S+ \\(.+\\) and \\S+ \\(.+\\) for a review$/.test(b.innerText.trim()))
+    const pair = items.find((b) => /^\\S+ \\(.+\\) and \\S+ \\(.+\\)$/.test(b.innerText.trim()))
     if (!pair) return 'NOT OFFERED: ' + menu
     const said = pair.innerText.trim()
     pair.click()

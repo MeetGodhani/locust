@@ -65,7 +65,7 @@ describe('the </> button', () => {
     expect(APP).not.toContain('<OpenInTerminalButton offer={shownTerminal}')
     expect(APP.indexOf('aria-label="More actions"')).toBeGreaterThan(-1)
     const menu = APP.indexOf('headerActions.push({ label: `Open in terminal (${shownTerminal.runtimeName})`')
-    const reviews = APP.indexOf('label: `Ask ${reviewer.name} for a review`')
+    const reviews = APP.indexOf('const asks = reviewMenuItem(')
     expect(menu).toBeGreaterThan(-1)
     expect(menu).toBeLessThan(reviews)
   })
