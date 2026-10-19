@@ -110,6 +110,7 @@ export function consoleLine(program: { readonly file: string; readonly args: rea
 }
 
 export interface TerminalRequest {
+  readonly account?: string
   readonly runtime: string
   readonly sessionId: string
   readonly cwd: string
@@ -139,13 +140,13 @@ export function terminalArgsFor(request: TerminalRequest): readonly string[] | u
 /** What the host knows, handed in so the decision can be tested without a ledger. */
 export interface TerminalFacts {
   readonly liveMissionIds: () => readonly string[]
-  readonly getMission: (missionId: string) => Promise<{ readonly runtime: MissionRuntimeId; readonly model: string; readonly session: string | undefined } | undefined>
+  readonly getMission: (missionId: string) => Promise<{ readonly runtime: MissionRuntimeId; readonly model: string; readonly session: string | undefined; readonly account?: string } | undefined>
   /** The teammate whose conversation this is, if anyone's. */
   readonly ownerOf: (missionId: string) => Promise<{ readonly teammateId: string; readonly name: string } | undefined>
   /** Where that teammate's runs happen (peerContextFor's cwd), or undefined for the folder. */
   readonly cwdFor: (teammateId: string) => Promise<string | undefined>
   readonly workspacePath: string
-  readonly launchFor: (runtime: MissionRuntimeId) => Promise<ExecutableLaunch | undefined>
+  readonly launchFor: (runtime: MissionRuntimeId, account?: string) => Promise<ExecutableLaunch | undefined>
 }
 
 /**
@@ -168,11 +169,11 @@ export async function terminalRequestFor(missionId: string, facts: TerminalFacts
   if (resumeArgsFor(mission.runtime, mission.session) === undefined) return { refused: `${name} cannot resume this conversation in a terminal.` }
   const owner = await facts.ownerOf(missionId).catch(() => undefined)
   const cwd = (owner === undefined ? undefined : await facts.cwdFor(owner.teammateId).catch(() => undefined)) ?? facts.workspacePath
-  const launch = await facts.launchFor(mission.runtime).catch(() => undefined)
+  const launch = await facts.launchFor(mission.runtime, ...(mission.account === undefined ? [] : [mission.account])).catch(() => undefined)
   // Antigravity resumes only through its CLI; its app's conversations live in its own window.
   if (mission.runtime === 'antigravity' && launch?.commandName !== 'agy') return { refused: "An Antigravity conversation lives in Antigravity's own window. Open it there, or install Antigravity CLI to open it in a terminal." }
   if (launch === undefined) return { refused: `Locust could not find ${name} on this machine.` }
-  return { runtime: mission.runtime, sessionId: mission.session, cwd, launch, title: `${owner?.name ?? 'Locust'} · ${name}` }
+  return { runtime: mission.runtime, ...(mission.account === undefined ? {} : { account: mission.account }), sessionId: mission.session, cwd, launch, title: `${owner?.name ?? 'Locust'} · ${name}` }
 }
 
 export interface OpenInTerminalOptions {

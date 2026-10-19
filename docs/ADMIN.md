@@ -68,6 +68,7 @@ access, or promise that an agent supports a model or mode.
 | `phone` | `false` keeps phone pairing off and prevents Claude Code Remote Control from being started through Locust. `true` leaves those choices available. |
 | `cloud` | `false` prevents cloud computer setup and sign-in, cloud conversations, and legacy Codex Cloud and Claude cloud tasks. Existing computers can still be stopped or deleted. `true` leaves cloud choices available. |
 | `terminal` | `false` disables the in-window Terminal panel. `true` leaves it available. The panel is also disabled by an agent/model allowlist, a highest mode below Auto, or an organization monthly cap: an unrestricted personal shell cannot enforce those restrictions. Closing the panel keeps shells running; closing tabs or quitting ends them. No terminal output is sent to an AI agent. |
+| `accounts` | `false` prevents adding, signing in to, renaming or running added Claude Code and Codex accounts. The machine's existing sign-in is unchanged. Cancel and Remove remain available. |
 | `browser` | `false` disables the in-window Browser panel and teammates' per-run browser tools. `true` leaves them available. |
 
 A finite model allowlist requires an explicit model: an unresolved account

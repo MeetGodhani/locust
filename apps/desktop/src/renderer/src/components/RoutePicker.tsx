@@ -1,3 +1,5 @@
+import { accountUsageKey } from '../../../shared/agent-accounts.js'
+import { useAgentAccounts } from '../agentAccounts.js'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { KeyboardEvent, ReactElement } from 'react'
 
@@ -15,6 +17,7 @@ import { policyModelAllowed } from '../../../shared/organization-policy.js'
 import { ManagedPolicyNote, useOrganizationPolicy } from '../organizationPolicy.js'
 
 export interface RouteChoice {
+  readonly account?: string
   readonly runtime: MissionRuntimeId
   /** The model identifier a mission would actually be started with. */
   readonly model: string
@@ -59,9 +62,10 @@ export interface ComparePicking {
   readonly record?: ReadonlyMap<string, { readonly kept: number; readonly compared: number }>
 }
 
-const samePick = (a: RouteChoice, b: RouteChoice): boolean => a.runtime === b.runtime && a.model === b.model
+const samePick = (a: RouteChoice, b: RouteChoice): boolean => a.runtime === b.runtime && a.model === b.model && a.account === b.account
 
 interface RouteRow {
+  readonly account?: string
   readonly key: string
   readonly group: string
   readonly runtime: MissionRuntimeId
@@ -380,6 +384,7 @@ export function RoutePicker({
   /** Compare (0.441): absent where a comparison cannot start (a run is live, or a comparison is on screen). */
   readonly compare?: ComparePicking
 }): ReactElement {
+  const accounts = useAgentAccounts()
   const comparing = compare?.on === true
   const policy = useOrganizationPolicy()
   const [query, setQuery] = useState('')
@@ -391,8 +396,16 @@ export function RoutePicker({
   }, [])
 
   const rows = useMemo(
-    () => buildRows(runtimes, models, active, resolvedModels, recentRoutes, limitedRuntimes).filter((row) => policyModelAllowed(policy, row.runtime, row.model)),
-    [runtimes, models, active, resolvedModels, recentRoutes, limitedRuntimes, policy]
+    () => {
+      const base = buildRows(runtimes, models, active.account === undefined ? active : { runtime: active.runtime, model: '' }, resolvedModels, recentRoutes, limitedRuntimes)
+      const added = policy?.policy.accounts === false ? [] : accounts.flatMap(a => {
+        const ownRuntimes = runtimes.filter(r => r.id === a.runtime).map(r => ({ ...r, ready: r.installed, status: 'ready' as const, auth: 'authenticated' as const }))
+        const ownLimits = new Map([[a.runtime, limitedRuntimes.get(accountUsageKey(a.runtime, a.id))!]])
+        return buildRows(ownRuntimes, models, active.account === a.id ? active : { runtime: active.runtime, model: '' }, resolvedModels, [], ownLimits).map(row => ({ ...row, key: `${row.key}:${a.id}`, account: a.id, tag: a.state === 'ready' ? row.tag : 'SIGN IN' as RouteTag, group: `${row.group.replace(/ \u00b7 your account$/, '')} \u00b7 ${a.name}`, label: `${row.label} \u00b7 ${a.name}` }))
+      })
+      return [...base, ...added].filter(row => policyModelAllowed(policy, row.runtime, row.model))
+    },
+    [runtimes, models, active, resolvedModels, recentRoutes, limitedRuntimes, policy, accounts]
   )
   const needle = routeSearchText(query)
   const searching = needle.length > 0
@@ -457,9 +470,9 @@ export function RoutePicker({
 
   /** One model row, the same wherever it is drawn: in its group or under a fold. */
   const drawRow = (row: RouteRow): ReactElement => {
-    const isActive = !comparing && row.tag === 'ACTIVE'
+    const isActive = !comparing && (row.account === undefined ? row.tag === 'ACTIVE' : row.account === active.account && row.runtime === active.runtime && row.model === active.model)
     const recent = row.group === 'Recent'
-    const choice = { runtime: row.runtime, model: row.model }
+    const choice = { runtime: row.runtime, model: row.model, ...(row.account === undefined ? {} : { account: row.account }) }
     const picked = comparing && (compare?.picks ?? []).some((pick) => samePick(pick, choice))
     const refused = comparing
       ? compare?.refusal(choice)
@@ -487,7 +500,7 @@ export function RoutePicker({
         onClick={() => {
           if (comparing && compare !== undefined) {
             // Named the way the chip names a route: "Nemotron 3 Ultra Free", not its id.
-            compare.onToggle({ ...choice, label: routeFamilyName(row, resolvedModels, models) })
+            compare.onToggle({ ...choice, label: `${routeFamilyName(row, resolvedModels, models)}${row.account === undefined ? '' : ` \u00b7 ${accounts.find(a => a.id === row.account)?.name ?? 'Removed account'}`}` })
             return
           }
           onSelect(choice)

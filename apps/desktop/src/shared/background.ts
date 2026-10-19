@@ -12,6 +12,7 @@ export const BACKGROUND_DISMISS_CHANNEL = 'background:dismiss'
 export type PublicBackgroundState = 'working' | 'blocked' | 'done' | 'failed' | 'stopped' | 'unknown'
 
 export interface PublicBackgroundRun {
+  readonly account?: string
   readonly id: string
   readonly prompt: string
   readonly startedAt: string
@@ -28,6 +29,7 @@ export interface PublicBackgroundRun {
 }
 
 export interface BackgroundStartRequest {
+  readonly account?: string
   readonly prompt: string
   readonly teammateId?: string
   /** Any turn of the conversation it continues; absent for a new conversation. */

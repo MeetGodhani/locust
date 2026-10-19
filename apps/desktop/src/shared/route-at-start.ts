@@ -6,6 +6,7 @@ export interface StartRouteInput {
   readonly runtime?: unknown
   readonly model?: unknown
   readonly effort?: unknown
+  readonly account?: unknown
   readonly modelChoice?: unknown
   readonly routeOverrideFor?: unknown
 }
@@ -14,6 +15,7 @@ export interface StartRoute {
   readonly runtime: MissionRuntimeId
   readonly model?: string
   readonly effort?: string
+  readonly account?: string
 }
 
 /**
@@ -30,6 +32,7 @@ export function routeAtStart(
 ): StartRoute {
   const requested: StartRoute = {
     runtime: isMissionRuntime(input.runtime) ? input.runtime : 'codex',
+    ...(typeof input.account === 'string' ? { account: input.account } : {}),
     ...(typeof input.model === 'string' ? { model: input.model } : {}),
     ...(typeof input.effort === 'string' ? { effort: input.effort } : {})
   }
@@ -39,16 +42,17 @@ export function routeAtStart(
   // picker identity lets that transformation survive without allowing a
   // discovery fallback's model (or effort) to replace the saved identity.
   if (requested.runtime === saved.runtime && (input.modelChoice ?? input.model) === saved.model) {
-    return { ...requested, model: requested.model ?? saved.model }
+    return { ...requested, model: requested.model ?? saved.model, ...(saved.account === undefined ? {} : { account: saved.account }) }
   }
   return {
     runtime: saved.runtime,
+    ...(saved.account === undefined ? {} : { account: saved.account }),
     model: saved.model,
     ...(saved.effort === undefined ? {} : { effort: saved.effort })
   }
 }
 
-export interface PickerRoute { readonly runtime: MissionRuntimeId; readonly model: string }
+export interface PickerRoute { readonly account?: string; readonly runtime: MissionRuntimeId; readonly model: string }
 
 /**
  * Keep the chip and pending header on the same choice while effects settle.
@@ -134,7 +138,7 @@ export function startAs(
   const route = composerRouteFor(composer.route, teammate, explicit, pickKeyFor(undefined, teammate.teammateId))
   return {
     teammateId: teammate.teammateId,
-    route: { runtime: route.runtime, model: route.model },
+    route: { runtime: route.runtime, model: route.model, ...(route.account === undefined ? {} : { account: route.account }) },
     mode: teammate.route?.mode ?? composer.mode,
     effort: teammate.route === undefined ? composer.effort : teammate.route.effort
   }

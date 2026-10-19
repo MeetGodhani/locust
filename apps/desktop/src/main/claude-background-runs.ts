@@ -25,6 +25,7 @@ import { replaceFile } from './replace-file.js'
 
 /** One background turn, as it is kept across launches. */
 export interface BackgroundRun {
+  readonly account?: string
   readonly id: string
   readonly sessionId?: string
   readonly folder: string
@@ -50,9 +51,9 @@ export type StartBackground =
 export interface BackgroundFacts {
   readonly file: string
   /** `claude <args>` in `cwd`, resolving when the process exits, with what it printed. */
-  readonly claude: (args: readonly string[], cwd: string) => Promise<{ readonly code: number; readonly stdout: string; readonly stderr: string }>
+  readonly claude: (args: readonly string[], cwd: string, account?: string) => Promise<{ readonly code: number; readonly stdout: string; readonly stderr: string }>
   /** The conversation's Claude session, from any turn of it; undefined when it has none. */
-  readonly sessionOf: (conversation: string) => Promise<string | undefined>
+  readonly sessionOf: (conversation: string, account?: string) => Promise<string | undefined>
   /** Bring a finished run into the record: the turn's mission id, or why not. */
   readonly bringIn: (run: BackgroundRun) => Promise<{ readonly missionId: string } | { readonly refused: string }>
   readonly onChange: (runs: readonly BackgroundRun[]) => void
@@ -120,15 +121,18 @@ export function createBackgroundRuns(facts: BackgroundFacts) {
      * session still alive -- went into a COPY under a new id. Stopped, the conversation stays one session; Claude
      * Code keeps its conversation (`claude stop --help`).
      */
-    if ('missionId' in back && run.state === 'done' && SESSION_ID.test(run.id)) await facts.claude(['stop', run.id], run.folder).catch(() => undefined)
+    if ('missionId' in back && run.state === 'done' && SESSION_ID.test(run.id)) await facts.claude(['stop', run.id], run.folder, ...(run.account === undefined ? [] : [run.account])).catch(() => undefined)
   }
   const listAgents = async (): Promise<readonly BackgroundAgent[]> => {
     const where = (await load())[0]?.folder ?? process.cwd()
-    const answer = await facts.claude(['agents', '--json', '--all'], where)
-    const parsed = answer.code === 0 ? parseBackgroundAgents(answer.stdout) : undefined
-    // No answer is not "none are running": the watch skips this round.
-    if (parsed === undefined) throw new Error('claude agents gave no answer')
-    return parsed
+    const accounts = [...new Set((await load()).map(run => run.account))]
+    const groups = await Promise.all((accounts.length ? accounts : [undefined]).map(async account => {
+      const answer = await facts.claude(['agents', '--json', '--all'], where, ...(account === undefined ? [] : [account]))
+      const parsed = answer.code === 0 ? parseBackgroundAgents(answer.stdout) : undefined
+      if (parsed === undefined) throw new Error('claude agents gave no answer')
+      return parsed
+    }))
+    return groups.flat()
   }
   const seen = (agents: readonly BackgroundAgent[]): void => {
     void (async () => {
@@ -163,8 +167,9 @@ export function createBackgroundRuns(facts: BackgroundFacts) {
       readonly teammateId?: string
       readonly model?: string
       readonly effort?: string
+      readonly account?: string
     }): Promise<StartBackground> {
-      const resumeSessionId = request.conversation === undefined ? undefined : await facts.sessionOf(request.conversation).catch(() => undefined)
+      const resumeSessionId = request.conversation === undefined ? undefined : await facts.sessionOf(request.conversation, ...(request.account === undefined ? [] : [request.account])).catch(() => undefined)
       let args: readonly string[]
       try {
         args = backgroundArgs({
@@ -178,7 +183,7 @@ export function createBackgroundRuns(facts: BackgroundFacts) {
       } catch (error) {
         return { ok: false, message: error instanceof Error ? error.message : 'That could not be sent.' }
       }
-      const ran = await facts.claude(args, request.folder).catch((error: unknown) => ({ code: 127, stdout: '', stderr: error instanceof Error ? error.message : '' }))
+      const ran = await facts.claude(args, request.folder, ...(request.account === undefined ? [] : [request.account])).catch((error: unknown) => ({ code: 127, stdout: '', stderr: error instanceof Error ? error.message : '' }))
       const said = `${ran.stdout}\n${ran.stderr}`
       if (needsTrust(said)) {
         return {
@@ -194,6 +199,7 @@ export function createBackgroundRuns(facts: BackgroundFacts) {
       }
       const run: BackgroundRun = {
         id,
+        ...(request.account === undefined ? {} : { account: request.account }),
         folder: request.folder,
         prompt: request.prompt.trim(),
         startedAt: now().toISOString(),
@@ -214,7 +220,7 @@ export function createBackgroundRuns(facts: BackgroundFacts) {
     async stop(id: string): Promise<boolean> {
       const run = (await load()).find((entry) => entry.id === id)
       if (run === undefined || !SESSION_ID.test(id)) return false
-      const ran = await facts.claude(['stop', id], run.folder).catch(() => undefined)
+      const ran = await facts.claude(['stop', id], run.folder, ...(run.account === undefined ? [] : [run.account])).catch(() => undefined)
       return ran?.code === 0
     },
     /** Takes an ended run off the list; its turn stays in the conversation. */

@@ -315,7 +315,7 @@ export type ImportResult =
  * reply resumes it. The session is then marked read through, so what is done
  * in its terminal later comes back as it does for any Locust conversation.
  */
-export async function importSession(session: Pick<ImportableSession, 'runtime' | 'sessionId' | 'cwd' | 'title'>, facts: ImportFacts): Promise<ImportResult> {
+export async function importSession(session: Pick<ImportableSession, 'runtime' | 'sessionId' | 'cwd' | 'title'> & { readonly account?: string }, facts: ImportFacts): Promise<ImportResult> {
   if ((await facts.imports.read(session.sessionId)) !== undefined) {
     return { ok: false, message: 'That conversation is already in Locust.' }
   }
@@ -331,8 +331,8 @@ export async function importSession(session: Pick<ImportableSession, 'runtime' |
   await facts.learnFolder(workspaceId, cwd).catch(() => undefined)
   const runtime = session.runtime
   const route = runtime === 'claude'
-    ? { model: 'account-default', requestedRouteId: 'claude', resolvedRouteId: 'claude-account:default' }
-    : { model: 'account-default', requestedRouteId: 'codex', resolvedRouteId: 'codex-account:default' }
+    ? { model: 'account-default', requestedRouteId: 'claude', resolvedRouteId: `claude-account:${session.account ?? 'default'}` }
+    : { model: 'account-default', requestedRouteId: 'codex', resolvedRouteId: `codex-account:${session.account ?? 'default'}` }
   let previous: string | undefined
   let first: string | undefined
   let count = 0

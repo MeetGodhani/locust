@@ -1,3 +1,5 @@
+import { accountUsageKey } from '../../../shared/agent-accounts.js'
+import { accountName, routeAccount, useAgentAccounts } from '../agentAccounts.js'
 import mark from '../assets/locust-mark.svg'
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { usagePercent, usageWindowSentence } from '../missionView.js'
@@ -900,11 +902,12 @@ export function Composer({
         break
     }
   }
+  const accounts = useAgentAccounts()
   const selected = runtimes.find((runtime) => runtime.id === route.runtime)
   // The account's window, from the latest reading (SURFACES-0.22 §3): a
   // sentence in the tooltip always; a dot on the chip only from 80%, when a
   // long run might not finish.
-  const usageReading = usageWindows?.get(route.runtime)
+  const usageReading = usageWindows?.get(accountUsageKey(route.runtime, route.account))
   const usagePercentNow = usageReading === undefined ? undefined : usagePercent(usageReading)
   const usageSentence = usageReading === undefined
     ? undefined
@@ -916,7 +919,7 @@ export function Composer({
   const usagePressing = usagePercentNow !== undefined && usagePercentNow >= 80
   // An agent the person added (0.777) is never discovered: the host finds it when the message goes, and says in the
   // thread, in words, when it cannot start it -- the chat box does not hold the message back on a check it cannot make.
-  const selectedReady = route.runtime === 'acp' || (selected !== undefined && runtimeIsUsable(selected))
+  const selectedReady = route.account !== undefined ? accounts.some(a => a.id === route.account && a.runtime === route.runtime && a.state === 'ready') : route.runtime === 'acp' || (selected !== undefined && runtimeIsUsable(selected))
   // A runtime that could run this message even though the route does not
   // point at it. Only consulted when the selected one cannot.
   const readyElsewhere = selectedReady
@@ -1419,7 +1422,7 @@ export function Composer({
   const effortIndex = Math.max(0, effortBases.indexOf(effortBase))
   const shownRuntimeStatus = runtimes.find((runtime) => runtime.id === shownRuntime)
   /** Nothing on this machine can take work, so no route is a real answer. */
-  const nothingConnected = !runtimes.some(runtimeIsUsable)
+  const nothingConnected = !runtimes.some(runtimeIsUsable) && !accounts.some(a => a.state === 'ready')
   // The chip is a label on a control, not the Settings row that tells you
   // which program this is -- so `Cursor`, not `Cursor Agent`. See `routeName`.
   const runtimeLabel = shortRuntimeName(shownRuntime)
@@ -1479,7 +1482,7 @@ export function Composer({
   const activeChoice: RouteChoice =
     activeRoute === undefined
       ? route
-      : { runtime: activeRoute.runtime, model: activeRoute.model }
+      : { runtime: activeRoute.runtime, model: activeRoute.model, ...(routeAccount(activeRoute) === undefined ? {} : { account: routeAccount(activeRoute) }) }
 
   /** Attaching, as the + menu's first satellite does it. */
   const attachFiles = (): void => {
@@ -2471,7 +2474,7 @@ export function Composer({
                       }
                       // Picking the route the run is already on would stop it
                       // and buy nothing, so it is not an action here.
-                      if (choice.runtime === activeChoice.runtime) return
+                      if (choice.runtime === activeChoice.runtime && choice.account === activeChoice.account) return
                       void Promise.resolve(onHandOff(choice)).then((why) => {
                         if (typeof why === 'string') setNote(why)
                       })
@@ -2558,15 +2561,20 @@ export function Composer({
                   {comparing ? null : nothingConnected ? (
                     <span className="lc-control__model">No AI agent</span>
                   ) : shownModel === 'account-default' && !ownModel ? (
-                    // The account's own default is the runtime alone, "Claude", as every other surface says it (0.723)
-                    // -- with the model it turned out to be once a run has said (0.797, above).
-                    defaultModelName === undefined ? runtimeLabel : (
-                      <>
-                        {runtimeLabel}
-                        <span className="lc-separator">/</span>
-                        <span className="lc-control__mono lc-control__model">{defaultModelName}</span>
-                      </>
-                    )
+                    // The account's own default is the runtime alone, "Claude", as every other surface says it (0.723) -- with
+                    // the account when one was picked (0.797), and otherwise with the model it turned out to be once a run
+                    // has said (0.797, above). That reading is the machine's own sign-in's, so never beside another account.
+                    (() => {
+                      const account = running ? routeAccount(activeRoute ?? {}) : route.account
+                      if (account !== undefined) return <>{runtimeLabel}{` · ${accountName(account)}`}</>
+                      return defaultModelName === undefined ? runtimeLabel : (
+                        <>
+                          {runtimeLabel}
+                          <span className="lc-separator">/</span>
+                          <span className="lc-control__mono lc-control__model">{defaultModelName}</span>
+                        </>
+                      )
+                    })()
                   ) : (
                     <>
                       {!ownModel && (
@@ -2575,7 +2583,7 @@ export function Composer({
                           <span className="lc-separator">/</span>
                         </>
                       )}
-                      <span className="lc-control__mono lc-control__model">{modelName}</span>
+                      <span className="lc-control__mono lc-control__model">{modelName}{(running ? routeAccount(activeRoute ?? {}) : route.account) !== undefined ? ` \u00b7 ${accountName(running ? routeAccount(activeRoute ?? {}) : route.account)}` : ''}</span>
                       {freeModel && <span className="lc-control__free">Free</span>}
                     </>
                   )}

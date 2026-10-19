@@ -1,5 +1,8 @@
 // H1: first, before any import can spawn -- no bare name is found in its working folder.
 import './no-planted-executables.js'
+import { AGENT_ACCOUNTS_CHANNEL, accountFromRoute, supportsAccounts, type AccountAction } from '../shared/agent-accounts.js'
+import { createAgentAccounts } from './agent-accounts.js'
+import { startAccountLogin } from './agent-account-login.js'
 import { OrganizationPolicyError, readOrganizationPolicy } from './organization-policy.js'
 import { createSpendRefusal } from './organization-spend.js'
 import { policyCloudTerminalRefusal, policyFeatureRefusal, policyModels, policyTurnRefusal, policyUnmeteredRefusal, type PolicyTurn } from '../shared/organization-policy.js'
@@ -2468,7 +2471,16 @@ if (!ownsSingleInstanceLock) {
       ownerOf: async (id: string) => (await teammates.missionOwners())[id],
       assign: (teammateId: string, id: string) => teammates.assignMission(teammateId, id)
     } satisfies CatchUpFacts
-    const catchUp = createTerminalCatchUp(catchUpFacts)
+    const catchUpMachine = createTerminalCatchUp(catchUpFacts)
+    const catchUp = async (missionId: string) => {
+      const mission = await missionLedger.getMission(missionId)
+      const account = accountFromRoute(mission?.metadata.resolvedRouteId ?? '')
+      if (account === undefined) return catchUpMachine(missionId)
+      const own = (await agentAccounts.state()).accounts.find(a => a.id === account && a.runtime === mission?.metadata.runtime)
+      if (own?.home === undefined) throw new Error('This conversation used a removed account. Its record was not read from another sign-in.')
+      const places = { ...sessionPlaces, ...(own.runtime === 'claude' ? { claudeHome: own.home } : { codexHome: own.home }) }
+      return catchUpTerminal(missionId, { ...catchUpFacts, transcriptOf: createTranscriptReader(places) })
+    }
     // Each runtime's own slash commands, as its CLI last listed them (0.426).
     const runtimeCommands = createRuntimeCommands({ file: join(app.getPath('userData'), 'runtime-commands.json') })
     // Cursor saves a run's --model as the person's own default; put back after (0.431).
@@ -2495,6 +2507,49 @@ if (!ownsSingleInstanceLock) {
       fromOwnWindow(event) ? acpAgents.save(name, commandLine) : { ok: false, message: 'Only Locust’s own window can add an agent.' })
     ipcMain.handle(ACP_AGENTS_REMOVE_CHANNEL, (event, id: unknown) =>
       fromOwnWindow(event) ? acpAgents.remove(id) : { ok: false, message: 'Only Locust’s own window can remove an agent.' })
+    const agentAccounts = createAgentAccounts({
+      directory: app.getPath('userData'),
+      refusal: () => policyFeatureRefusal(organizationPolicy, 'accounts'),
+      inUse: async (_runtime, account) => codexMissions.accountInUse(account) || (await backgroundRuns.list()).some(run => run.account === account && ['working', 'blocked', 'unknown'].includes(run.state)),
+      changed: () => { accountCatalogs.clear(); sendToWindow({ kind: 'models-changed' }) },
+      login: async (runtime, home, env, done) => {
+        const found = await executableLocator.find(runtime)
+        if (found === undefined) throw new Error('The agent is not installed.')
+        return startAccountLogin(runtime, { ...found, env: { ...found.env, ...env } }, home, done)
+      }
+    })
+    app.on('before-quit', () => agentAccounts.dispose())
+    const discoverForAccount = async (runtime?: string, account?: string): Promise<readonly RuntimeDiscovery[]> => {
+      if (account === undefined) return discoverForStart(runtime)
+      if (runtime === undefined || !supportsAccounts(runtime)) throw new Error('This agent does not support another account.')
+      const launch = await executableLocator.find(runtime)
+      if (launch === undefined) return []
+      const own = await agentAccounts.launch(runtime, account, launch)
+      return discoverInstalledRuntimes({ runner: probeRunner, locator: { find: async () => own }, only: new Set([runtime]), recall: runtimeFacts })
+    }
+    ipcMain.handle(AGENT_ACCOUNTS_CHANNEL, async (event, action: AccountAction) => {
+      if (!fromOwnWindow(event)) return { ok: false, accounts: [], message: 'Only Locust\'s own window can manage accounts.' }
+      try {
+        if (action?.kind === 'preview' && !app.isPackaged && process.env.LOCUST_ACCOUNT_PREVIEW === '1') {
+          const a = (await agentAccounts.list()).find(a => a.id === action.id)
+          if (a === undefined) throw new Error('Choose an added account to preview.')
+          const found = await executableLocator.find(a.runtime)
+          if (found === undefined) throw new Error('The agent is not installed.')
+          const own = await agentAccounts.launch(a.runtime, a.id, found)
+          const variable = a.runtime === 'claude' ? 'CLAUDE_CONFIG_DIR' : 'CODEX_HOME'
+          return { ...await agentAccounts.state(), preview: { runtime: a.runtime, variable, home: own.env![variable]! } }
+        }
+        if (action?.kind === 'add') await agentAccounts.add(action.runtime, action.name)
+        else if (action?.kind === 'rename') await agentAccounts.rename(action.id, action.name)
+        else if (action?.kind === 'remove') await agentAccounts.remove(action.id)
+        else if (action?.kind === 'login') await agentAccounts.login(action.id)
+        else if (action?.kind === 'cancel') await agentAccounts.cancel(action.id)
+        else if (action?.kind !== 'list') throw new Error('Choose an account action in Settings.')
+        return await agentAccounts.state()
+      } catch (cause) {
+        return { ok: false, accounts: await agentAccounts.list().catch(() => []), message: cause instanceof Error ? cause.message : 'The account could not be changed. Your other accounts are unchanged.' }
+      }
+    })
     const codexMissions = createCodexMissionService({
       organizationPolicy,
       workspacePath,
@@ -2518,8 +2573,8 @@ if (!ownsSingleInstanceLock) {
       openCodeCommandGuard: () => openCodeGuardWritten,
       setsItselfUp: (runtime) => runtime === 'opencode' && openCodeFirstStart.willSetUp(),
       // The same guard for Codex (0.720), only when it is the one hook Codex would load.
-      codexCommandGuard: async (folder) => {
-        if ((await otherCodexHooks({ codexHome: process.env.CODEX_HOME ?? join(homedir(), '.codex'), folder })).length > 0) return undefined
+      codexCommandGuard: async (folder, codexHome) => {
+        if ((await otherCodexHooks({ codexHome: codexHome ?? process.env.CODEX_HOME ?? join(homedir(), '.codex'), folder })).length > 0) return undefined
         return codexCommandGuardConfig({
           node: process.execPath,
           guardPath: app.isPackaged ? join(process.resourcesPath, 'locust-command-guard.mjs') : join(__dirname, '../../resources/locust-command-guard.mjs'),
@@ -2610,7 +2665,7 @@ if (!ownsSingleInstanceLock) {
         }).catch((error: unknown) => note('runtime-commands', `could not keep ${runtime}'s commands: ${error instanceof Error ? error.message : String(error)}`))
       },
       allowConnectors: async (workspace) => cursorConnectors.allow(workspace, await cursorConfiguredConnectorNames()),
-      discover: discoverForStart,
+      discover: discoverForAccount,
       runner: createNodeRuntimeProcessRunner(),
       ledger: missionLedger,
       workroom,
@@ -2847,6 +2902,19 @@ if (!ownsSingleInstanceLock) {
       // Antigravity's usage came after the list went out (0.709): read again to show it.
       onLateUsage: () => sendToWindow({ kind: 'models-changed' })
     })
+    const accountCatalogs = new Map<string, ReturnType<typeof createModelCatalog>>()
+    const readAccountModels = async () => {
+      const accounts = await agentAccounts.list()
+      const readings = await Promise.all(accounts.filter(a => a.state === 'ready').map(async a => {
+        let catalog = accountCatalogs.get(a.id)
+        if (catalog === undefined) {
+          catalog = createModelCatalog({ discover: () => discoverForAccount(a.runtime, a.id), spawn: spawnAppServer })
+          accountCatalogs.set(a.id, catalog)
+        }
+        return { account: a, result: await catalog.read() }
+      }))
+      return readings
+    }
     const adoptClaudeListed = (models: readonly ClaudeListedModel[]): void => {
       if (claudeListed !== undefined && JSON.stringify(claudeListed) === JSON.stringify(models)) return
       claudeListed = models
@@ -2945,7 +3013,7 @@ if (!ownsSingleInstanceLock) {
         commitDraftPrompt(pending, words),
         turn.metadata.runtime,
         'ask',
-        { ...(turn.metadata.model === 'account-default' ? {} : { model: turn.metadata.model }), ...(typeof effort === 'string' ? { effort } : {}) },
+        { ...(turn.metadata.model === 'account-default' ? {} : { model: turn.metadata.model }), ...(accountFromRoute(turn.metadata.resolvedRouteId) === undefined ? {} : { account: accountFromRoute(turn.metadata.resolvedRouteId) }), ...(typeof effort === 'string' ? { effort } : {}) },
         sendToWindow,
         undefined,
         undefined,
@@ -2995,7 +3063,7 @@ if (!ownsSingleInstanceLock) {
         walkthroughPrompt({ diff: change.text, cut: change.truncated, paths, asks: words, ...(said.latestFinal === undefined ? {} : { said: said.latestFinal }) }),
         turn.metadata.runtime,
         'ask',
-        { ...(turn.metadata.model === 'account-default' ? {} : { model: turn.metadata.model }), ...(typeof effort === 'string' ? { effort } : {}) },
+        { ...(turn.metadata.model === 'account-default' ? {} : { model: turn.metadata.model }), ...(accountFromRoute(turn.metadata.resolvedRouteId) === undefined ? {} : { account: accountFromRoute(turn.metadata.resolvedRouteId) }), ...(typeof effort === 'string' ? { effort } : {}) },
         sendToWindow,
         undefined,
         undefined,
@@ -3139,7 +3207,9 @@ if (!ownsSingleInstanceLock) {
       if (!fromOwnWindow(event)) {
         return { ok: false, error: { code: 'MODELS_UNAVAILABLE', message: 'Models could not be read.' } } as const
       }
-      const read = await modelCatalog.read()
+      const [read, accounts] = await Promise.all([modelCatalog.read(), policyFeatureRefusal(organizationPolicy, 'accounts') === undefined ? readAccountModels().catch(() => []) : Promise.resolve([])])
+      const accountModels = accounts.flatMap(({ result }) => result.ok ? result.data.models : [])
+      const accountUsage = Object.fromEntries(accounts.flatMap(({ account, result }) => !result.ok ? [] : Object.entries(result.data.usageWindows ?? {}).map(([runtime, said]) => [`${runtime}:${account.id}`, said])))
       // The person's own, first, read fresh: adding one must show at once,
       // not after the catalogue's ten-minute cache (0.357).
       const own = await ownModels.catalog().catch(() => [])
@@ -3147,7 +3217,7 @@ if (!ownsSingleInstanceLock) {
       const added = await acpAgents.list().then((listed) => (listed.ok ? acpCatalog(listed.agents) : [])).catch(() => [])
       if (own.length === 0 && added.length === 0 && !read.ok) return read
       // The usage reading rides along with the models it was read beside (0.390).
-      return { ok: true, data: { ...(read.ok ? read.data : {}), models: policyModels(organizationPolicy, [...own, ...added, ...(read.ok ? read.data.models : [])]) } } as const
+      return { ok: true, data: { ...(read.ok ? read.data : {}), usageWindows: { ...(read.ok ? read.data.usageWindows : {}), ...accountUsage }, models: policyModels(organizationPolicy, [...new Map([...own, ...added, ...(read.ok ? read.data.models : []), ...accountModels].map(model => [`${model.runtime}:${model.id}`, model])).values()]) } } as const
     })
 
     ipcMain.handle(OWN_MODEL_LIST_CHANNEL, async (event) => {
@@ -3510,7 +3580,7 @@ if (!ownsSingleInstanceLock) {
     // only where it is set: the teammate's profile (Edit teammate's Model row).
     const rememberRoute = async (
       teammateId: string | undefined,
-      route: { readonly runtime: MissionRuntimeId; readonly model: string; readonly mode: MissionMode; readonly effort?: string }
+      route: { readonly runtime: MissionRuntimeId; readonly model: string; readonly mode: MissionMode; readonly effort?: string; readonly account?: string }
     ): Promise<void> => {
       if (teammateId === undefined) return
       const own = (await teammates.list().catch(() => [])).find((entry) => entry.teammateId === teammateId)
@@ -3563,7 +3633,7 @@ if (!ownsSingleInstanceLock) {
           input.runtime,
           input.mode,
           // M10: the effort as well as the model, which this used to drop.
-          { ...(input.model === undefined ? {} : { model: input.model }), ...(input.effort === undefined ? {} : { effort: input.effort }) },
+          { ...(input.model === undefined ? {} : { model: input.model }), ...(input.account === undefined ? {} : { account: input.account }), ...(input.effort === undefined ? {} : { effort: input.effort }) },
           sendToWindow,
           undefined,
           input.peer,
@@ -3836,7 +3906,7 @@ if (!ownsSingleInstanceLock) {
             // A routine replays on a STORED route, which now carries the level
             // it was taught with. Without this one saved at `high` quietly
             // replayed at the runtime's default.
-            ...(input.effort === undefined ? {} : { effort: input.effort })
+            ...(input.account === undefined ? {} : { account: input.account }), ...(input.effort === undefined ? {} : { effort: input.effort })
           },
           sendToWindow,
           undefined,
@@ -4722,7 +4792,7 @@ if (!ownsSingleInstanceLock) {
         getMission: async (missionId) => {
           const mission = await missionLedger.getMission(missionId)
           // Antigravity's own walk: never a conversation its app held, which the CLI does not have (0.543).
-          return mission === undefined ? undefined : { runtime: mission.metadata.runtime, model: mission.metadata.model, session: mission.metadata.runtime === 'antigravity' ? resumableThreadOf(mission, 'antigravity') : runtimeThreadIdOf(mission) }
+          return mission === undefined ? undefined : { runtime: mission.metadata.runtime, model: mission.metadata.model, ...(accountFromRoute(mission.metadata.resolvedRouteId) === undefined ? {} : { account: accountFromRoute(mission.metadata.resolvedRouteId) }), session: mission.metadata.runtime === 'antigravity' ? resumableThreadOf(mission, 'antigravity') : runtimeThreadIdOf(mission) }
         },
         ownerOf: async (missionId) => {
           const [owners, roster] = await Promise.all([teammates.missionOwners(), teammates.list()])
@@ -4731,11 +4801,11 @@ if (!ownsSingleInstanceLock) {
         },
         cwdFor: async (teammateId) => (await peerContextFor(teammateId))?.cwd,
         workspacePath,
-        launchFor: async (runtime) => (await discoverForWork()).find((entry) => entry.id === runtime)?.executable
+        launchFor: async (runtime, account) => (await (account === undefined ? discoverForWork() : discoverForAccount(runtime, account))).find((entry) => entry.id === runtime)?.executable
       })
       if ('refused' in request) return { ok: false, message: request.refused } as const
       if (!isMissionRuntime(request.runtime)) return { ok: false, message: 'That AI agent is not supported here.' } as const
-      const managed = policyUnmeteredRefusal(organizationPolicy, { runtime: request.runtime, mode: 'auto' })
+      const managed = policyUnmeteredRefusal(organizationPolicy, { runtime: request.runtime, mode: 'auto', account: request.account })
       if (managed !== undefined) return { ok: false, message: managed } as const
       return openInTerminal(request, {
         ...(process.env.LOCALAPPDATA === undefined ? {} : { localAppData: process.env.LOCALAPPDATA }),
@@ -4824,7 +4894,7 @@ if (!ownsSingleInstanceLock) {
         question.trim(),
         turn.metadata.runtime,
         'ask',
-        { ...(turn.metadata.model === 'account-default' ? {} : { model: turn.metadata.model }), ...(typeof effort === 'string' ? { effort } : {}) },
+        { ...(turn.metadata.model === 'account-default' ? {} : { model: turn.metadata.model }), ...(accountFromRoute(turn.metadata.resolvedRouteId) === undefined ? {} : { account: accountFromRoute(turn.metadata.resolvedRouteId) }), ...(typeof effort === 'string' ? { effort } : {}) },
         sendToWindow,
         undefined,
         peer,
@@ -4982,8 +5052,8 @@ if (!ownsSingleInstanceLock) {
     }
     // The variables a parent Claude Code session sets for its own children: never handed on (a drive is run from one).
     const PARENT_SESSION_VARIABLES = ['CLAUDECODE', 'CLAUDE_PID', 'CLAUDE_CODE_ENTRYPOINT', 'CLAUDE_CODE_SESSION_ID', 'CLAUDE_CODE_CHILD_SESSION', 'CLAUDE_CODE_BRIDGE_SESSION_ID', 'CLAUDE_CODE_MESSAGING_SOCKET', 'CLAUDE_CODE_MESSAGING_TOKEN', 'CLAUDE_CODE_SESSION_ATTENDED', 'CLAUDE_CODE_EXECPATH']
-    const claudeCommand = async (args: readonly string[], cwd: string): Promise<{ code: number; stdout: string; stderr: string }> => {
-      const executable = await claudeLaunch()
+    const claudeCommand = async (args: readonly string[], cwd: string, account?: string): Promise<{ code: number; stdout: string; stderr: string }> => {
+      const executable = account === undefined ? await claudeLaunch() : (await discoverForAccount('claude', account)).find(r => r.id === 'claude' && r.readiness === 'ready')?.executable
       if (executable === undefined) return { code: 127, stdout: '', stderr: 'Claude Code is not installed or not signed in on this computer.' }
       const env = Object.fromEntries(Object.entries({ ...process.env, ...(executable.env ?? {}) }).filter(([key]) => !PARENT_SESSION_VARIABLES.includes(key)))
       return new Promise((resolve) => {
@@ -5009,16 +5079,19 @@ if (!ownsSingleInstanceLock) {
         child.on('exit', (code) => done(code ?? 1))
       })
     }
-    const backgroundSessionOf = async (conversation: string): Promise<string | undefined> => {
+    const backgroundSessionOf = async (conversation: string, account?: string): Promise<string | undefined> => {
       const newest = await newestTurnOf(missionLedger, conversation).catch(() => conversation)
       const mission = await missionLedger.getMission(newest).catch(() => undefined)
-      return mission === undefined || mission.metadata.runtime !== 'claude' ? undefined : runtimeThreadIdOf(mission)
+      return mission === undefined || mission.metadata.runtime !== 'claude' || accountFromRoute(mission.metadata.resolvedRouteId) !== account ? undefined : runtimeThreadIdOf(mission)
     }
     const backgroundRuns = createBackgroundRuns({
       file: join(app.getPath('userData'), 'claude-background.json'),
       claude: claudeCommand,
-      sessionOf: (conversation) => backgroundSessionOf(conversation),
+      sessionOf: (conversation, account) => backgroundSessionOf(conversation, account),
       bringIn: async (run) => {
+        const places = run.account === undefined ? sessionPlaces : { ...sessionPlaces, claudeHome: (await agentAccounts.state()).accounts.find(a => a.id === run.account)?.home ?? '' }
+        if (!places.claudeHome) return { refused: 'The account used by this run was removed. Its record was not read from another account.' }
+        const ownFacts = run.account === undefined ? catchUpFacts : { ...catchUpFacts, transcriptOf: createTranscriptReader(places) }
         if (run.conversation !== undefined) {
           const conversation = run.conversation
           /*
@@ -5028,11 +5101,11 @@ if (!ownsSingleInstanceLock) {
            * moment after `claude agents` says done.
            */
           const ownSession = run.sessionId
-          const conversationSession = await backgroundSessionOf(conversation)
+          const conversationSession = await backgroundSessionOf(conversation, run.account)
           const read = (): Promise<{ readonly imported: number; readonly latestMissionId: string }> =>
             ownSession !== undefined && ownSession !== conversationSession
-              ? catchUpTerminal(conversation, { ...catchUpFacts, sessionOf: () => ownSession })
-              : catchUp(conversation)
+              ? catchUpTerminal(conversation, { ...ownFacts, sessionOf: () => ownSession })
+              : catchUpTerminal(conversation, ownFacts)
           for (let attempt = 0; attempt < 5; attempt += 1) {
             const caught = await read()
             if (caught.imported > 0) return { missionId: caught.latestMissionId }
@@ -5041,14 +5114,14 @@ if (!ownsSingleInstanceLock) {
           return { refused: 'Its turn was not found in Claude Code\'s record of the conversation.' }
         }
         if (run.sessionId === undefined) return { refused: 'Claude Code never said which session it was.' }
-        const imported = await importSession({ runtime: 'claude', sessionId: run.sessionId, cwd: run.folder, title: run.prompt.slice(0, 80) }, {
+        const imported = await importSession({ runtime: 'claude', sessionId: run.sessionId, cwd: run.folder, title: run.prompt.slice(0, 80), ...(run.account === undefined ? {} : { account: run.account }) }, {
           ledger: missionLedger,
           imports: terminalImports,
           workspaceIdFor,
           sameFolder: (cwd) => folders.sameAs(cwd),
           learnFolder: (id, path) => folders.learn([{ id, path }]),
           nameConversation: (missionId, title) => teammates.renameMission(missionId, title),
-          pathOf: (runtime, sessionId) => transcriptPathFor(runtime, sessionId, sessionPlaces)
+          pathOf: (runtime, sessionId) => transcriptPathFor(runtime, sessionId, places)
         })
         if (!imported.ok) return { refused: imported.message }
         if (run.teammateId !== undefined) await teammates.assignMission(run.teammateId, imported.missionId).catch(() => undefined)
@@ -5077,7 +5150,8 @@ if (!ownsSingleInstanceLock) {
       const teammateId = text('teammateId')
       const model = text('model')
       const effort = text('effort')
-      const managed = await policyStartRefusal({ runtime: 'claude', mode, model }, teammateId)
+      const account = text('account')
+      const managed = await policyStartRefusal({ runtime: 'claude', mode, model, account }, teammateId)
       if (managed !== undefined) return { ok: false, message: managed }
       // Policy narrows the person's own Auto switch; it never enables it.
       if (mode === 'auto' && (await teammates.readSettings()).autoMode !== true) return { ok: false, message: 'Auto is off in Settings, so a background turn cannot use it.' }
@@ -5089,6 +5163,7 @@ if (!ownsSingleInstanceLock) {
         ...(conversation === undefined ? {} : { conversation }),
         ...(teammateId === undefined ? {} : { teammateId }),
         ...(model === undefined || model === 'account-default' ? {} : { model }),
+        ...(account === undefined ? {} : { account }),
         ...(effort === undefined ? {} : { effort })
       })
       if (started.ok) note('background-started', `${started.run.id} ${mode}`)
@@ -5098,10 +5173,10 @@ if (!ownsSingleInstanceLock) {
     ipcMain.handle(BACKGROUND_DISMISS_CHANNEL, async (event, id: unknown) => {
       if (fromOwnWindow(event) && typeof id === 'string') await backgroundRuns.dismiss(id)
     })
-    const openClaudeTerminal = async (request: { readonly sessionId: string; readonly attach?: true; readonly setup?: true }) => {
-      const managed = policyUnmeteredRefusal(organizationPolicy, { runtime: 'claude', mode: 'auto' })
+    const openClaudeTerminal = async (request: { readonly sessionId: string; readonly attach?: true; readonly setup?: true; readonly account?: string }) => {
+      const managed = policyUnmeteredRefusal(organizationPolicy, { runtime: 'claude', mode: 'auto', account: request.account })
       if (managed !== undefined) return { ok: false, message: managed }
-      const launch = await claudeLaunch()
+      const launch = request.account === undefined ? await claudeLaunch() : (await discoverForAccount('claude', request.account)).find(r => r.id === 'claude')?.executable
       if (launch === undefined) return { ok: false, message: 'Claude Code is not installed or not signed in on this computer.' }
       return openInTerminal({ runtime: 'claude', cwd: workspacePath, launch, title: 'Claude Code', ...request }, {
         ...(process.env.LOCALAPPDATA === undefined ? {} : { localAppData: process.env.LOCALAPPDATA }),
@@ -5112,7 +5187,7 @@ if (!ownsSingleInstanceLock) {
       if (!fromOwnWindow(event) || typeof id !== 'string') return { ok: false, message: 'That run cannot be opened.' }
       const run = (await backgroundRuns.list()).find((entry) => entry.id === id)
       if (run === undefined) return { ok: false, message: 'That run is not in the list any more.' }
-      return openClaudeTerminal({ sessionId: id, attach: true })
+      return openClaudeTerminal({ sessionId: id, attach: true, ...(run.account === undefined ? {} : { account: run.account }) })
     })
     ipcMain.handle(BACKGROUND_SETUP_CHANNEL, async (event) => (fromOwnWindow(event) ? openClaudeTerminal({ sessionId: 'setup', setup: true }) : { ok: false, message: 'That request was rejected.' }))
     const publicTask = <T extends { folder: string }>(task: T): Omit<T, 'folder'> => {
@@ -6755,7 +6830,7 @@ if (!ownsSingleInstanceLock) {
         route.runtime,
         route.mode,
         // M10: the teammate's saved effort too, as a direct message runs them.
-        { ...(route.model === 'account-default' ? {} : { model: route.model }), ...(route.effort === undefined ? {} : { effort: route.effort }) },
+        { ...(route.model === 'account-default' ? {} : { model: route.model }), ...(route.account === undefined ? {} : { account: route.account }), ...(route.effort === undefined ? {} : { effort: route.effort }) },
         sendToWindow,
         undefined,
         peer,
@@ -6857,7 +6932,7 @@ if (!ownsSingleInstanceLock) {
           : compare.changes === true && column.route.mode === 'auto' && (await teammates.readSettings()).autoMode === true
             ? 'auto'
             : 'accept-edits',
-        { ...(column.route.model === 'account-default' ? {} : { model: column.route.model }), ...(column.route.effort === undefined ? {} : { effort: column.route.effort }) },
+        { ...(column.route.model === 'account-default' ? {} : { model: column.route.model }), ...(column.route.account === undefined ? {} : { account: column.route.account }), ...(column.route.effort === undefined ? {} : { effort: column.route.effort }) },
         sendToWindow,
         undefined,
         peer,
@@ -6909,7 +6984,7 @@ if (!ownsSingleInstanceLock) {
         .map((route) => ({
           runtime: typeof route.runtime === 'string' ? route.runtime : '',
           model: typeof route.model === 'string' && route.model.length > 0 ? route.model : 'account-default',
-          ...(typeof route.effort === 'string' ? { effort: route.effort } : {}),
+          ...(typeof route.account === 'string' ? { account: route.account } : {}), ...(typeof route.effort === 'string' ? { effort: route.effort } : {}),
           ...(typeof route.label === 'string' && route.label.trim().length > 0 ? { label: route.label.trim() } : {}),
           ...(route.mode === 'auto' ? { mode: 'auto' as const } : {})
         }))
@@ -7039,7 +7114,7 @@ if (!ownsSingleInstanceLock) {
         added = await compares.addColumn(compare.compareId, {
           runtime: route.runtime,
           model: route.model,
-          ...(typeof route.effort === 'string' ? { effort: route.effort } : {}),
+          ...(typeof route.account === 'string' ? { account: route.account } : {}), ...(typeof route.effort === 'string' ? { effort: route.effort } : {}),
           ...(typeof route.label === 'string' && route.label.trim().length > 0 ? { label: route.label.trim() } : {})
         })
       } catch (error) {
@@ -7113,7 +7188,7 @@ if (!ownsSingleInstanceLock) {
         brief,
         one.runtime as MissionRuntimeId,
         'ask',
-        { ...(one.model === 'account-default' ? {} : { model: one.model }), ...(typeof one.effort === 'string' ? { effort: one.effort } : {}) },
+        { ...(one.model === 'account-default' ? {} : { model: one.model }), ...(one.account === undefined ? {} : { account: one.account }), ...(typeof one.effort === 'string' ? { effort: one.effort } : {}) },
         sendToWindow,
         undefined,
         undefined,
@@ -7123,7 +7198,7 @@ if (!ownsSingleInstanceLock) {
         undefined,
         { key }
       )
-      const routeKept = (one: CompareRoute): CompareRoute => ({ runtime: one.runtime, model: one.model, ...(typeof one.effort === 'string' ? { effort: one.effort } : {}), ...(typeof one.label === 'string' && one.label.trim().length > 0 ? { label: one.label.trim() } : {}) })
+      const routeKept = (one: CompareRoute): CompareRoute => ({ runtime: one.runtime, model: one.model, ...(typeof one.account === 'string' ? { account: one.account } : {}), ...(typeof one.effort === 'string' ? { effort: one.effort } : {}), ...(typeof one.label === 'string' && one.label.trim().length > 0 ? { label: one.label.trim() } : {}) })
       const response = await startJudge({ ...route, runtime, model }, `judge:${compare.compareId}`)
       if (!response.ok) return refused(response.error.code === 'RUN_ALREADY_ACTIVE' ? 'The judge is still reading. Ask again when it has finished.' : response.error.message)
       const started = [response.data]
@@ -7163,14 +7238,14 @@ if (!ownsSingleInstanceLock) {
       for (const member of Array.isArray(input.panel) ? input.panel.slice(0, PANEL_JUDGES + 1) : []) {
         const one = (typeof member === 'object' && member !== null ? member : {}) as Record<string, unknown>
         if (!isMissionRuntime(one.runtime) || typeof one.model !== 'string' || one.model.length === 0 || one.model.length > 200) return compareRefused('Pick a model for each judge.')
-        panel.push({ runtime: one.runtime, model: one.model, ...(typeof one.effort === 'string' ? { effort: one.effort } : {}), ...(typeof one.label === 'string' && one.label.trim().length > 0 ? { label: one.label.trim() } : {}) })
+        panel.push({ runtime: one.runtime, model: one.model, ...(typeof one.account === 'string' ? { account: one.account } : {}), ...(typeof one.effort === 'string' ? { effort: one.effort } : {}), ...(typeof one.label === 'string' && one.label.trim().length > 0 ? { label: one.label.trim() } : {}) })
       }
       const judged = await judgeCompare(
         compare,
         {
           runtime: route.runtime,
           model: route.model,
-          ...(typeof route.effort === 'string' ? { effort: route.effort } : {}),
+          ...(typeof route.account === 'string' ? { account: route.account } : {}), ...(typeof route.effort === 'string' ? { effort: route.effort } : {}),
           ...(typeof route.label === 'string' && route.label.trim().length > 0 ? { label: route.label.trim() } : {})
         },
         criteria,
@@ -7243,7 +7318,7 @@ if (!ownsSingleInstanceLock) {
         pointsDraftRequest(compare.prompt),
         route.runtime,
         'ask',
-        { ...(model === 'account-default' ? {} : { model }), ...(typeof route.effort === 'string' ? { effort: route.effort } : {}) },
+        { ...(model === 'account-default' ? {} : { model }), ...(typeof route.account === 'string' ? { account: route.account } : {}), ...(typeof route.effort === 'string' ? { effort: route.effort } : {}) },
         sendToWindow,
         undefined,
         undefined,
@@ -7366,7 +7441,7 @@ if (!ownsSingleInstanceLock) {
           prompt,
           runtime,
           'ask',
-          { ...(chosen === 'account-default' ? {} : { model: chosen }), ...(model === undefined && typeof route.effort === 'string' ? { effort: route.effort } : {}) },
+          { ...(chosen === 'account-default' ? {} : { model: chosen }), ...(model === undefined && route.account !== undefined ? { account: route.account } : {}), ...(model === undefined && typeof route.effort === 'string' ? { effort: route.effort } : {}) },
           scoutEmit,
           undefined,
           undefined,
@@ -7406,7 +7481,7 @@ if (!ownsSingleInstanceLock) {
         const taken = new Set(roster.map((mate) => mate.name.toLowerCase()))
         const name = ['Scout', 'Scout 2', 'Scout 3', 'Lookout'].find((one) => !taken.has(one.toLowerCase())) ?? `Scout ${String(roster.length + 1)}`
         const made = await teammates.create({ name, hue: 'teal', role: 'Custom', roleTitle: 'Keeps watch' })
-        await teammates.rememberRoute(made.teammateId, { runtime: route.runtime, model: route.model, mode: 'ask' })
+        await teammates.rememberRoute(made.teammateId, { runtime: route.runtime, model: route.model, ...(route.account === undefined ? {} : { account: route.account }), mode: 'ask' })
         return made.teammateId
       },
       teammateExists: async (teammateId) => (await teammates.list()).some((mate) => mate.teammateId === teammateId),
@@ -7422,9 +7497,9 @@ if (!ownsSingleInstanceLock) {
     ipcMain.handle(SCOUT_TURN_ON, async (event, route: unknown) => {
       if (!fromOwnWindow(event)) return { refused: 'That request was rejected.' }
       const asked = (typeof route === 'object' && route !== null ? route : {}) as Record<string, unknown>
-      const kept = { runtime: asked.runtime, model: asked.model, mode: 'ask' }
+      const kept = { runtime: asked.runtime, model: asked.model, ...(typeof asked.account === 'string' ? { account: asked.account } : {}), mode: 'ask' }
       // A Scout already on the team needs no route: it reads with its own.
-      return keptScout.turnOn(isTeammateRoute(kept) ? { runtime: kept.runtime, model: kept.model } : undefined)
+      return keptScout.turnOn(isTeammateRoute(kept) ? { runtime: kept.runtime, model: kept.model, ...(kept.account === undefined ? {} : { account: kept.account }) } : undefined)
     })
     ipcMain.handle(SCOUT_SET, (event, change: unknown) => (fromOwnWindow(event) ? keptScout.set(change) : keptScout.state()))
     ipcMain.handle(SCOUT_DISMISS, (event, cardId: unknown) => (fromOwnWindow(event) ? keptScout.dismiss(cardId) : keptScout.state()))
@@ -7470,7 +7545,7 @@ if (!ownsSingleInstanceLock) {
           prompt,
           route.runtime,
           route.mode,
-          { ...(route.model === 'account-default' ? {} : { model: route.model }), ...(route.effort === undefined ? {} : { effort: route.effort }) },
+          { ...(route.model === 'account-default' ? {} : { model: route.model }), ...(route.account === undefined ? {} : { account: route.account }), ...(route.effort === undefined ? {} : { effort: route.effort }) },
           sendToWindow,
           undefined,
           peer
@@ -8607,7 +8682,7 @@ if (!ownsSingleInstanceLock) {
       // Resolve before choosing a transport: discovery in the renderer may
       // still be partial, but the host already knows this teammate's route.
       const savedTeammate = (await teammates.list().catch(() => [])).find((entry) => entry.teammateId === payload.teammateId)
-      const { runtime, model, effort } = routeAtStart(payload, savedTeammate)
+      const { runtime, model, effort, account } = routeAtStart(payload, savedTeammate)
       const managed = policyTurnRefusal(organizationPolicy, { runtime, model, mode, cloud: payload.cloud === true })
       if (managed !== undefined) return { ok: false, error: { code: 'POLICY_REFUSED', message: managed } } as const
       const peer = await peerContextFor(payload.teammateId)
@@ -8689,7 +8764,7 @@ if (!ownsSingleInstanceLock) {
           prompt,
           runtime,
           mode,
-          { ...(model === undefined ? {} : { model }), ...(effort === undefined ? {} : { effort }) },
+          { ...(model === undefined ? {} : { model }), ...(effort === undefined ? {} : { effort }), ...(account === undefined ? {} : { account }) },
           emit,
           undefined,
           peer,
@@ -8712,7 +8787,7 @@ if (!ownsSingleInstanceLock) {
           await assignOwner(peer?.self.teammateId, response.data.missionId)
           // A review's read-only run is for that run alone (0.514): the saved route stays the teammate's.
           if ((payload as { readonly keepSavedRoute?: unknown }).keepSavedRoute !== true) {
-            await rememberRoute(peer?.self.teammateId, { runtime, model: model ?? 'account-default', mode, ...(effort === undefined ? {} : { effort }) })
+            await rememberRoute(peer?.self.teammateId, { runtime, model: model ?? 'account-default', mode, ...(effort === undefined ? {} : { effort }), ...(account === undefined ? {} : { account }) })
           }
           // A rewind moves the teammate's conversation from the old tip to the new branch (0.498).
           await advanceHub(peer?.self.teammateId, rewindTip(payload) ?? followUpOf, response.data.missionId)
@@ -9018,6 +9093,7 @@ if (!ownsSingleInstanceLock) {
       const refusedResume = noWorkspaceRefusal()
       if (refusedResume !== undefined) return refusedResume
       const payload = (typeof request === 'object' && request !== null ? request : {}) as Partial<MissionResumeRequest>
+      const account = typeof payload.account === 'string' ? payload.account : undefined
       // Same widening as a start and a handoff: an unrecognized mode is
       // read-only and an unrecognized runtime is Codex, so a malformed
       // request cannot buy itself write access by being wrong.
@@ -9037,7 +9113,7 @@ if (!ownsSingleInstanceLock) {
           payload.missionId,
           runtime,
           mode,
-          { ...(model === undefined ? {} : { model }), ...(effort === undefined ? {} : { effort }) },
+          { ...(model === undefined ? {} : { model }), ...(effort === undefined ? {} : { effort }), ...(account === undefined ? {} : { account }) },
           (update: CodexMissionUpdate) => {
             if (!owner.isDestroyed() && !owner.webContents.isDestroyed()) {
               owner.webContents.send(CODEX_MISSION_UPDATE_CHANNEL, update)
@@ -9066,6 +9142,7 @@ if (!ownsSingleInstanceLock) {
       const refusedHandoff = noWorkspaceRefusal()
       if (refusedHandoff !== undefined) return refusedHandoff
       const payload = (typeof request === 'object' && request !== null ? request : {}) as Partial<MissionHandoffRequest>
+      const account = typeof payload.account === 'string' ? payload.account : undefined
       // Same widening rules as a start: an unrecognized mode is read-only and
       // an unrecognized runtime is Codex. A handoff must not become the way a
       // malformed request buys itself write access.
@@ -9079,7 +9156,7 @@ if (!ownsSingleInstanceLock) {
           payload.runId,
           runtime,
           mode,
-          { ...(model === undefined ? {} : { model }), ...(effort === undefined ? {} : { effort }) },
+          { ...(model === undefined ? {} : { model }), ...(effort === undefined ? {} : { effort }), ...(account === undefined ? {} : { account }) },
           (update: CodexMissionUpdate) => {
             if (!owner.isDestroyed() && !owner.webContents.isDestroyed()) {
               owner.webContents.send(CODEX_MISSION_UPDATE_CHANNEL, update)
@@ -9094,7 +9171,7 @@ if (!ownsSingleInstanceLock) {
           // A person picked this route for this teammate, mid-run; that is
           // as much a choice as starting them on it. The sidebar read the old
           // route while the composer read the new one (seen driving, 2026-09-05).
-          await rememberRoute(ownerId, { runtime, model: model ?? 'account-default', mode, ...(effort === undefined ? {} : { effort }) })
+          await rememberRoute(ownerId, { runtime, model: model ?? 'account-default', mode, ...(effort === undefined ? {} : { effort }), ...(account === undefined ? {} : { account }) })
         }
         return response
       } catch {

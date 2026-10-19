@@ -1,3 +1,4 @@
+import { accountFromRoute } from '../shared/agent-accounts.js'
 import { policyFeatureRefusal, policyTurnRefusal } from '../shared/organization-policy.js'
 import { supportsPerRunBrowserMcp } from '../shared/browser.js'
 import type { BrowserMcpRegistration, BrowserRunContext } from './browser-host.js'
@@ -150,6 +151,7 @@ export { MAX_LIVE_MISSIONS } from '../shared/live-missions.js'
 const NOBODY = ''
 
 interface ActiveCodexMission {
+  readonly account?: string
   /** Whether this mission has already explained a refused read. Once is enough. */
   saidWhyAReadFailed: boolean
   /** Whether this run has already said a connector needs signing in to. */
@@ -252,7 +254,7 @@ export interface CodexMissionService {
     prompt: unknown,
     runtime: MissionRuntimeId,
     mode: MissionMode,
-    route: { readonly model?: string; readonly effort?: string },
+    route: { readonly model?: string; readonly effort?: string; readonly account?: string },
     emit: (update: CodexMissionUpdate) => void,
     /**
      * Only `handOff` supplies this. It is not reachable from the renderer: the
@@ -334,7 +336,7 @@ export interface CodexMissionService {
     missionId: unknown,
     runtime: MissionRuntimeId,
     mode: MissionMode,
-    route: { readonly model?: string; readonly effort?: string },
+    route: { readonly model?: string; readonly effort?: string; readonly account?: string },
     emit: (update: CodexMissionUpdate) => void,
     /**
      * H6: the teammate the interrupted mission belonged to. A resume used to
@@ -348,11 +350,13 @@ export interface CodexMissionService {
     runId: unknown,
     runtime: MissionRuntimeId,
     mode: MissionMode,
-    route: { readonly model?: string; readonly effort?: string },
+    route: { readonly model?: string; readonly effort?: string; readonly account?: string },
     emit: (update: CodexMissionUpdate) => void
   ): Promise<MissionHandoffResponse>
   /** What a reply on `runtime` to that mission would carry, composed as a send would and with nothing written (0.517). */
   previewSwitch(followUpOf: string, runtime: MissionRuntimeId, prompt: string, leaveOut?: readonly string[]): Promise<HandoffPreview>
+  /** Whether a run of this transport is starting or live on that added account. */
+  accountInUse(account: string): boolean
   /** Whether this transport owns a live run of that mission. */
   hasMission(missionId: string): boolean
   /** The missions this transport is running right now. */
@@ -414,7 +418,7 @@ interface CodexMissionServiceOptions {
    * `ready` record instead of re-probing every other runtime — see
    * `discoverForStart`. Passing nothing is the old full sweep.
    */
-  readonly discover: (runtimeId?: string) => Promise<readonly RuntimeDiscovery[]>
+  readonly discover: (runtimeId?: string, account?: string) => Promise<readonly RuntimeDiscovery[]>
   /**
    * Bring what the person did in the runtime's own terminal on a conversation
    * into its record, and say its newest turn (0.391; terminal-catch-up.ts).
@@ -667,7 +671,7 @@ interface CodexMissionServiceOptions {
    * undefined when Codex would load some other hook too (`otherCodexHooks`),
    * and that run goes without it.
    */
-  readonly codexCommandGuard?: (folder: string) => Promise<Readonly<Record<string, unknown>> | undefined>
+  readonly codexCommandGuard?: (folder: string, codexHome?: string) => Promise<Readonly<Record<string, unknown>> | undefined>
   /**
    * What answers a Codex run that stops to ask -- Approve-each's whole point.
    * Without it that mode has nobody to ask, and every request is refused.
@@ -1372,11 +1376,11 @@ export function createCodexMissionService(options: CodexMissionServiceOptions): 
   async function targetRefusal(
     runtime: MissionRuntimeId,
     mode: MissionMode,
-    route: { readonly model?: string; readonly effort?: string },
+    route: { readonly model?: string; readonly effort?: string; readonly account?: string },
     /** The teammate the run belongs to, whose monthly limit applies to the run it hands to. */
     teammateId?: string
   ): Promise<string | undefined> {
-    const managed = policyTurnRefusal(options.organizationPolicy, { runtime, mode, model: route.model })
+    const managed = policyTurnRefusal(options.organizationPolicy, { runtime, mode, model: route.model, account: route.account })
     if (managed !== undefined) return managed
     const chosenModel = route.model === undefined || route.model === 'account-default' ? undefined : route.model
     if (options.freeRoutesOnly === true && !isFreeRoute(runtime, chosenModel)) return FREE_ONLY_REFUSAL
@@ -1391,7 +1395,7 @@ export function createCodexMissionService(options: CodexMissionServiceOptions): 
     }
     let runtimes: readonly RuntimeDiscovery[]
     try {
-      runtimes = await options.discover(runtime)
+      runtimes = await options.discover(runtime, ...(route.account === undefined ? [] : [route.account]))
     } catch {
       return `${runtimeDisplayName(runtime)} readiness could not be verified. Check the local runtime and try again.`
     }
@@ -1430,7 +1434,7 @@ export function createCodexMissionService(options: CodexMissionServiceOptions): 
       prompt: unknown,
       runtime: MissionRuntimeId,
       mode: MissionMode,
-      route: { readonly model?: string; readonly effort?: string },
+      route: { readonly model?: string; readonly effort?: string; readonly account?: string },
       emit: (update: CodexMissionUpdate) => void,
       continuation?: MissionContinuation,
       peer?: MissionPeerContext,
@@ -1445,9 +1449,10 @@ export function createCodexMissionService(options: CodexMissionServiceOptions): 
       cloud?: { readonly setUp?: boolean }
     ): Promise<CodexMissionStartResponse> {
       // All callers, including routines, relays, compares, resume and handoffs, cross this gate before I/O.
-      const managed = policyTurnRefusal(options.organizationPolicy, { runtime, mode, model: route.model, cloud: cloud !== undefined })
+      const managed = policyTurnRefusal(options.organizationPolicy, { runtime, mode, model: route.model, account: route.account, cloud: cloud !== undefined })
       if (managed !== undefined) return error('POLICY_REFUSED', managed) as CodexMissionStartResponse
       // The start's phases (0.602): said to the window as they begin, and timed for the note the run's end writes.
+      if (route.account !== undefined && cloud !== undefined) return error('RUNTIME_START_FAILED', 'Added accounts run on this computer. Choose This PC\'s sign-in for a cloud turn.') as CodexMissionStartResponse
       const sentAt = Date.now()
       const phaseAt: Partial<Record<StartPhase, number>> = {}
       const say = (phase: StartPhase): void => {
@@ -1621,7 +1626,7 @@ export function createCodexMissionService(options: CodexMissionServiceOptions): 
           acpAgentRun = found
         } else {
           try {
-            runtimes = await options.discover(runtime)
+            runtimes = await options.discover(runtime, ...(route.account === undefined ? [] : [route.account]))
           } catch {
             return error(
               'CODEX_UNAVAILABLE',
@@ -1785,7 +1790,7 @@ export function createCodexMissionService(options: CodexMissionServiceOptions): 
             const said = createTranscriptTracker()
             said.track(prior.events)
             coldEarlier = [...(await earlierTurnsOf(prior)), { asked: prior.metadata.prompt, answered: said.latestFinal }]
-          } else if (prior.metadata.runtime !== runtime) {
+          } else if (prior.metadata.runtime !== runtime || accountFromRoute(prior.metadata.resolvedRouteId) !== route.account) {
             // A reply on ANOTHER runtime. This used to be refused ("switch the
             // route back, or hand the mission over"), and the person's
             // workaround was a fresh mission with the filenames and the task
@@ -1977,12 +1982,13 @@ export function createCodexMissionService(options: CodexMissionServiceOptions): 
         ) {
           return error('RUNTIME_START_FAILED', CURSOR_READ_ONLY_REFUSAL) as CodexMissionStartResponse
         }
-        const resolvedRouteId = `${routeId}-account:default`
+        const resolvedRouteId = `${routeId}-account:${route.account ?? 'default'}`
         const normalizerContext = {
           runId,
           missionId,
           requestedRouteId: routeId,
           resolvedRouteId,
+          ...(route.account === undefined ? {} : { account: route.account }),
           ...(chosen.version?.version === undefined ? {} : { cliVersion: chosen.version.version }),
           // A free model's refusal is OpenCode's side, never a sign-in to renew (opencode-error.ts, 2026-10-12).
           ...(runtime === 'opencode' && chosenModel !== undefined ? { model: chosenModel } : {}),
@@ -2097,7 +2103,7 @@ export function createCodexMissionService(options: CodexMissionServiceOptions): 
         const copilotGuardPlugin = runtime === 'copilot' ? await options.copilotCommandGuard?.().catch(() => undefined) : undefined
         // A cloud turn's guard is the computer it runs on: nothing there reaches GitHub (cloud-computer.ts).
         const openCodeGuardPlugin = runtime === 'opencode' && cloud === undefined ? await options.openCodeCommandGuard?.().catch(() => undefined) : undefined
-        const codexGuardConfig = runtime === 'codex' && cloud === undefined ? await options.codexCommandGuard?.(runCwd).catch(() => undefined) : undefined
+        const codexGuardConfig = runtime === 'codex' && cloud === undefined ? await options.codexCommandGuard?.(runCwd, chosen.executable.env?.CODEX_HOME).catch(() => undefined) : undefined
         // The person's connectors are this computer's: a turn there has none to ask about.
         const permissionBridge =
           cloud === undefined && runtime === 'claude' && effectiveSandbox !== 'full-access' && options.permissionHost !== undefined
@@ -2544,6 +2550,7 @@ ${sentPrompt.trim()}`
             model: chosenModel ?? 'account-default',
             requestedRouteId: routeId,
             resolvedRouteId,
+            ...(route.account === undefined ? {} : { account: route.account }),
             cliVersion: chosen.version?.version ?? null,
             workspaceId,
             sandbox: effectiveSandbox,
@@ -2925,6 +2932,7 @@ ${sentPrompt.trim()}`
           emit,
           prompt,
           runtime,
+          ...(route.account === undefined ? {} : { account: route.account }),
           peer,
           ...(slot === undefined ? {} : { slot: slot.key }),
           transcript: createTranscriptTracker(),
@@ -2982,6 +2990,7 @@ ${sentPrompt.trim()}`
             runtime,
             model: chosenModel ?? 'account-default',
             resolvedRouteId,
+            ...(route.account === undefined ? {} : { account: route.account }),
             cliVersion: chosen.version?.version ?? null,
             sandbox: effectiveSandbox,
             mode,
@@ -3065,7 +3074,7 @@ ${sentPrompt.trim()}`
       runId: unknown,
       runtime: MissionRuntimeId,
       mode: MissionMode,
-      route: { readonly model?: string; readonly effort?: string },
+      route: { readonly model?: string; readonly effort?: string; readonly account?: string },
       emit: (update: CodexMissionUpdate) => void
     ): Promise<MissionHandoffResponse> {
       const previous = validRunId(runId) ? active.get(runId) : undefined
@@ -3078,7 +3087,7 @@ ${sentPrompt.trim()}`
       // Refuse a handoff to the runtime already running it. Stopping a run to
       // restart it on the same route would cost the user their progress and
       // buy nothing, and it is much more likely to be a misclick than a wish.
-      if (previous.runtime === runtime) {
+      if (previous.runtime === runtime && previous.account === route.account) {
         return {
           ok: false,
           error: { code: 'HANDOFF_REFUSED', message: 'That mission is already on this runtime. Nothing was changed.', untouched: true }
@@ -3177,7 +3186,7 @@ ${sentPrompt.trim()}`
       missionId: unknown,
       runtime: MissionRuntimeId,
       mode: MissionMode,
-      route: { readonly model?: string; readonly effort?: string },
+      route: { readonly model?: string; readonly effort?: string; readonly account?: string },
       emit: (update: CodexMissionUpdate) => void,
       peer?: MissionPeerContext
     ): Promise<MissionHandoffResponse> {
@@ -3209,7 +3218,7 @@ ${sentPrompt.trim()}`
 
       // H6: resumed on ANOTHER runtime, it is a route switch -- recorded as
       // one, so the thread draws the seam -- not a follow-up.
-      const switching = runtime !== recovered.metadata.runtime
+      const switching = runtime !== recovered.metadata.runtime || accountFromRoute(recovered.metadata.resolvedRouteId) !== route.account
       let checkpoint
       try {
         checkpoint = await options.ledger.createCheckpoint(missionId, switching ? 'route-switch' : 'manual')
@@ -3291,6 +3300,7 @@ ${sentPrompt.trim()}`
       }
     },
 
+    accountInUse(account: string): boolean { return starting.size > 0 || [...active.values()].some(mission => mission.account === account) },
     hasMission(missionId: string): boolean {
       return [...active.values()].some((mission) => mission.missionId === missionId)
     },

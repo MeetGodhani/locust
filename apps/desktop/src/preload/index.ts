@@ -1,3 +1,4 @@
+import { AGENT_ACCOUNTS_CHANNEL, type AccountAction, type AgentAccountsState } from '../shared/agent-accounts.js'
 import { contextBridge, ipcRenderer } from 'electron'
 import { TERMINAL_SHELLS, TERMINAL_CREATE, TERMINAL_INPUT, TERMINAL_RESIZE, TERMINAL_CLOSE, TERMINAL_EVENT, TERMINAL_LINK, TERMINAL_COPY, type TerminalApi } from '../shared/terminal.js'
 import {
@@ -723,6 +724,7 @@ const desktopApi: DesktopApi = {
   /** Run `npm install -g <package>` for a runtime, watching npm's own output. */
   installRuntime: (runtime: string) =>
     ipcRenderer.invoke(RUNTIME_INSTALL_CHANNEL, runtime) as Promise<RuntimeInstallResponse>,
+  agentAccounts: (action: AccountAction) => ipcRenderer.invoke(AGENT_ACCOUNTS_CHANNEL, action) as Promise<AgentAccountsState>,
   signInRuntime: (runtime: string, again?: boolean) =>
     ipcRenderer.invoke(RUNTIME_SIGN_IN_CHANNEL, runtime, again === true) as Promise<RuntimeSignInResponse>,
   onSignInClosed: (listener: (runtime: string) => void) => {

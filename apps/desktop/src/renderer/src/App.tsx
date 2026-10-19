@@ -1,3 +1,5 @@
+import { accountUsageKey, accountFromRoute } from '../../shared/agent-accounts.js'
+import { accountName, routeAccount, useAgentAccounts } from './agentAccounts.js'
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { TerminalToggle } from './components/TerminalToggle.js'
 import { BrowserToggle } from './components/BrowserToggle.js'
@@ -841,6 +843,7 @@ export default function App(): ReactElement {
   // that opens a finished mission from another runtime on launch (room
   // smoke, 2026-09-05), which is exactly a person's profile after an update.
   const runtimes = runtimeState.phase === 'ready' ? runtimeState.runtimes : []
+  const addedAccounts = useAgentAccounts()
   // Antigravity joins a comparison through its CLI, never through its app (0.543).
   const antigravityCli = runtimes.some((status) => status.id === 'antigravity' && status.throughCli === true)
   const [build, setBuild] = useState<{ readonly version: string; readonly packaged: boolean; readonly platform: string; readonly organizationPolicy?: import('../../shared/organization-policy.js').OrganizationPolicyState }>()
@@ -1548,7 +1551,7 @@ export default function App(): ReactElement {
    */
   const seedRouteFromGroup = (group: PublicGroup): void => {
     if (group.route === undefined) return
-    const next = { runtime: group.route.runtime, model: group.route.model }
+    const next = { runtime: group.route.runtime, model: group.route.model, ...(group.route.account === undefined ? {} : { account: group.route.account }) }
     /*
      * The same three writes the composer's own route picker makes, or the
      * seed does not show. MEASURED 2026-09-16 driving 0.161.0 before release:
@@ -3000,7 +3003,8 @@ export default function App(): ReactElement {
       // A finished mission hops once; a message that just arrived earns a
       // glance. Both are moments, so both clear themselves.
       if (update.kind === 'event') {
-        const runtime = update.event.sourceAdapter
+        const agent = update.event.sourceAdapter
+        const runtime = accountUsageKey(agent, accountFromRoute(update.event.resolvedRouteId ?? ''))
         if (update.event.type === 'adapter.diagnostic' && /\.usage_window$/.test(update.event.payload.code)) {
           const said = `${update.event.payload.message} · from a run at ${update.event.occurredAt}`
           setUsageWindows((current) => (current.get(runtime) === said ? current : new Map(current).set(runtime, said)))
@@ -3011,7 +3015,7 @@ export default function App(): ReactElement {
         }
         if (update.event.type === 'run.completed') {
           // W12: an ACP run (Copilot) told Locust what it can do as it started; the row in Settings reads it now.
-          if (runtime === 'copilot') askDiscoveryAgain.current()
+          if (agent === 'copilot') askDiscoveryAgain.current()
           setLimitedRuntimes((current) => {
             if (!current.has(runtime)) return current
             const next = new Map(current)
@@ -3556,7 +3560,7 @@ export default function App(): ReactElement {
           // The model a new chat with nobody starts on (0.552).
           const newChat = settings.newChatRoute
           if (newChat !== undefined) {
-            setPickerRoutes((current) => (current.has('new') ? current : new Map(current).set('new', { runtime: newChat.runtime, model: newChat.model })))
+            setPickerRoutes((current) => (current.has('new') ? current : new Map(current).set('new', { runtime: newChat.runtime, model: newChat.model, ...(newChat.account === undefined ? {} : { account: newChat.account }) })))
             setNewChatSetup({ mode: newChat.mode, effort: newChat.effort })
           }
       if (settings.metal !== undefined) setMetal(settings.metal)
@@ -3960,7 +3964,7 @@ export default function App(): ReactElement {
    * A run still starting has no record yet, so its new chat's pick holds.
    */
   const pickKey = pickKeyFor(liveRun === undefined ? shownKey : liveRun.data?.missionId, pickedTeammate?.teammateId)
-  const conversationRoute = liveRun?.data === undefined ? undefined : { runtime: liveRun.data.runtime, model: liveRun.data.model ?? 'account-default' }
+  const conversationRoute = liveRun?.data === undefined ? undefined : { runtime: liveRun.data.runtime, model: liveRun.data.model ?? 'account-default', ...(routeAccount(liveRun.data) === undefined ? {} : { account: routeAccount(liveRun.data) }) }
   const composerRoute = composerRouteFor(route, pickedTeammate, pickerRoutes, pickKey, conversationRoute)
   /*
    * EACH CHAT KEEPS ITS OWN SETUP (0.552). Colin, 10/02: "each time i switch
@@ -4365,7 +4369,7 @@ export default function App(): ReactElement {
   const clearMemories = (scope: 'workspace' | 'all'): Promise<string | undefined> => memoryCall(window.desktop?.clearMemories({ scope }))
   const restoreMemory = (memoryId: string): Promise<string | undefined> => memoryCall(window.desktop?.restoreMemory(memoryId))
   const rememberNewChatRoute = (next: RouteChoice, nextMode: MissionMode, nextEffort: string | undefined): void => {
-    const newChatRoute = { runtime: next.runtime, model: next.model, mode: nextMode, ...(nextEffort === undefined ? {} : { effort: nextEffort }) }
+    const newChatRoute = { runtime: next.runtime, model: next.model, ...(next.account === undefined ? {} : { account: next.account }), mode: nextMode, ...(nextEffort === undefined ? {} : { effort: nextEffort }) }
     setNewChatSetup({ mode: nextMode, effort: nextEffort })
     void window.desktop
       ?.writeWorkspaceSettings({ swarm, relay, relayHopCap, interrupt, memoryMode, autoMode, askConnectors, keepATodoList, replySize, layout, tube, newChatRoute })
@@ -4489,7 +4493,7 @@ export default function App(): ReactElement {
    * the ask then goes to every ticked model, each its own mission, and the
    * comparison takes the thread's place until one is kept.
    */
-  const samePick = (a: RouteChoice, b: RouteChoice): boolean => a.runtime === b.runtime && a.model === b.model
+  const samePick = (a: RouteChoice, b: RouteChoice): boolean => a.runtime === b.runtime && a.model === b.model && a.account === b.account
   // Anywhere: no teammate is needed to compare (Colin, 2026-09-28), so a new person can try it first thing.
   // Above the comparison's default picks, which read both while rendering (0.460).
   // What each route's model turned out to be, from missions that already ran.
@@ -4573,6 +4577,7 @@ export default function App(): ReactElement {
       const continuing = liveRun?.data?.runtime === 'claude' ? liveRun.data.missionId : undefined
       const sent = await bridge.startBackground({
         prompt,
+        ...(composerRoute.account === undefined ? {} : { account: composerRoute.account }),
         mode,
         model: composerRoute.model,
         ...(backgroundEffort === undefined ? {} : { effort: backgroundEffort }),
@@ -4659,7 +4664,7 @@ export default function App(): ReactElement {
             const level = levels.length === 0 ? undefined : pick.effort ?? idLevel ?? defaultEffort(levels, family?.defaultEffort)
             const started = startRoute(models, pick.runtime, pick.model, level)
             return {
-              runtime: pick.runtime,
+              runtime: pick.runtime, ...(pick.account === undefined ? {} : { account: pick.account }),
               model: started.model,
               ...(started.effort === undefined ? {} : { effort: started.effort }),
               // Every column is named with its level, so two levels of one model read apart.
@@ -4747,7 +4752,7 @@ export default function App(): ReactElement {
 
   /** Ask one column again, on the same model (0.444): a provider that was down gets another go. */
   /** Ask a judge for its view of the answers (0.520): one read-only run on the model picked. */
-  const judgeCompare = async (compare: PublicCompare, choice: { readonly runtime: MissionRuntimeId; readonly model: string; readonly label: string }, criteria: string, panel: readonly { readonly runtime: MissionRuntimeId; readonly model: string; readonly label: string }[] = []): Promise<void> => {
+  const judgeCompare = async (compare: PublicCompare, choice: { readonly runtime: MissionRuntimeId; readonly model: string; readonly label: string; readonly account?: string }, criteria: string, panel: readonly { readonly runtime: MissionRuntimeId; readonly model: string; readonly label: string; readonly account?: string }[] = []): Promise<void> => {
     const bridge = window.desktop
     if (!bridge) return
     setJudgingCompare(true)
@@ -4755,9 +4760,9 @@ export default function App(): ReactElement {
     try {
       const answer = await bridge.judgeCompare({
         compareId: compare.compareId,
-        route: { runtime: choice.runtime, model: choice.model, label: choice.label },
+        route: { runtime: choice.runtime, model: choice.model, ...(choice.account === undefined ? {} : { account: choice.account }), label: choice.label },
         ...(criteria.trim().length === 0 ? {} : { criteria }),
-        ...(panel.length === 0 ? {} : { panel: panel.map((one) => ({ runtime: one.runtime, model: one.model, label: one.label })) })
+        ...(panel.length === 0 ? {} : { panel: panel.map((one) => ({ runtime: one.runtime, model: one.model, ...(one.account === undefined ? {} : { account: one.account }), label: one.label })) })
       }).catch(() => undefined)
       if (answer === undefined || !answer.ok) {
         setCompareProblem(answer?.ok === false ? answer.error.message : 'The judge could not be asked. Nothing was started.')
@@ -4769,7 +4774,7 @@ export default function App(): ReactElement {
     }
   }
   /** Put the comparison's question to one more model, as a new column (0.523). */
-  const addCompareModel = async (compare: PublicCompare, choice: { readonly runtime: MissionRuntimeId; readonly model: string; readonly label: string }): Promise<void> => {
+  const addCompareModel = async (compare: PublicCompare, choice: { readonly runtime: MissionRuntimeId; readonly model: string; readonly label: string; readonly account?: string }): Promise<void> => {
     const bridge = window.desktop
     if (!bridge) return
     setAddingCompareModel(true)
@@ -4777,7 +4782,7 @@ export default function App(): ReactElement {
     try {
       // The column is named by its model, as the others are; its runtime's mark sits beside it.
       const label = routeModelName(choice.runtime, choice.model, resolvedModels.get(`${choice.runtime}:${choice.model}`))
-      const answer = await bridge.addCompareModel({ compareId: compare.compareId, route: { runtime: choice.runtime, model: choice.model, label } }).catch(() => undefined)
+      const answer = await bridge.addCompareModel({ compareId: compare.compareId, route: { runtime: choice.runtime, model: choice.model, ...(choice.account === undefined ? {} : { account: choice.account }), label } }).catch(() => undefined)
       if (answer === undefined || !answer.ok) {
         setCompareProblem(answer?.ok === false ? answer.error.message : 'That model could not be asked. Nothing was started.')
         return
@@ -4874,7 +4879,7 @@ export default function App(): ReactElement {
           const key = `${slot.route.runtime}:${slot.route.model}`
           return {
             key,
-            runtime: slot.route.runtime as MissionRuntimeId,
+            runtime: slot.route.runtime as MissionRuntimeId, ...(slot.route.account === undefined ? {} : { account: slot.route.account }),
             model: slot.route.model,
             ...(slot.route.effort === undefined ? {} : { effort: slot.route.effort }),
             name: slot.route.label ?? routeModelName(slot.route.runtime as MissionRuntimeId, slot.route.model, resolvedModels.get(key)),
@@ -5287,7 +5292,7 @@ export default function App(): ReactElement {
       phase: 'starting',
       events: [],
       startedAtIso: new Date().toISOString(),
-      runtime: route.runtime,
+      runtime: route.runtime, ...(route.account === undefined ? {} : { account: route.account }),
       ...(teammateId === undefined ? {} : { teammateId }),
       ...(earlierTurns.length === 0 ? {} : { earlierTurns }),
       ...(coldStart ? { coldStart: true } : {}),
@@ -5315,7 +5320,7 @@ export default function App(): ReactElement {
         mode: modeRunsOn(modeOverride ?? runMode, route.runtime, build?.platform)
           ? modeOverride ?? runMode
           : modesFor(route.runtime, build?.platform)[0] ?? 'accept-edits',
-        runtime: route.runtime,
+        runtime: route.runtime, ...(route.account === undefined ? {} : { account: route.account }),
         // The concrete model. When a runtime encodes effort in the id, the
         // chosen effort names a different model, and sending the family's
         // default with an effort beside it would run the wrong one.
@@ -5498,7 +5503,7 @@ export default function App(): ReactElement {
         setMissionOwners((current) => ({ ...current, [missionId]: teammateId }))
         // The host records a route only for a teammate who had none (0.552);
         // mirror that, so their first run's route shows at once.
-        const kept = { runtime: response.data.runtime, model: response.data.model, mode: modeOverride ?? runMode }
+        const kept = { runtime: response.data.runtime, model: response.data.model, ...(routeAccount(response.data) === undefined ? {} : { account: routeAccount(response.data) }), mode: modeOverride ?? runMode }
         setTeammates((current) =>
           current.map((teammate) => (teammate.teammateId === teammateId && teammate.route === undefined ? { ...teammate, route: kept } : teammate))
         )
@@ -5636,7 +5641,7 @@ export default function App(): ReactElement {
       )
       const response = await bridge.resumeMission({
         missionId,
-        runtime: route.runtime,
+        runtime: route.runtime, ...(route.account === undefined ? {} : { account: route.account }),
         // M26: the mode this runtime can run, as a start sends it.
         mode: modeRunsOn(mode, route.runtime, build?.platform) ? mode : modesFor(route.runtime, build?.platform)[0] ?? 'accept-edits',
         ...(resumed.model === 'account-default' ? {} : { model: resumed.model }),
@@ -5695,7 +5700,7 @@ export default function App(): ReactElement {
     try {
       const response = await bridge.handOffMission({
         runId,
-        runtime: choice.runtime,
+        runtime: choice.runtime, ...(choice.account === undefined ? {} : { account: choice.account }),
         // M26: the mode as chosen. Never widened to one the new runtime can
         // run: Ask onto Cursor on Windows would have become Edit unasked. A
         // mode the runtime cannot run is refused with nothing stopped (M9).
@@ -5728,7 +5733,7 @@ export default function App(): ReactElement {
         const missionId = response.data.missionId
         setMissionOwners((owners) => ({ ...owners, [missionId]: ownerId }))
         // Mirrored only for a teammate with no route yet, as the host records it.
-        const kept = { runtime: response.data.runtime, model: response.data.model, mode }
+        const kept = { runtime: response.data.runtime, model: response.data.model, ...(routeAccount(response.data) === undefined ? {} : { account: routeAccount(response.data) }), mode }
         setTeammates((all) => all.map((teammate) => (teammate.teammateId === ownerId && teammate.route === undefined ? { ...teammate, route: kept } : teammate)))
       }
       const queued = pendingUpdatesRef.current.get(newRunId) ?? []
@@ -6749,7 +6754,7 @@ export default function App(): ReactElement {
    */
   const followRouteOf = (run: LiveRunState | undefined): void => {
     if (run?.data === undefined || liveRunIsActive(run)) return
-    setRoute({ runtime: run.data.runtime, model: run.data.model ?? 'account-default' })
+    setRoute({ runtime: run.data.runtime, model: run.data.model ?? 'account-default', ...(routeAccount(run.data) === undefined ? {} : { account: routeAccount(run.data) }) })
     /*
      * The MODE too, from the record, and the effort from the teammate.
      *
@@ -7448,7 +7453,7 @@ export default function App(): ReactElement {
     // model every time they switch who they are talking to.
     const own = teammates.find((teammate) => teammate.teammateId === teammateId)?.route
     if (own !== undefined) {
-      setRoute({ runtime: own.runtime, model: own.model })
+      setRoute({ runtime: own.runtime, model: own.model, ...(own.account === undefined ? {} : { account: own.account }) })
       setMode(own.mode)
       /*
        * Including the effort, which this used to drop.
@@ -8024,7 +8029,7 @@ export default function App(): ReactElement {
   }
 
   const noRuntimeReady =
-    runtimeState.phase !== 'ready' || !runtimes.some((runtime) => runtime.ready && runtime.status === 'ready')
+    runtimeState.phase !== 'ready' || (!runtimes.some((runtime) => runtime.ready && runtime.status === 'ready') && !addedAccounts.some(a => a.state === 'ready'))
   /*
    * WHAT'S NEW, AND THE SPLASH.
    *
@@ -9024,7 +9029,7 @@ export default function App(): ReactElement {
             // models are connected and then can click onto their teammates").
             // `selectedTeammate` falls back to the first teammate so a message
             // always has someone to go to; the SCREEN keys on the explicit pick.
-            selectedTeammateId !== undefined && selectedTeammate !== undefined && runtimes.some((entry) => entry.ready && entry.status === 'ready') ? (
+            selectedTeammateId !== undefined && selectedTeammate !== undefined && !noRuntimeReady ? (
               <IdleTeammate
                 teammate={pickedTeammate ?? selectedTeammate ?? teammates[0]!}
                 canStart={busyRun === undefined}
@@ -9041,6 +9046,7 @@ export default function App(): ReactElement {
                  */
                 blocked={(() => {
                   const who = pickedTeammate ?? selectedTeammate ?? teammates[0]!
+                  if (who.route?.account !== undefined) return addedAccounts.some(a => a.id === who.route?.account && a.state === 'ready') ? undefined : `Sign in to ${accountName(who.route.account)} in Settings > AI agents before ${who.name} starts.`
                   const view = viewByTeammate[who.teammateId]
                   if (view?.status !== 'blocked') return undefined
                   const theirs = runtimeOfTeammate(
@@ -10478,7 +10484,7 @@ export default function App(): ReactElement {
             group={instructing}
             // What "Use current" takes: the route a mission would start on
             // if you pressed send now, effort included.
-            currentRoute={{ runtime: route.runtime, model: route.model, mode, ...(effort === undefined ? {} : { effort }) }}
+            currentRoute={{ runtime: route.runtime, ...(route.account === undefined ? {} : { account: route.account }), model: route.model, mode, ...(effort === undefined ? {} : { effort }) }}
             onCancel={() => setInstructingGroupId(undefined)}
             onSave={({ instructions, route: nextRoute, routeChanged }) => {
               setInstructingGroupId(undefined)
@@ -10512,7 +10518,7 @@ export default function App(): ReactElement {
           takenNames={teammates.map((teammate) => teammate.name)}
           onCancel={() => setNewTeammateOpen(false)}
           onCreate={createTeammate}
-          composerRoute={{ runtime: route.runtime, model: route.model, mode, ...(effort === undefined ? {} : { effort }) }}
+          composerRoute={{ runtime: route.runtime, ...(route.account === undefined ? {} : { account: route.account }), model: route.model, mode, ...(effort === undefined ? {} : { effort }) }}
           picker={{ runtimes, models, resolvedModels, recentRoutes, limitedRuntimes }}
           {...(build?.platform === undefined ? {} : { platform: build.platform })}
         />
@@ -10530,7 +10536,7 @@ export default function App(): ReactElement {
           }}
           onCreate={(input) => updateTeammate(editingTeammate.teammateId, input)}
           {...(spendByTeammate[editingTeammate.teammateId] === undefined ? {} : { spentThisMonth: spendByTeammate[editingTeammate.teammateId]! })}
-          composerRoute={{ runtime: route.runtime, model: route.model, mode, ...(effort === undefined ? {} : { effort }) }}
+          composerRoute={{ runtime: route.runtime, ...(route.account === undefined ? {} : { account: route.account }), model: route.model, mode, ...(effort === undefined ? {} : { effort }) }}
           picker={{ runtimes, models, resolvedModels, recentRoutes, limitedRuntimes }}
           {...(build?.platform === undefined ? {} : { platform: build.platform })}
           onChooseFolder={(clear) => chooseTeammateFolder(editingTeammate.teammateId, clear)}

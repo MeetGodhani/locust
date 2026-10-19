@@ -1,3 +1,4 @@
+import { accountFromRoute, accountUsageKey } from '../shared/agent-accounts.js'
 import { createHash } from 'node:crypto'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
@@ -124,7 +125,7 @@ export function limitedRuntimesFrom(missions: readonly RecoveredMission[]): Reco
         relevant = true
       }
       if (!relevant) continue
-      const runtime = event.sourceAdapter
+      const runtime = accountUsageKey(event.sourceAdapter, accountFromRoute(mission.metadata.resolvedRouteId))
       const current = latest.get(runtime)
       if (current === undefined || event.occurredAt > current.at) latest.set(runtime, { at: event.occurredAt, said })
     }
@@ -164,7 +165,7 @@ export function usageWindowsFrom(missions: readonly RecoveredMission[]): Record<
           ? readingOfWarning(event.payload.message)
           : undefined
       if (said === undefined) continue
-      const runtime = event.sourceAdapter
+      const runtime = accountUsageKey(event.sourceAdapter, accountFromRoute(mission.metadata.resolvedRouteId))
       const current = latest.get(runtime)
       if (current === undefined || event.occurredAt > current.at) latest.set(runtime, { at: event.occurredAt, said })
     }

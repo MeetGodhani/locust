@@ -1,3 +1,4 @@
+import { isAccountId } from '../shared/agent-accounts.js'
 import { randomUUID } from 'node:crypto'
 import { constants as fsConstants } from 'node:fs'
 import { mkdir, open, readFile, unlink } from 'node:fs/promises'
@@ -91,6 +92,8 @@ function parsedSlot(value: unknown): PublicCompareSlot | undefined {
   const runtime = text(route.runtime, 40)
   const model = text(route.model, 200)
   if (!isSlot(record.slot) || runtime === undefined || model === undefined) return undefined
+  if (route.account !== undefined && !isAccountId(route.account)) return undefined
+  const account = route.account as string | undefined
   const effort = text(route.effort, 40)
   const label = text(route.label, 120)
   const mode = route.mode === 'auto' ? ('auto' as const) : undefined
@@ -99,7 +102,7 @@ function parsedSlot(value: unknown): PublicCompareSlot | undefined {
   const retried = Array.isArray(record.retried) ? record.retried.filter((id): id is string => typeof id === 'string' && id.length > 0 && id.length <= 200).slice(-MAX_RETRIED_PER_SLOT) : []
   return {
     slot: record.slot,
-    route: { runtime, model, ...(effort === undefined ? {} : { effort }), ...(label === undefined ? {} : { label }), ...(mode === undefined ? {} : { mode }) },
+    route: { runtime, model, ...(account === undefined ? {} : { account }), ...(effort === undefined ? {} : { effort }), ...(label === undefined ? {} : { label }), ...(mode === undefined ? {} : { mode }) },
     missionIds,
     ...(refused === undefined ? {} : { refused }),
     ...(retried.length === 0 ? {} : { retried })
@@ -288,7 +291,7 @@ export function createCompareStore(options: {
             slot: COMPARE_SLOTS[index]!,
             route: {
               runtime: route.runtime,
-              model: route.model,
+              model: route.model, ...(route.account === undefined ? {} : { account: route.account }),
               ...(route.effort === undefined ? {} : { effort: route.effort }),
               ...(route.label === undefined ? {} : { label: route.label.slice(0, 120) }),
               ...(route.mode === 'auto' && input.changes === true ? { mode: 'auto' as const } : {})
@@ -329,14 +332,14 @@ export function createCompareStore(options: {
     addColumn: (compareId, route) =>
       change(compareId, (compare) => {
         if (compare.slots.length >= MAX_COMPARE_SLOTS) throw new Error(`A comparison is at most ${String(MAX_COMPARE_SLOTS)} models.`)
-        if (compare.slots.some((column) => column.route.runtime === route.runtime && column.route.model === route.model)) throw new Error('That model is already in this comparison.')
+        if (compare.slots.some((column) => column.route.runtime === route.runtime && column.route.model === route.model && column.route.account === route.account)) throw new Error('That model is already in this comparison.')
         const slot = COMPARE_SLOTS.find((letter) => !compare.slots.some((column) => column.slot === letter))
         if (slot === undefined) throw new Error(`A comparison is at most ${String(MAX_COMPARE_SLOTS)} models.`)
         return {
           ...compare,
           slots: [...compare.slots, {
             slot,
-            route: { runtime: route.runtime, model: route.model, ...(route.effort === undefined ? {} : { effort: route.effort }), ...(route.label === undefined ? {} : { label: route.label.slice(0, 120) }) },
+            route: { runtime: route.runtime, model: route.model, ...(route.account === undefined ? {} : { account: route.account }), ...(route.effort === undefined ? {} : { effort: route.effort }), ...(route.label === undefined ? {} : { label: route.label.slice(0, 120) }) },
             missionIds: []
           }]
         }
@@ -344,7 +347,7 @@ export function createCompareStore(options: {
 
     judge: (compareId, route, missionId, criteria, panel = []) =>
       change(compareId, (compare) => {
-        const routeOf = (one: CompareRoute): CompareRoute => ({ runtime: one.runtime, model: one.model, ...(one.effort === undefined ? {} : { effort: one.effort }), ...(one.label === undefined ? {} : { label: one.label.slice(0, 120) }) })
+        const routeOf = (one: CompareRoute): CompareRoute => ({ runtime: one.runtime, model: one.model, ...(one.account === undefined ? {} : { account: one.account }), ...(one.effort === undefined ? {} : { effort: one.effort }), ...(one.label === undefined ? {} : { label: one.label.slice(0, 120) }) })
         const members = panel.slice(0, PANEL_JUDGES).map((member) => ({ route: routeOf(member.route), missionId: member.missionId }))
         // Every panel run stays the comparison's, so one asked over never turns up as a conversation.
         const heard = [...(compare.judge?.panelMissionIds ?? []), ...members.map((member) => member.missionId)].slice(-MAX_JUDGES * PANEL_JUDGES)

@@ -1,3 +1,4 @@
+import type { AccountAction, AgentAccountsState } from './agent-accounts.js'
 import type { AppearanceState, ThemeChoice } from './appearance.js'
 import type { ReverseChange } from './reverse-diff.js'
 import type { AwaySummaryCounts } from './away.js'
@@ -1683,6 +1684,7 @@ export interface PublicTeammate {
 export const MAX_TEAMMATE_INSTRUCTIONS = 4_000
 
 export interface TeammateRoute {
+  readonly account?: string
   readonly runtime: MissionRuntimeId
   /** A model id from the catalog, or `account-default`. */
   readonly model: string
@@ -2998,6 +3000,7 @@ export type MissionApprovalAnswer =
     }
 
 export interface CodexMissionStartRequest {
+  readonly account?: string
   readonly prompt: string
   readonly mode?: MissionMode
   readonly runtime?: MissionRuntimeId
@@ -3048,6 +3051,7 @@ export interface CodexMissionStartRequest {
  * mission may be on a runtime this build cannot start.
  */
 export interface MissionRouteSummary {
+  readonly account?: string
   readonly runId: string
   readonly missionId: string
   readonly runtime: MissionRuntimeId
@@ -3133,6 +3137,7 @@ export interface CodexMissionCancelRequest {
  * between them.
  */
 export interface MissionHandoffRequest {
+  readonly account?: string
   readonly runId: string
   readonly runtime: MissionRuntimeId
   readonly mode: MissionMode
@@ -3145,6 +3150,7 @@ export interface MissionHandoffRequest {
  * because the run it continues is over -- that is the whole case.
  */
 export interface MissionResumeRequest {
+  readonly account?: string
   readonly missionId: string
   readonly runtime: MissionRuntimeId
   readonly mode: MissionMode
@@ -3860,6 +3866,7 @@ export interface DesktopApi {
   onRuntimeUpdates(listener: (state: RuntimeUpdatesState) => void): () => void
   /** Open the runtime's sign-in in its own window. */
   /** `again`: sign in once more, as this account or another (Colin, 2026-10-02). */
+  agentAccounts(action: AccountAction): Promise<AgentAccountsState>
   signInRuntime(runtime: string, again?: boolean): Promise<RuntimeSignInResponse>
   /** A sign-in window Locust opened has closed, finished or not (0.545). */
   onSignInClosed(listener: (runtime: string) => void): () => void

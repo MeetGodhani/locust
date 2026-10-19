@@ -25,7 +25,7 @@ describe('every way a turn starts crosses the organization policy', () => {
       expect(index.slice(index.indexOf(`= ${factory}({`), index.indexOf(`= ${factory}({`) + 100)).toContain('organizationPolicy,')
     }
     const start = between(service, '    async start(', '    async handOff(')
-    expect(start.indexOf('policyTurnRefusal(options.organizationPolicy')).toBeLessThan(start.indexOf('options.discover(runtime)'))
+    expect(start.indexOf('policyTurnRefusal(options.organizationPolicy')).toBeLessThan(start.indexOf('options.discover(runtime'))
     expect(start).toContain("if (managed !== undefined) return error('POLICY_REFUSED', managed)")
     expect(start).toContain('await spendRefusalFor(peer?.self.teammateId)')
     expect(index).toContain('const spendRefusal = createSpendRefusal({ policy: organizationPolicy')

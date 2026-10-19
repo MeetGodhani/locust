@@ -67,6 +67,7 @@ export interface RoutineRunnerOptions {
     readonly model: string | undefined
     /** The level the routine was taught with; absent where the route reports none. */
     readonly effort: string | undefined
+    readonly account?: string
     readonly peer: MissionPeerContext
     readonly followUpOf: string | undefined
     readonly startedBy: { readonly kind: 'routine'; readonly routineId: string; readonly step: number }
@@ -511,6 +512,7 @@ export function createRoutineRunner(options: RoutineRunnerOptions): RoutineRunne
         // asked to think is part of how it ran: one saved at `high` that
         // replays at the runtime's default is not the same routine.
         effort: route.effort,
+        ...(route.account === undefined ? {} : { account: route.account }),
         peer,
         followUpOf,
         startedBy: { kind: 'routine', routineId: routine.routineId, step },

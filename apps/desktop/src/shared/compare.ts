@@ -19,6 +19,7 @@ export const COMPARE_SLOTS = ['a', 'b', 'c'] as const
 export type CompareSlotId = (typeof COMPARE_SLOTS)[number]
 
 export interface CompareRoute {
+  readonly account?: string
   readonly runtime: string
   readonly model: string
   readonly effort?: string

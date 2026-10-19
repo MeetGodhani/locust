@@ -78,6 +78,7 @@ const NEVER_COPIED = new Set(['.writable'])
  * that rebuilds itself.
  */
 export const LEFT_OUT: Readonly<Record<string, string>> = {
+  'agent-accounts': 'added agent homes and sign-ins: they stay on this machine and are never copied into a backup',
   'locust-mcp-connection.json': 'the local MCP server token and address: they belong to this Windows account and are minted again',
   'locust-mcp.json': 'whether other AI apps can use Locust on this machine: enable again after a restore',
   'voice-call-mcp': 'a voice call\'s own token for handing work to teammates: minted again for every call (0.739)',

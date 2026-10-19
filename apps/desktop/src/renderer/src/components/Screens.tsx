@@ -1,3 +1,4 @@
+import { AgentAccountsSettings } from './AgentAccountsSettings.js'
 import { Fragment, useEffect, useRef, useState } from 'react'
 import { BOT_SIZE } from '../botSizes.js'
 import { boardSectionOf, teamBoard } from '../teamBoard.js'
@@ -2151,7 +2152,7 @@ export function SettingsScreen({
             */}
           {runtimes.some((runtime) => runtime.id === 'claude' && runtime.installed) && <RemoteControlSetting />}
           <p className="lc-settings__lede">
-            Each AI agent uses the account already signed in on this machine. Locust adds nothing of its own.
+            Each AI agent starts with this PC's sign-in. Claude Code and Codex can also use accounts you add here.
           </p>
           {/*
             Only when NOTHING is installed, which is what someone who has just
@@ -2245,6 +2246,7 @@ export function SettingsScreen({
                       <div className="lc-runtimerow__detail lc-mono">{installLine}</div>
                     )}
                     {runtimeSetup?.[runtime.id] !== undefined && <RuntimeSetupLine setup={runtimeSetup[runtime.id]!} />}
+                    {runtime.installed && <AgentAccountsSettings runtime={runtime.id} usage={usageWindows} />}
                     {/*
                       * What the person set up inside THIS CLI. It used to sit
                       * on the Automations screen under a heading that

@@ -71,7 +71,7 @@ export interface ScoutDeps {
   /** What a look's turn said last, once it has ended; why not, when it said nothing. */
   readonly answerOf: (missionId: string) => Promise<{ readonly text: string } | { readonly failed: string }>
   /** Makes Scout's own teammate. */
-  readonly makeTeammate: (route: { readonly runtime: string; readonly model: string }) => Promise<string>
+  readonly makeTeammate: (route: { readonly runtime: string; readonly model: string; readonly account?: string }) => Promise<string>
   /** Whether Scout's teammate is still on the team. */
   readonly teammateExists: (teammateId: string) => Promise<boolean>
   readonly changed: (state: ScoutState) => void
@@ -324,7 +324,7 @@ export function createScout(deps: ScoutDeps) {
       if (from.settings.on) firstLook = later(() => { firstLook = undefined; void look() }, firstLookMs)
     },
     /** On again with its own teammate; a new Scout, on this route, when it has none. */
-    async turnOn(route: { readonly runtime: string; readonly model: string } | undefined): Promise<ScoutState | { readonly refused: string }> {
+    async turnOn(route: { readonly runtime: string; readonly model: string; readonly account?: string } | undefined): Promise<ScoutState | { readonly refused: string }> {
       const from = await load()
       let teammateId = from.settings.teammateId
       if (teammateId === undefined || !(await deps.teammateExists(teammateId).catch(() => false))) {

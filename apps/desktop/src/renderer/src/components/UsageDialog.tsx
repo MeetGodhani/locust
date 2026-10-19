@@ -1,3 +1,4 @@
+import { accountName, useAgentAccounts } from '../agentAccounts.js'
 import { useEffect, useRef, useState } from 'react'
 import type { ReactElement } from 'react'
 
@@ -72,8 +73,9 @@ export function UsageDialog({
   }, [range])
   const summary = summaries[range]
   const clock = now()
+  useAgentAccounts()
   const limits = [...usageWindows.entries()]
-    .map(([runtime, said]) => ({ runtime, said, windows: usageWindowsOf(said, clock) }))
+    .map(([runtime, said]) => ({ key: runtime, runtime: runtime.split(':')[0]!, account: runtime.split(':')[1], said, windows: usageWindowsOf(said, clock) }))
     .filter((entry) => entry.windows.length > 0)
   return (
     <div className="lc-scrim">
@@ -136,11 +138,11 @@ export function UsageDialog({
                   <p className="lc-usage__empty">No agent has reported a limit yet. Claude Code and Codex report theirs with each turn.</p>
                 ) : (
                   <div className="lc-usage__limits">
-                    {limits.map(({ runtime, said, windows }) => (
-                      <div className="lc-usage__agent" key={runtime}>
+                    {limits.map(({ key, runtime, account, said, windows }) => (
+                      <div className="lc-usage__agent" key={key}>
                         <div className="lc-usage__agentname">
                           <RuntimeMark runtime={runtime} size={15} />
-                          <span>{isMissionRuntime(runtime) ? runtimeDisplayName(runtime) : runtime}</span>
+                          <span>{isMissionRuntime(runtime) ? runtimeDisplayName(runtime) : runtime}{account === undefined ? '' : ` \u00b7 ${accountName(account)}`}</span>
                         </div>
                         {/* /usage's own shape: the window and how much is used, the bar, when it resets. */}
                         {windows.map((window) => {

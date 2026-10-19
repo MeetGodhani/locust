@@ -1,3 +1,4 @@
+import { isAccountId } from '../shared/agent-accounts.js'
 import { randomUUID } from 'node:crypto'
 import { constants as fsConstants } from 'node:fs'
 import { mkdir, open, readFile, unlink } from 'node:fs/promises'
@@ -284,6 +285,7 @@ export function isTeammateRoute(value: unknown): value is TeammateRoute {
     // was taught with. Bounded rather than free -- it is written into a command
     // line, and a route carrying something absurd should be refused here rather
     // than at the runtime.
+    && (record.account === undefined || isAccountId(record.account))
     && (record.effort === undefined
       || (typeof record.effort === 'string' && record.effort.length > 0 && record.effort.length <= 40))
   )
@@ -835,6 +837,7 @@ export function createTeammateStore(options: { readonly rootDirectory: string; r
           runtime: route.runtime,
           model: route.model,
           mode: route.mode,
+          ...(route.account === undefined ? {} : { account: route.account }),
           ...(route.effort === undefined ? {} : { effort: route.effort })
         }
         await write({

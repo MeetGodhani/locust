@@ -1,3 +1,4 @@
+import { accountName } from '../agentAccounts.js'
 import { useEffect, useRef, useState } from 'react'
 import type { ReactElement } from 'react'
 import { useModal } from '../useModal.js'
@@ -313,7 +314,7 @@ export function NewTeammateDialog({
     const kept = modeRunsOn(wanted, choice.runtime, platform) && policyModeAllowed(policy, wanted) ? wanted : modesFor(choice.runtime, platform).find((value) => policyModeAllowed(policy, value)) ?? 'ask'
     // The level goes with the model that reported it; another model starts on its own default.
     const effort = was !== undefined && was.runtime === choice.runtime && was.model === choice.model ? was.effort : undefined
-    setPicked({ runtime: choice.runtime, model: choice.model, mode: kept, ...(effort === undefined ? {} : { effort }) })
+    setPicked({ runtime: choice.runtime, ...(choice.account === undefined ? {} : { account: choice.account }), model: choice.model, mode: kept, ...(effort === undefined ? {} : { effort }) })
     setPicking(false)
   }
   /*
@@ -508,6 +509,7 @@ export function NewTeammateDialog({
             <span className="lc-fieldlabel lc-mono">Model</span>
             <div className="lc-teammatemodel__row">
               <span className="lc-teammatemodel__name">
+                {shownRoute?.account !== undefined && <span>{accountName(shownRoute.account)}{' \u00b7 '}</span>}
                 {shownRoute === undefined ? 'The chat box\u2019s, when they start' : routeLabel(shownRoute)}
                 {picked === undefined && ownRoute === undefined && shownRoute !== undefined && (
                   <span className="lc-teammatemodel__whose"> · the chat box&apos;s, until you pick one</span>
@@ -527,7 +529,7 @@ export function NewTeammateDialog({
                   models={picker.models}
                   resolvedModels={picker.resolvedModels}
                   recentRoutes={picker.recentRoutes}
-                  active={shownRoute === undefined ? { runtime: 'claude', model: 'account-default' } : { runtime: shownRoute.runtime, model: shownRoute.model }}
+                  active={shownRoute === undefined ? { runtime: 'claude', model: 'account-default' } : { runtime: shownRoute.runtime, model: shownRoute.model, ...(shownRoute.account === undefined ? {} : { account: shownRoute.account }) }}
                   onSelect={pick}
                   onClose={() => setPicking(false)}
                 />
