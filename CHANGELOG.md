@@ -11,6 +11,12 @@ Settings shows this file as What's new. An entry may group its changes under
 about when they arrive on it carries `<!-- big -->` on the line under its
 heading: the home screen then shows it once, as a splash.
 
+## 0.805.0 - 2026-10-19
+
+### Fixed
+
+- **OpenCode 2 is said plainly instead of failing every turn.** OpenCode 2 changed how other apps talk to it, so with it installed every OpenCode turn in Locust ended with "OpenCode's event stream closed before the turn finished" while OpenCode still read as ready. Locust now shows OpenCode 2 as not supported yet, says why on hover, and how to keep using OpenCode teammates today (OpenCode 1). Support for OpenCode 2 is on its way.
+
 ## 0.804.0 - 2026-10-19
 <!-- big -->
 
