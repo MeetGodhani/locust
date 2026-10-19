@@ -11,6 +11,13 @@ Settings shows this file as What's new. An entry may group its changes under
 about when they arrive on it carries `<!-- big -->` on the line under its
 heading: the home screen then shows it once, as a splash.
 
+## 0.801.0 - 2026-10-19
+
+### Improved
+
+- **Answer a question by number.** When a teammate stops to ask which way to go, each option wears a number: press it and that answer is sent, as in Claude Code. The card takes the keys when the chat box is empty, and starting to type a reply instead still goes to the chat box. A question card that has several questions works the same way, then Enter sends.
+- **An option's note sits under its name.** On the same cards, what each choice means now lines up under its label.
+
 ## 0.800.0 - 2026-10-19
 
 ### Improved
