@@ -799,13 +799,16 @@ export function NewTeammateDialog({
           )}
 
           {/*
-            * Which connectors THIS teammate may use without asking.
+            * Which connectors THIS teammate may use without asking -- and, since
+            * 0.798, whether it has the person's connectors at all.
             *
-            * Nothing ticked is the ordinary state and means every connector
-            * the person has -- Colin's ruling. Ticking some NARROWS: a
-            * Finance Bro gets Robinhood and not Gmail, and a call to anything
-            * else stops the run and asks. Every name here was read off
-            * `claude mcp list`; none can be typed.
+            * Nothing ticked means OFF: Claude Code sends every tool of every
+            * connector with each call, about 170k tokens a turn on Colin's
+            * account (measured 2026-10-19 on Haiku, Sonnet and Opus), so a
+            * teammate carries them only once it has one ticked. Ticked ones work
+            * without asking; while any is, the rest are loaded too and a call to
+            * one asks first. A Finance Bro gets Robinhood and not Gmail. Every
+            * name here was read off `claude mcp list`; none can be typed.
             *
             * Only when editing, like the folder: a teammate being created has
             * nothing to write a list onto.
@@ -816,7 +819,7 @@ export function NewTeammateDialog({
               <div className="lc-connectorgrid" role="group" aria-label="Connectors this teammate may use">
                 {connectors.map((connector) => {
                   const narrowed = initial?.connectors ?? []
-                  const on = narrowed.length === 0 || narrowed.includes(connector.name)
+                  const on = narrowed.includes(connector.name)
                   const label = connectorLabel(connector.name)
                   return (
                     <button
@@ -827,11 +830,8 @@ export function NewTeammateDialog({
                       className={`lc-connectorpick${on ? ' is-on' : ''}${connector.status === 'connected' ? '' : ' is-unready'}`}
                       title={connector.status === 'connected' ? `${connector.name} — ${connector.location}` : `${connector.name} — ${connector.status === 'needs-auth' ? 'not signed in yet' : 'not responding'}`}
                       onClick={() => {
-                        // From "everything" the first untick narrows to all-but-one;
-                        // unticking the last one widens back to everything.
-                        const current = narrowed.length === 0 ? connectors.map((entry) => entry.name) : [...narrowed]
-                        const next = on ? current.filter((name) => name !== connector.name) : [...current, connector.name]
-                        onSetConnectors(next.length === connectors.length ? [] : next)
+                        // A tick turns that connector on for this teammate; the last untick turns them off again.
+                        onSetConnectors(on ? narrowed.filter((name) => name !== connector.name) : [...narrowed, connector.name])
                       }}
                     >
                       <span>{label}</span>
@@ -841,8 +841,8 @@ export function NewTeammateDialog({
               </div>
               <span className="lc-field__hint">
                 {(initial?.connectors ?? []).length === 0
-                  ? 'All of them, without asking. Untick one and this teammate is limited to the rest; a call to anything else asks you first.'
-                  : `Only these, without asking. A call to any other connector stops the run and asks you.`}
+                  ? 'Off. This teammate works without your connectors, which keeps each Claude Code turn about ten times lighter. Tick the ones it may use.'
+                  : 'On. The ticked ones work without asking. While any is ticked, Claude Code loads all your connectors, and a call to one not ticked asks you first.'}
               </span>
             </div>
           )}

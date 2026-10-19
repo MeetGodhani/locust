@@ -435,6 +435,13 @@ export interface RuntimeCommandOptions {
    */
   readonly connectors?: readonly string[];
   /**
+   * Whether the run loads the person's connectors at all (0.798): `false` keeps every MCP server but the ones named
+   * by `--mcp-config` -- Locust's own -- out of the run. Claude Code sends every tool of every connector with each
+   * call, about 170k tokens on Colin's account (MEASURED 2026-10-19 on Haiku, Sonnet and Opus), so a teammate has
+   * them only when it has one ticked. Absent, the CLI's own choice. Claude Code only.
+   */
+  readonly accountConnectors?: boolean;
+  /**
    * Models the person added themselves (0.357): an OpenAI-compatible
    * endpoint -- their company's model, or one running on this machine --
    * declared to OpenCode as a provider of its own, by id. OpenCode only;
@@ -985,6 +992,14 @@ export function createClaudePrintCommand(
         ...(bridge === undefined ? [] : ["--permission-prompt-tool", requireText(bridge.toolName, "Permission tool")])
       ]
     })(),
+    /*
+     * THE PERSON'S CONNECTORS, ONLY WHERE A TEAMMATE HAS ONE TICKED (0.798). Claude Code sends every tool of every
+     * connector on the account with each call: MEASURED 2026-10-19 (_tools/drive-haiku-turn-two-context.mjs), a
+     * second "say hello" turn held 191,214 tokens on Haiku, 190,424 on Sonnet and 195,329 on Opus -- 235 of 246 tools
+     * from ten connectors, and on Opus still 182k written to the cache with 222 of them marked deferred -- against
+     * 17,763 with them left out. `--strict-mcp-config` keeps only the servers named above, Locust's own.
+     */
+    ...(options.accountConnectors === false ? ["--strict-mcp-config"] : []),
   ];
   // `--add-dir` too outside Auto: `--restricted` confines the file tools to
   // the working directories, and a skill reads the files kept beside its

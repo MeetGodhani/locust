@@ -9935,6 +9935,10 @@ export default function App(): ReactElement {
             // So the mode menu can say where connectors live when this route
             // is not the one they are signed in on. See `connectorsNote`.
             hasConnectors={connectorList !== undefined && connectorList.length > 0}
+            // A teammate on Claude Code with none ticked runs without the person's connectors (0.798).
+            {...(composerRoute.runtime === 'claude' && pickedTeammate !== undefined && (pickedTeammate.connectors ?? []).length === 0 && connectorList !== undefined && connectorList.length > 0
+              ? { connectorsOff: { teammate: pickedTeammate.name, names: connectorList.map((connector) => connector.name) } }
+              : {})}
             // Said before the send: a reply on another runtime continues
             // from the stopped run's checkpoint, not from its memory.
             continuationNote={continuationNote ?? newConversationNote}

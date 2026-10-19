@@ -36,6 +36,7 @@ import type { MetalMotion, MetalPreset, MetalStrength } from '../../../shared/ip
 import { isImagePath } from '../../../shared/image-files.js'
 import { ContextRing, ContextRingMenu } from './ContextRing.js'
 import { compactOffer } from '../compactNow.js'
+import { connectorMentioned, connectorsOffHint } from '../connectorsOff.js'
 import { ArrowUpGlyph, ChevronGlyph } from './ChatGlyphs.js'
 import { PlusMenu } from './PlusMenu.js'
 import type { ContextReading } from '../cost.js'
@@ -216,6 +217,8 @@ export interface ComposerProps {
    * `connectorsNote`.
    */
   readonly hasConnectors?: boolean
+  /** The teammate's connectors are off (0.798): a draft naming one says so. Absent where they are on, or not Claude Code. */
+  readonly connectorsOff?: { readonly teammate: string; readonly names: readonly string[] }
   readonly runtimes: readonly PublicRuntimeStatus[]
   /** Discovery asked its four times and nobody answered; the rows say NOT ANSWERING. */
   readonly runtimesGaveUp?: boolean
@@ -485,6 +488,7 @@ export function Composer({
   quoteIn,
   runtimeCommands,
   hasConnectors = false,
+  connectorsOff,
   continuationNote,
   continuation,
   workspaceName,
@@ -1623,6 +1627,16 @@ export function Composer({
           * Why the last Enter did nothing. Same surface as the host's own
           * errors: one place the box speaks, rather than a second voice.
           */}
+        {/* A connector named while this teammate's are off (0.798, connectorsOff.ts): said before the message goes. */}
+        {refusal === undefined && connectorsOff !== undefined && (() => {
+          const named = value.trim().length === 0 ? undefined : connectorMentioned(value, connectorsOff.names)
+          return named === undefined ? null : (
+            <div className="lc-notice is-plain" role="status" aria-live="polite">
+              <Icon name="plug" size={13} />
+              {connectorsOffHint(connectorsOff.teammate, named)}
+            </div>
+          )
+        })()}
         {refusal !== undefined && (
           <div className={`lc-notice${refusal.plain === true ? ' is-plain' : ''}`} role="status" aria-live="polite">
             {/* The shield says "refused". A note about what the host DID is

@@ -848,6 +848,11 @@ export function resumableThreadOf(prior: RecoveredMission, runtime: string): str
  * mode does -- measured with a test server, 2026-10-03. None when the person
  * asked to be asked about every one. Otherwise the named ones.
  */
+/** Whether a run loads the person's connectors: only for a teammate that has one ticked (0.798). */
+export function connectorsOn(ticked: readonly string[] | undefined): boolean {
+  return ticked !== undefined && ticked.length > 0
+}
+
 export function claudeConnectorRules(sandbox: string, askEvery: boolean, named: readonly string[]): { readonly connectors?: readonly string[] } {
   if (askEvery || sandbox === 'read-only' || named.length === 0) return {}
   return { connectors: named }
@@ -2315,10 +2320,16 @@ export function createCodexMissionService(options: CodexMissionServiceOptions): 
                    * 2026-10-03: "i just want it to work the way the actual
                    * models do." So Ask sends no rules: each call is a card.
                    */
-                  // The teammate's own list when it has one -- a NARROWING of
-                  // what the person has -- else everything the person has.
-                  return claudeConnectorRules(effectiveSandbox, askEveryConnector, cloud !== undefined ? [] : (peer?.connectors ?? options.connectors?.() ?? []))
+                  // The teammate's own ticks, and nothing for a teammate with none: its connectors are off (0.798, below).
+                  return claudeConnectorRules(effectiveSandbox, askEveryConnector, cloud !== undefined ? [] : (peer?.connectors ?? []))
                 })(),
+                /*
+                 * A TEAMMATE'S CONNECTORS ARE ON ONLY WHEN IT HAS ONE TICKED (0.798). Claude Code sends every tool of
+                 * every connector with each call -- about 170k tokens a turn on Colin's account, MEASURED 2026-10-19 on
+                 * Haiku, Sonnet and Opus -- so a teammate with none ticked runs without them, ten times lighter. Colin,
+                 * asked: "sounds like the logical decision for best user experience right?"
+                 */
+                accountConnectors: connectorsOn(cloud === undefined ? peer?.connectors : undefined),
                 // Claude's containment IS this value: it picks the permission
                 // mode and the tool list. Leaving it out defaulted every
                 // Claude run to read-only, so a mission started in Accept

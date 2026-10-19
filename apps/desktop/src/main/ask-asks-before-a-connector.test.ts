@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { claudeConnectorRules } from './codex-mission.js'
+import { claudeConnectorRules, connectorsOn } from './codex-mission.js'
 
 /**
  * ASK ASKS BEFORE A CONNECTOR (0.545).
@@ -23,5 +23,14 @@ describe('the connectors a Claude run is pre-approved for', () => {
   it('are none when the person asked to be asked about every one, or none are named', () => {
     expect(claudeConnectorRules('workspace-write', true, ['github'])).toEqual({})
     expect(claudeConnectorRules('workspace-write', false, [])).toEqual({})
+  })
+})
+
+describe('a teammate with no connector ticked (0.798)', () => {
+  it('runs without the person’s connectors, and with them once one is ticked', () => {
+    // Claude Code sends every connector's tools with each call, about 170k tokens a turn on Colin's account.
+    expect(connectorsOn(undefined)).toBe(false)
+    expect(connectorsOn([])).toBe(false)
+    expect(connectorsOn(['claude.ai Gmail'])).toBe(true)
   })
 })

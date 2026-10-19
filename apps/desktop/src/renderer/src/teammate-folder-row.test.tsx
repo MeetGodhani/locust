@@ -125,22 +125,24 @@ describe("a teammate's connectors", () => {
       />
     )
 
-  it('offers every connector the host reported, all ticked when the teammate has no list', () => {
+  it('offers every connector the host reported, none ticked and off when the teammate has no list (0.798)', () => {
+    // Claude Code sends every connector's tools with each call, about 170k tokens a turn: a teammate has them once ticked.
     const html = drawWith(WREN)
     expect(html).toContain('lc-field--connectors')
-    expect((html.match(/role="checkbox" aria-checked="true"/g) ?? []).length).toBe(3)
-    expect(html).toContain('All of them, without asking')
+    expect((html.match(/role="checkbox" aria-checked="true"/g) ?? []).length).toBe(0)
+    expect((html.match(/role="checkbox" aria-checked="false"/g) ?? []).length).toBe(3)
+    expect(html).toContain('Off. This teammate works without your connectors')
     // The claude.ai prefix is the account, not the connector; it is dropped.
     expect(html).toContain('>Robinhood<')
     expect(html).not.toContain('>claude.ai Robinhood<')
   })
 
-  it('shows a narrowed teammate as exactly its list, and says the rest will ask', () => {
+  it('shows a teammate with one ticked as on, exactly its list, and says the rest will ask', () => {
     const html = drawWith({ ...WREN, connectors: ['claude.ai Robinhood'] })
     expect((html.match(/role="checkbox" aria-checked="true"/g) ?? []).length).toBe(1)
     expect((html.match(/role="checkbox" aria-checked="false"/g) ?? []).length).toBe(2)
-    expect(html).toContain('Only these, without asking')
-    expect(html).toContain('stops the run and asks you')
+    expect(html).toContain('On. The ticked ones work without asking')
+    expect(html).toContain('a call to one not ticked asks you first')
   })
 
   it('still offers a connector the person has not finished signing into, dimmed', () => {
