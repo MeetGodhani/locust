@@ -8,7 +8,14 @@ PUB=StopBanning/locust
 R=/c/work/locust
 [ -n "$V" ] || { echo "usage: linux-attach-dl.sh VERSION [RUN_ID]"; exit 1; }
 cd "$R" || exit 1
-if curl -sfI "https://dl.locust.lol/Locust-$V-linux.json" > /dev/null; then echo "LINUX: $V already has its Linux packages"; exit 0; fi
+if curl -sfI "https://dl.locust.lol/Locust-$V-linux.json" > /dev/null; then
+  # Up already, but the promote after the upload can still have failed (0.793.0: Cloudflare answered the
+  # Locust-Setup.exe re-upload with an error page), and this early exit then skipped it on every run again. So the
+  # promote alone runs unless the tester lane's Linux feed already names this version.
+  if curl -sf "https://dl.locust.lol/latest-linux.yml" | tr -d '\r' | grep -qx "version: $V"; then echo "LINUX: $V already has its Linux packages"; exit 0; fi
+  node "$R/_tools/publish-downloads.mjs" "$V" --promote || { echo "LINUX: the Linux feed was not promoted"; exit 1; }
+  echo "LINUX ATTACHED: $V (AppImage, .deb, .rpm; promoted on a second run)"; exit 0
+fi
 git fetch -q stopbanning
 # SHA: the release commit, which a later commit on main may follow (the version is read from that commit): its tag,
 # made by publish-dl.sh at its push, so work committed while the Mac and Linux builds run is never taken for the
