@@ -1,7 +1,9 @@
+import { useEffect, useRef } from 'react'
 import type { ReactElement } from 'react'
 
 import type { DecisionOption, DecisionRequest } from '../../../shared/decision.js'
 import { Icon } from './Icon.js'
+import { numberKeyAnswer } from '../questionKeys.js'
 
 /**
  * A teammate asking which way to go.
@@ -40,8 +42,50 @@ export function DecisionCard({
   // With no teammate there is nobody to name (0.780): "The runtime needs a decision" was the first card a new person
   // met, on their first conversation, in a word the rest of the app stopped using on 2026-10-01.
   const title = teammateName === undefined ? 'A decision is needed to continue' : `${teammateName} needs a decision to continue`
+  const box = useRef<HTMLDivElement>(null)
+  /*
+   * NUMBER KEYS (0.801), as Claude Code's own question does: 1 to 9 choose that option, and choosing is answering.
+   * Every runtime asks with this card; Antigravity's own question tool is skipped by its CLI before anyone sees it.
+   * Never from a text field -- "2" typed into the chat box is a 2 -- and never while a question card waits, which is
+   * answered first. The card takes the focus only from an empty chat box or from nothing, and a letter typed while it
+   * holds the focus goes to the chat box: the reply below is still one keystroke away.
+   */
+  useEffect(() => {
+    const element = box.current
+    if (element === null || busy) return undefined
+    const active = document.activeElement
+    const idle = active === null || active === document.body || (active instanceof HTMLTextAreaElement && active.value.trim().length === 0 && active.closest('form.command-dock') !== null)
+    if (idle && document.querySelector('.lc-decision') === element) element.querySelector<HTMLButtonElement>('.lc-decision__option')?.focus({ preventScroll: true })
+    return undefined
+  }, [busy])
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent): void => {
+      const element = box.current
+      if (element === null || busy || document.querySelector('.lc-decision') !== element || document.querySelector('.lc-questions') !== null) return
+      const target = event.target instanceof HTMLElement ? event.target : null
+      const modified = event.ctrlKey || event.metaKey || event.altKey
+      const picked = numberKeyAnswer({
+        key: event.key,
+        modified,
+        typing: target !== null && (target.isContentEditable || target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement),
+        questions: [{ id: 'decision', options: request.options.map((option) => option.label) }],
+        chosen: {}
+      })
+      const option = picked === undefined ? undefined : request.options.find((one) => one.label === picked.label)
+      if (option !== undefined) {
+        event.preventDefault()
+        onChoose(option)
+        return
+      }
+      if (!modified && event.key.length === 1 && event.key !== ' ' && target !== null && element.contains(target)) {
+        document.querySelector<HTMLTextAreaElement>('form.command-dock textarea')?.focus()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [busy, onChoose, request.options])
   return (
-    <div className="lc-decision" role="group" aria-label="A decision is needed to continue">
+    <div className="lc-decision" role="group" aria-label="A decision is needed to continue" ref={box}>
       <div className="lc-decision__head">
         <span className="lc-decision__title">
           <Icon name="diff" size={13} /> {title}
@@ -62,16 +106,20 @@ export function DecisionCard({
         * that reads: options first, then that you are not bound by them.
         */}
       <div className="lc-decision__options">
-        {request.options.map((option) => (
+        {request.options.map((option, index) => (
           <button
             key={option.label}
             type="button"
             className="lc-decision__option"
             disabled={busy}
+            {...(index < 9 ? { 'aria-keyshortcuts': String(index + 1) } : {})}
             onClick={() => onChoose(option)}
           >
-            <span className="lc-decision__label">{option.label}</span>
-            {option.note !== undefined && <span className="lc-decision__note">{option.note}</span>}
+            {index < 9 && <span className="lc-decision__key lc-mono" aria-hidden="true">{String(index + 1)}</span>}
+            <span className="lc-decision__body">
+              <span className="lc-decision__label">{option.label}</span>
+              {option.note !== undefined && <span className="lc-decision__note">{option.note}</span>}
+            </span>
           </button>
         ))}
       </div>

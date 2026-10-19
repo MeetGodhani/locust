@@ -218,15 +218,39 @@ try {
   }
 
   if (card.card === true) {
-    say('4. press the first option and watch the next turn start')
+    say('4. answer by number, as Claude Code does (0.801), and watch the next turn start')
     const before = (await ledgers()).length
-    const pressed = await cdp.eval(`(async () => {
-      const option = document.querySelector('.lc-decision__option')
-      const label = (option.innerText || '').replace(new RegExp('[' + String.fromCharCode(32, 9, 13, 10) + ']+', 'g'), ' ').trim()
-      option.click()
-      return label
+    const key = async (name, code, vk) => {
+      await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', key: name, code, windowsVirtualKeyCode: vk, nativeVirtualKeyCode: vk, text: name })
+      await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key: name, code, windowsVirtualKeyCode: vk, nativeVirtualKeyCode: vk })
+      await sleep(300)
+    }
+    const state = async () => JSON.parse(await cdp.eval(`JSON.stringify({
+      keys: [...document.querySelectorAll('.lc-decision__option .lc-decision__key')].map((k) => k.innerText.trim()),
+      focus: document.activeElement?.classList.contains('lc-decision__option') ? 'option' : document.activeElement?.closest('form.command-dock') ? 'chat box' : String(document.activeElement?.tagName),
+      typed: document.querySelector('form.command-dock textarea')?.value ?? null,
+      card: !!document.querySelector('.lc-decision__option:not([disabled])')
+    })`))
+    const first = await state()
+    check('each option wears the number that chooses it', first.keys.join(',') === card.options.map((_, i) => String(i + 1)).join(','), JSON.stringify(first.keys))
+    check('the card has the focus, the chat box being empty', first.focus === 'option', first.focus)
+    await key('h', 'KeyH', 72)
+    const letter = await state()
+    check('a letter typed on the card goes to the chat box', letter.focus === 'chat box' && letter.typed === 'h', JSON.stringify(letter))
+    await key('2', 'Digit2', 50)
+    const inField = await state()
+    check('a number typed in the chat box is a number, not an answer', inField.card && inField.typed === 'h2', JSON.stringify(inField))
+    await cdp.eval(`(() => {
+      const field = document.querySelector('form.command-dock textarea')
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(field, '')
+      field.dispatchEvent(new Event('input', { bubbles: true }))
+      field.blur()
+      return 'cleared'
     })()`)
-    say(`   pressed: ${pressed}`)
+    await sleep(300)
+    const pressed = await cdp.eval(`(document.querySelectorAll('.lc-decision__option .lc-decision__label')[1]?.innerText ?? '').replace(new RegExp('[' + String.fromCharCode(32, 9, 13, 10) + ']+', 'g'), ' ').trim()`)
+    await key('2', 'Digit2', 50)
+    say(`   pressed 2: ${pressed}`)
     const answeredAt = Date.now()
     let after = before
     while (Date.now() - answeredAt < WAIT_MS) {
@@ -244,7 +268,9 @@ try {
       const text = await readFile(join(LEDGER_DIR, name), 'utf8')
       const first = JSON.parse(text.split('\n')[0] ?? '{}')
       const prompt = String(first.metadata?.prompt ?? '')
-      if (prompt.length > 0 && pressed.length > 0 && prompt.includes(pressed.split(' ')[0])) carried = true
+      // Only the turn the answer started: the first one names both files.
+      if (prompt.length > 0 && pressed.length > 0 && !prompt.includes('neither says which wins') && prompt.includes(pressed) && !prompt.includes(pressed.includes('b.md') ? 'notes/a.md' : 'notes/b.md')) carried = true
+      if (prompt.length > 0 && !prompt.includes('neither says which wins')) say(`   the answered turn's prompt: ${prompt.replace(/\s+/g, ' ').slice(0, 200)}`)
     }
     check('and that turn carries the option the person chose', carried, pressed)
     const gone = await cdp.eval(`(() => JSON.stringify({ card: !!document.querySelector('.lc-decision'), standing: !!document.querySelector('.lc-decision__option:not([disabled])') }))()`)

@@ -1,4 +1,4 @@
-import { useContext, useRef, useState } from 'react'
+import { useContext, useEffect, useRef, useState } from 'react'
 import type { ReactElement } from 'react'
 
 import type { MissionApprovalDecision, MissionApprovalRequest, MissionQuestion } from '../../../shared/ipc.js'
@@ -11,6 +11,7 @@ import { DiffView } from './DiffView.js'
 import { DiffNotesContext } from './DiffNotes.js'
 import { fileCounts, parseUnifiedDiff } from '../diff.js'
 import { ApprovalRuleContext } from '../approvalRuleContext.js'
+import { numberKeyAnswer } from '../questionKeys.js'
 
 /** How long a card that has just appeared takes no approval (N9): a double click's second half. */
 export const FRESH_CARD_MS = 500
@@ -43,6 +44,50 @@ function QuestionForm({
 }): ReactElement {
   const [chosen, setChosen] = useState<Readonly<Record<string, string>>>({})
   const [typed, setTyped] = useState<Readonly<Record<string, string>>>({})
+  const box = useRef<HTMLDivElement>(null)
+  const send = useRef<HTMLButtonElement>(null)
+  /*
+   * NUMBER KEYS (0.801), as Claude Code's own question does: 1 to 9 choose that option of the question being
+   * answered, and once every question has one the focus is on Send, so Enter sends. Never from a text field --
+   * "2" typed into the chat box or the Something else field is a 2 -- and only the first card on the screen takes
+   * them. A card that appears takes the focus only from an empty chat box or from nothing: a message being written
+   * is not interrupted.
+   */
+  useEffect(() => {
+    const element = box.current
+    if (element === null || busy) return undefined
+    const active = document.activeElement
+    const idle = active === null || active === document.body || (active instanceof HTMLTextAreaElement && active.value.trim().length === 0 && active.closest('form.command-dock') !== null)
+    if (idle && document.querySelector('.lc-questions') === element) element.querySelector<HTMLButtonElement>('.lc-question__option')?.focus({ preventScroll: true })
+    return undefined
+  }, [busy])
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent): void => {
+      const element = box.current
+      if (element === null || busy || document.querySelector('.lc-questions') !== element) return
+      const target = event.target instanceof HTMLElement ? event.target : null
+      const picked = numberKeyAnswer({
+        key: event.key,
+        modified: event.ctrlKey || event.metaKey || event.altKey,
+        typing: target !== null && (target.isContentEditable || target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement),
+        questions: questions.map((question) => ({ id: question.id, options: question.options.map((option) => option.label) })),
+        chosen,
+        focusedQuestion: target === null || !element.contains(target) ? undefined : target.closest<HTMLElement>('[data-question]')?.dataset.question
+      })
+      if (picked === undefined) return
+      event.preventDefault()
+      const next = { ...chosen, [picked.questionId]: picked.label }
+      setChosen(next)
+      // The next question still unanswered, else Send: Enter then does what the card is for.
+      const open = questions.find((question) => question.options.length > 0 && next[question.id] === undefined)
+      requestAnimationFrame(() => {
+        if (open === undefined) send.current?.focus({ preventScroll: true })
+        else element.querySelector<HTMLButtonElement>(`[data-question="${CSS.escape(open.id)}"] .lc-question__option`)?.focus({ preventScroll: true })
+      })
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [busy, chosen, questions])
 
   const answersFor = (question: MissionQuestion): readonly string[] => {
     const values: string[] = []
@@ -57,29 +102,33 @@ function QuestionForm({
   const ready = questions.every((question) => answersFor(question).length > 0)
 
   return (
-    <div className="lc-questions">
+    <div className="lc-questions" ref={box}>
       {questions.map((question) => (
-        <div key={question.id} className="lc-question">
+        <div key={question.id} className="lc-question" data-question={question.id}>
           {question.header !== null && question.header.length > 0 && (
             <p className="lc-question__header lc-mono">{question.header}</p>
           )}
           <p className="lc-question__text">{question.question}</p>
           {question.options.length > 0 && (
             <div className="lc-question__options" role="radiogroup" aria-label={question.question}>
-              {question.options.map((option) => (
+              {question.options.map((option, index) => (
                 <button
                   key={option.label}
                   type="button"
                   role="radio"
                   aria-checked={chosen[question.id] === option.label}
+                  {...(index < 9 ? { 'aria-keyshortcuts': String(index + 1) } : {})}
                   className={`lc-question__option${chosen[question.id] === option.label ? ' is-chosen' : ''}`}
                   disabled={busy}
                   onClick={() => setChosen((current) => ({ ...current, [question.id]: option.label }))}
                 >
-                  <span className="lc-question__label">{option.label}</span>
-                  {option.description !== null && option.description.length > 0 && (
-                    <span className="lc-question__desc">{option.description}</span>
-                  )}
+                  {index < 9 && <span className="lc-question__key lc-mono" aria-hidden="true">{String(index + 1)}</span>}
+                  <span className="lc-question__body">
+                    <span className="lc-question__label">{option.label}</span>
+                    {option.description !== null && option.description.length > 0 && (
+                      <span className="lc-question__desc">{option.description}</span>
+                    )}
+                  </span>
                 </button>
               ))}
             </div>
@@ -102,6 +151,7 @@ function QuestionForm({
       ))}
       <div className="lc-approval__actions">
         <button
+          ref={send}
           type="button"
           className="lc-primarybutton"
           disabled={busy || !ready}

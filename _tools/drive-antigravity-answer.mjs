@@ -3,6 +3,10 @@
 //
 //   LOCUST_SPEND=1 node _tools/drive-antigravity-answer.mjs [--packaged <exe>] [--once]
 //
+// THE APP ROUTE ONLY. Where Antigravity CLI (`agy`) is installed, Locust runs Antigravity through it, and `agy -p`
+// skips `ask_question` before anyone sees it (1.4.2, 2026-10-19) -- so this drive cannot pass there; there the
+// question comes back as the decision card instead (probe-antigravity-asks-with-the-card.mjs).
+//
 // Yurt's beta run, 2026-09-23, hung on an `ask_question` that Antigravity drew
 // only in its own window. Colin: "he was hung up while waiting on this answer
 // since the google question wasnt popping up in our chat". Two turns on
@@ -136,6 +140,8 @@ const same = (a, b) => String(a ?? '').replace(/\s+/g, ' ').trim() === String(b 
 
 const askAndWaitForCard = async (label) => {
   await send(PROMPT)
+  await sleep(5000)
+  await shoot(`00-${label.replace(/\s+/g, '-')}-after-send.png`)
   for (let second = 0; second < 150; second += 1) {
     await sleep(1000)
     const card = JSON.parse(await readCard())
@@ -180,13 +186,22 @@ try {
     await shoot('01-the-question-in-locust.png')
     const chosen = card.options[1]
     say(`choosing: ${chosen}`)
-    await drive.evaluate(`(async () => {
-      const card = ${CARD}.closest('.lc-card')
-      card.querySelectorAll('.lc-question__option')[1].click()
-      await new Promise((r) => setTimeout(r, 300))
-      ;[...card.querySelectorAll('button')].find((b) => b.innerText.trim() === 'Send answer').click()
-      return 'sent'
-    })()`)
+    // By number (0.801), as a person at the keyboard answers Claude Code's own question: 2, then Enter on Send.
+    const key = async (name, code, vk, text) => {
+      await drive.send('Input.dispatchKeyEvent', { type: 'keyDown', key: name, code, windowsVirtualKeyCode: vk, nativeVirtualKeyCode: vk, ...(text === undefined ? {} : { text }) })
+      await drive.send('Input.dispatchKeyEvent', { type: 'keyUp', key: name, code, windowsVirtualKeyCode: vk, nativeVirtualKeyCode: vk })
+    }
+    await drive.evaluate(`(() => { const a = document.activeElement; if (a instanceof HTMLElement && a.closest('.lc-questions') === null) a.blur(); return 'ready' })()`)
+    await key('2', 'Digit2', 50, '2')
+    await sleep(300)
+    const byKey = JSON.parse(String(await drive.evaluate(`JSON.stringify((() => {
+      const card = ${CARD}
+      const options = [...card.querySelectorAll('.lc-question__option')]
+      return { keys: options.map((o) => o.querySelector('.lc-question__key')?.innerText ?? ''), chosen: options.findIndex((o) => o.classList.contains('is-chosen')), onSend: document.activeElement?.innerText?.trim() === 'Send answer' }
+    })())`)))
+    check('2 chooses the second option, and the focus goes to Send', byKey.chosen === 1 && byKey.onSend && byKey.keys[0] === '1' && byKey.keys[1] === '2', JSON.stringify(byKey))
+    await shoot('01b-chosen-by-number.png')
+    await key('Enter', 'Enter', 13, '\r')
     await drive.waitFor(`!(${CARD})`, { timeoutMs: 20_000, what: 'the card to go once the answer is delivered' })
     check('the answer is delivered and the card goes', true)
     await shoot('02-answered.png')

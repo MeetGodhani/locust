@@ -1598,6 +1598,30 @@ textarea {
   font-size: var(--lc-text-ask);
 }
 
+/*
+  The option's number (0.801): the key that chooses it, quiet beside its label, as on the question card. The label
+  and its note stand in one column beside it, so the note lines up under the label and not under the number.
+*/
+.lc-decision__option:has(> .lc-decision__key) {
+  flex-direction: row;
+  align-items: baseline;
+  gap: var(--lc-space-4);
+}
+
+.lc-decision__body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.lc-decision__key {
+  flex: none;
+  min-width: 1ch;
+  color: var(--lc-text-muted);
+  font-size: var(--lc-text-mono-caption);
+}
+
 .lc-decision__foot {
   color: var(--lc-text-muted);
   font-size: var(--lc-text-ask-foot);
@@ -18002,6 +18026,31 @@ textarea.lc-compare__judgecriteria {
 
 .lc-question__label {
   font-size: var(--lc-text-body);
+}
+
+/* The option's number (0.801): the key that chooses it, quiet beside its label and its description's column. */
+.lc-question__option:has(> .lc-question__key) {
+  flex-direction: row;
+  align-items: baseline;
+  gap: var(--lc-space-4);
+}
+
+.lc-question__body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.lc-question__key {
+  flex: none;
+  min-width: 1ch;
+  color: var(--lc-text-muted);
+  font-size: var(--lc-text-mono-caption);
+}
+
+.lc-question__option.is-chosen .lc-question__key {
+  color: inherit;
 }
 
 .lc-question__desc {
