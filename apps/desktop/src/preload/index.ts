@@ -41,6 +41,7 @@ import { LOCUST_LINK_TAKE, LOCUST_LINK_WAITING, type LocustLink } from '../share
 import { SCOUT_CHANGED, SCOUT_DISMISS, SCOUT_LOOK, SCOUT_SET, SCOUT_STATE, SCOUT_TURN_ON, type ScoutState } from '../shared/scout.js'
 import { REMOTE_CONTROL_GET_CHANNEL, REMOTE_CONTROL_SET_CHANNEL, type RemoteControlState } from '../shared/claude-remote-control.js'
 import { FOLDER_CHANGES_CHANNEL, FOLDER_COMMIT_CHANNEL, FOLDER_REPOSITORY_CHANNEL, type CommitResult, type FolderChanges } from '../shared/folder-commit.js'
+import { GITHUB_ISSUE_OPEN_CHANNEL, GITHUB_ISSUE_REMEMBERED_CHANNEL, GITHUB_ISSUES_LIST_CHANNEL, GITHUB_ISSUES_READY_CHANNEL, type ListedIssue, type StartedIssue } from '../shared/github-issue.js'
 import {
   BACKGROUND_DISMISS_CHANNEL,
   BACKGROUND_LIST_CHANNEL,
@@ -764,7 +765,7 @@ const desktopApi: DesktopApi = {
   catchUpTerminal: (missionId: string) =>
     ipcRenderer.invoke(TERMINAL_CATCH_UP_CHANNEL, missionId) as Promise<TerminalCatchUpResponse>,
   listImportableSessions: () => ipcRenderer.invoke(SESSION_IMPORT_LIST_CHANNEL) as Promise<SessionImportListResponse>,
-  importSession: (runtime: 'claude' | 'codex', sessionId: string) =>
+  importSession: (runtime: 'claude' | 'codex' | 'cursor' | 'opencode', sessionId: string) =>
     ipcRenderer.invoke(SESSION_IMPORT_CHANNEL, { runtime, sessionId }) as Promise<SessionImportResponse>,
   saveMissionRecord: (request: MissionRecordSaveRequest) => ipcRenderer.invoke(MISSION_RECORD_SAVE_CHANNEL, request) as Promise<MissionRecordSaveResponse>,
   saveTeamCard: (rect: TeamCardRect) => ipcRenderer.invoke(TEAM_CARD_SAVE_CHANNEL, rect) as Promise<TeamCardSaveResponse>,
@@ -796,7 +797,7 @@ const desktopApi: DesktopApi = {
       ipcRenderer.removeListener(PULL_REQUEST_NEWS_CHANNEL, handler)
     }
   },
-  commitFolder: (message, then, shown) => ipcRenderer.invoke(FOLDER_COMMIT_CHANNEL, message, then, [...shown]) as Promise<CommitResult>,
+  commitFolder: (message, then, shown, fixes) => ipcRenderer.invoke(FOLDER_COMMIT_CHANNEL, message, then, [...shown], fixes) as Promise<CommitResult>,
   backgroundRuns: () => ipcRenderer.invoke(BACKGROUND_LIST_CHANNEL) as Promise<readonly PublicBackgroundRun[]>,
   startBackground: (request) => ipcRenderer.invoke(BACKGROUND_START_CHANNEL, request) as Promise<BackgroundStartResponse>,
   stopBackground: (id) => ipcRenderer.invoke(BACKGROUND_STOP_CHANNEL, id) as Promise<boolean>,
@@ -893,6 +894,12 @@ const desktopApi: DesktopApi = {
   },
   attachPasted: (name: string, bytes: Uint8Array) =>
     ipcRenderer.invoke(WORKSPACE_PASTE_CHANNEL, { name, bytes }) as Promise<AttachFilesResponse>,
+  githubIssues: {
+    ready: () => ipcRenderer.invoke(GITHUB_ISSUES_READY_CHANNEL) as Promise<boolean>,
+    list: () => ipcRenderer.invoke(GITHUB_ISSUES_LIST_CHANNEL) as Promise<readonly ListedIssue[]>,
+    open: (number: number) => ipcRenderer.invoke(GITHUB_ISSUE_OPEN_CHANNEL, { number }) as Promise<{ readonly brief: string; readonly issue: StartedIssue; readonly images: readonly { readonly name: string; readonly base64: string }[] } | undefined>,
+    remembered: (missionId: string) => ipcRenderer.invoke(GITHUB_ISSUE_REMEMBERED_CHANNEL, { missionId }) as Promise<StartedIssue | undefined>
+  },
   pickInPage: (request: PagePickRequest) => ipcRenderer.invoke(PAGE_PICK_CHANNEL, request) as Promise<PagePickResponse>,
   cancelPagePick: (pageUrl: string) => ipcRenderer.invoke(PAGE_PICK_CANCEL_CHANNEL, pageUrl) as Promise<void>,
   listRooms: () => ipcRenderer.invoke(ROOM_LIST_CHANNEL) as Promise<RoomListResponse>,

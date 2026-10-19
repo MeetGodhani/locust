@@ -122,6 +122,15 @@ describe('the folder commits as you', () => {
     expect(calls.find((call) => call[0] === 'gh' && call[1] === 'pr')).toEqual(['gh', 'pr', 'create', '--title=Fix the cart total', '--body=- Fix the cart total', '--head=locust/fix-the-cart-total', '--base=main'])
   })
 
+  it('a pull request for an issue says which issue it fixes', { timeout: TIMEOUT }, async () => {
+    const { folder } = await repository()
+    await writeFile(join(folder, 'cart.py'), `def total(items):${NL}    return sum(items)${NL}`)
+    const calls: string[][] = []
+    const done = await createFolderCommits({ runNetwork: network(calls) }).commit(folder, `Fix the cart total${NL}${NL}- Fix the cart total`, 'pull-request', undefined, 123)
+    expect(done.kind).toBe('done')
+    expect(calls.find((call) => call[0] === 'gh' && call[1] === 'pr')).toEqual(['gh', 'pr', 'create', '--title=Fix the cart total', '--body=- Fix the cart total\n\nFixes #123', '--head=locust/fix-the-cart-total', '--base=main'])
+  })
+
   it('a refused push keeps the commit and says so', { timeout: TIMEOUT }, async () => {
     const { folder } = await repository()
     await git(['remote', 'set-url', '--push', 'origin', join(folder, 'no-such-remote')], folder)

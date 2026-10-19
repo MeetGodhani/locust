@@ -107,6 +107,7 @@ export function FirstLaunch({
   onCompare,
   onStarter,
   onCompareStarter,
+  onStartFromIssue,
   workspaceMade = false,
   team = [],
   onMessageTeammate,
@@ -228,6 +229,8 @@ export function FirstLaunch({
   readonly onStarter?: (starter: Starter) => void
   /** The same words in a comparison of two models: of the work, each in its own copy, or of the answers. */
   readonly onCompareStarter?: (starter: Starter) => void
+  /** Open the folder's issues. Passed only when this folder is a GitHub repository gh can read. */
+  readonly onStartFromIssue?: () => void
   /**
    * Locust INVENTED the folder it is about to work in, because the one it was
    * launched from was refused. The screen has to say so; see the card below.
@@ -826,7 +829,7 @@ export function FirstLaunch({
     )
   })()
   const startersBlock = startersShown && onStarter !== undefined && onCompareStarter !== undefined
-    ? <StarterList onStart={onStarter} onCompareStart={onCompareStarter} {...(onCompare === undefined ? {} : { onCompare })} />
+    ? <StarterList onStart={onStarter} onCompareStart={onCompareStarter} {...(onCompare === undefined ? {} : { onCompare })} {...(onStartFromIssue === undefined ? {} : { onIssue: onStartFromIssue })} />
     : null
   const accountsAbove = team.length > 0
 

@@ -12,6 +12,8 @@
  * routine's steps follow.
  */
 
+import type { StartedIssue } from '../../shared/github-issue.js'
+
 export type QueuedVerdict =
   /** The run is still going; the message waits. */
   | { readonly kind: 'waiting' }
@@ -102,6 +104,8 @@ export interface QueuedRow {
   readonly origin: 'person' | 'host'
   /** Attachments ride with the row. Only the FIRST of a merge may carry them. */
   readonly attachments?: readonly string[]
+  /** The GitHub issue this message was filled from, so a later send still says Fixes #n. */
+  readonly issue?: StartedIssue
   /**
    * Not before this time (ms since the epoch): the host refused it as still
    * busy a moment ago. See `retriedAfterBusy`.

@@ -43,17 +43,30 @@ function PageIcon(): ReactElement {
   )
 }
 
-export function StarterList({ onStart, onCompareStart, onCompare }: {
+export function StarterList({ onStart, onCompareStart, onCompare, onIssue }: {
   readonly onStart: (starter: Starter) => void
   readonly onCompareStart: (starter: Starter) => void
   /** Compare on words of the person's own, from an empty box. */
   readonly onCompare?: () => void
+  /** The folder's open GitHub issues. Absent when this folder is not one gh can read. */
+  readonly onIssue?: () => void
 }): ReactElement {
   return (
     <section className="lc-homestarts" aria-label="Start a conversation">
       {/* One line, as the accounts' "Show all" sits on theirs: Compare on words of your own, at the heading's end. */}
       <div className="lc-homestarts__head">
         <span className="lc-agenthead__label">Start a conversation</span>
+        {/*
+          * FROM AN ISSUE, IN THE HEAD (0.799): a fifth starter was a third row of two, and Home scrolled again at
+          * 1205x803 (Colin, 2026-10-19: "fit all this in one screen with no scrolling"). Beside Compare models,
+          * the other way in that is not one of the four.
+          */}
+        {onIssue !== undefined && (
+          <button type="button" className="lc-buildhead__compare lc-homestarts__issue" title="An open GitHub issue in this folder, with its text and pictures. Choosing one fills the box; nothing is sent until you press Send." onClick={onIssue}>
+            <Icon name="inbox" size={12} />
+            Start from an issue
+          </button>
+        )}
         {onCompare !== undefined && (
           // "Compare models", word for word: six drives and the composer say it so (0.610).
           <button type="button" className="lc-buildhead__compare lc-homestarts__anything" title="Ask two or three models anything and see the answers side by side" onClick={onCompare}>

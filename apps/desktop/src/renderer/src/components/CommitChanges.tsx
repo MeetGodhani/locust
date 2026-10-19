@@ -25,6 +25,7 @@ export function CommitChanges({
   asks,
   teammate,
   of,
+  fixes,
   onCommitted
 }: {
   /** A run is live in this conversation: nothing is offered until it ends, so half a turn is never committed. */
@@ -35,6 +36,8 @@ export function CommitChanges({
   readonly teammate?: string
   /** The conversation's latest turn: its teammate writes the message from the changes (0.771). */
   readonly of?: string
+  /** The issue this conversation started from, named once in the pull request. */
+  readonly fixes?: number
   /** A commit was made: what shows the folder's changes reads them again. */
   readonly onCommitted?: () => void
 }): ReactElement | null {
@@ -100,7 +103,7 @@ export function CommitChanges({
     setWorking(then)
     // The files the person was shown: the host commits those, or refuses if the folder has changed since.
     const shown = changes?.kind === 'changes' ? changes.files.map((file) => file.path) : []
-    const done = await window.desktop?.commitFolder(message, then, shown).catch((): CommitResult => ({ kind: 'refused', message: 'Locust could not reach git.' }))
+    const done = await window.desktop?.commitFolder(message, then, shown, fixes).catch((): CommitResult => ({ kind: 'refused', message: 'Locust could not reach git.' }))
     setWorking(undefined)
     setResult(done)
     void read()

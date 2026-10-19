@@ -27,8 +27,8 @@ describe('the import dialog', () => {
       <ImportDialog onList={() => new Promise(() => undefined)} onImport={async () => ({ ok: false, message: 'no' })} onImported={() => undefined} onCancel={() => undefined} />
     )
     expect(html).toContain('Import a conversation')
-    expect(html).toContain('from Claude Code or Codex, the last 30 days')
-    expect(html).toContain('Looking for your sessions…')
+    expect(html).toContain('the last 30 days')
+    expect(html).toContain('Looking for your Claude Code, Codex, OpenCode and Cursor Agent sessions…')
   })
 
   it('says ages the way the sidebar does', () => {

@@ -56,6 +56,11 @@ describe('which commands are offered', () => {
   it('always offers the route picker, which is always reachable', () => {
     expect(availableCommands({ modes: [], running: false, canSwarm: false }).map((c) => c.name)).toEqual(['model'])
   })
+
+  it('offers an issue only for a folder whose issues can be read', () => {
+    expect(availableCommands({ modes: ALL_MODES, running: false, canSwarm: false }).some((command) => command.name === 'issue')).toBe(false)
+    expect(availableCommands({ modes: ALL_MODES, running: false, canSwarm: false, issues: true }).some((command) => command.name === 'issue')).toBe(true)
+  })
 })
 
 describe('narrowing as you type', () => {
@@ -100,7 +105,7 @@ describe("a runtime's own commands (0.426)", () => {
   it("sit under the runtime, after Locust's own, with what goes after them", () => {
     const offered = availableCommands({ modes: ALL_MODES, running: false, canSwarm: true, runtimeCommands: claude })
     const names = offered.map((command) => command.name)
-    expect(names.slice(0, names.indexOf('auto') + 1)).toEqual(SLASH_COMMANDS.filter((c) => c.name !== 'stop').map((c) => c.name))
+    expect(names.slice(0, names.indexOf('auto') + 1)).toEqual(SLASH_COMMANDS.filter((c) => c.name !== 'stop' && c.action.kind !== 'issues').map((c) => c.name))
     expect(names.slice(names.indexOf('auto') + 1)).toEqual(['compact', 'security-review', 'plugin:skill'])
     const compact = offered.find((command) => command.name === 'compact')
     expect(compact).toMatchObject({ group: 'Claude Code', hint: '<optional custom summarization instructions>', action: { kind: 'runtime' } })

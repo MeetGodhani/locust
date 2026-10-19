@@ -196,6 +196,24 @@ continue; report exact validation results, and say what was not run.
 - Not run: macOS, Linux, the packaged app, and a paid model turn.
 - The browser page shows up on the devtools port at its real address, but that socket's default script context is
   still `about:blank`. The drive evaluates in the context whose origin is `http://127.0.0.1`.
+### 2026-10-19 — import OpenCode and Cursor Agent sessions (Codex)
+
+- Scope: `exec/import-more-sessions`, based on `fba73fb8` (0.797.0). No version,
+  changelog, installer, site, dependency or global configuration change; no push.
+- `main/agent-session-import.ts` reads OpenCode through its documented JSON
+  list/export commands. After the person's explicit authorization, Cursor is
+  read through chat metadata and read-only SQLite message blobs, never its
+  configuration or sign-in. The existing import writer retains session IDs
+  and account-default routes; Cursor resumes omit `--model`.
+- Import rows name and mark all four supported sources. Missing folders are
+  visible and disabled, with a host recheck for the new sources at import time.
+  Antigravity and Muse were left out because their help documents no structured
+  session listing. Automatic terminal catch-up remains Claude/Codex only.
+- Validation and limits: `docs/REPORT-import-more-sessions.md` records the
+  exact commands, fixtures, controls, UI evidence and final gate result.
+- Not run: a live continuation/model turn, real-user-profile import, packaged
+  app or macOS/Linux run. Cursor's private storage format and chat-level
+  timestamps are explicit limits. Next: review this committed branch.
 
 ### 2026-10-18 — browser teammates can use
 

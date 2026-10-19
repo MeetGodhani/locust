@@ -128,6 +128,7 @@ import { BROWSER_EVENT_CHANNEL, BROWSER_POINT_HOTKEY_CHANNEL } from '../shared/b
 import { catchUpTerminal, createTerminalCatchUp, createTerminalImports, createTranscriptReader, transcriptPathFor } from './terminal-catch-up.js'
 import type { CatchUpFacts } from './terminal-catch-up.js'
 import { importSession, listImportableSessions } from './session-import.js'
+import { createOpenCodeSessionReader, cursorExchanges, listCursorSessions } from './agent-session-import.js'
 import type { ImportableSession } from './session-import.js'
 import { readTextChunk, withTextChunk } from './png-text.js'
 import { recordTurns, missionRecordMarkdown, rawRecordJson, recordFileName } from './mission-export.js'
@@ -170,6 +171,8 @@ import type { BackgroundRun, BackgroundRuns } from './claude-background-runs.js'
 import { BACKGROUND_DISMISS_CHANNEL, BACKGROUND_LIST_CHANNEL, BACKGROUND_OPEN_CHANNEL, BACKGROUND_SETUP_CHANNEL, BACKGROUND_START_CHANNEL, BACKGROUND_STOP_CHANNEL } from '../shared/background.js'
 import type { BackgroundStartResponse, PublicBackgroundRun } from '../shared/background.js'
 import { FOLDER_CHANGES_CHANNEL, FOLDER_COMMIT_CHANNEL, FOLDER_REPOSITORY_CHANNEL, type CommitResult, type FolderChanges } from '../shared/folder-commit.js'
+import { GITHUB_ISSUE_OPEN_CHANNEL, GITHUB_ISSUE_REMEMBERED_CHANNEL, GITHUB_ISSUES_LIST_CHANNEL, GITHUB_ISSUES_READY_CHANNEL, startedIssue } from '../shared/github-issue.js'
+import { checkoutIssueBranch, createGithubIssues, gitText } from './github-issues.js'
 import { readRuntimeArtifacts } from './runtime-artifacts.js'
 import { relative } from 'node:path'
 import { decideReveal, decideTeammateFile, insideOnDisk, readRoots } from './reveal-file.js'
@@ -572,6 +575,7 @@ function readAttachedPdfs(folder: string, paths: readonly string[]): void {
 const MAX_PASTED_BYTES = 24 * 1024 * 1024
 
 const probeRunner = createNodeProbeRunner()
+const sessionProbeRunner = createNodeProbeRunner({ maximumTimeoutMs: 30_000, maxOutputBytes: 16 * 1024 * 1024 })
 // `claude mcp list` health-checks every connector and asks for 20 s; the
 // ordinary runner caps any probe at 10 s, so on a slower machine the list
 // was never read and connector allow rules were never made. Its own ceiling,
@@ -3135,12 +3139,47 @@ if (!ownsSingleInstanceLock) {
       pullRequestWatch.watch(url, on === true)
       return pullRequestWatch.watching(url)
     })
-    ipcMain.handle(FOLDER_COMMIT_CHANNEL, (event, message: unknown, then: unknown, shown: unknown) =>
+    const githubIssues = createGithubIssues({
+      folder: () => workspaceChosen ? workspacePath : undefined,
+      originsFile: join(app.getPath('userData'), 'issue-origins.json')
+    })
+    const issueNumber = (value: unknown): number | undefined =>
+      typeof value === 'number' && Number.isInteger(value) && value >= 1 && value < 1_000_000_000 ? value : undefined
+    ipcMain.handle(FOLDER_COMMIT_CHANNEL, (event, message: unknown, then: unknown, shown: unknown, fixes: unknown) =>
       fromOwnWindow(event) && typeof message === 'string' && message.length <= 20_000 && (then === 'commit' || then === 'push' || then === 'pull-request')
         && Array.isArray(shown) && shown.length <= 100_000 && shown.every((path) => typeof path === 'string' && path.length <= 4_096)
-        ? folderCommits.commit(workspacePath, message, then, shown as string[]).catch((error: unknown): CommitResult => ({ kind: 'refused', message: error instanceof Error ? error.message : 'The commit could not be made.' }))
+        && (fixes === undefined || issueNumber(fixes) !== undefined)
+        ? folderCommits.commit(workspacePath, message, then, shown as string[], issueNumber(fixes)).catch((error: unknown): CommitResult => ({ kind: 'refused', message: error instanceof Error ? error.message : 'The commit could not be made.' }))
         : ({ kind: 'refused', message: 'That commit request was not understood.' } as CommitResult)
     )
+    const onlyKey = (payload: unknown, key: string): Record<string, unknown> | undefined => {
+      if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) return undefined
+      const row = payload as Record<string, unknown>
+      return Object.keys(row).every((name) => name === key) ? row : undefined
+    }
+    ipcMain.handle(GITHUB_ISSUES_READY_CHANNEL, (event, payload: unknown) =>
+      fromOwnWindow(event) && payload === undefined ? githubIssues.ready() : false
+    )
+    ipcMain.handle(GITHUB_ISSUES_LIST_CHANNEL, (event, payload: unknown) =>
+      fromOwnWindow(event) && payload === undefined ? githubIssues.list() : []
+    )
+    ipcMain.handle(GITHUB_ISSUE_OPEN_CHANNEL, async (event, payload: unknown) => {
+      const row = onlyKey(payload, 'number')
+      const number = row === undefined ? undefined : issueNumber(row.number)
+      if (!fromOwnWindow(event) || number === undefined) return undefined
+      const opened = await githubIssues.open(number)
+      if (opened === undefined) return undefined
+      return {
+        brief: opened.brief,
+        issue: opened.issue,
+        images: opened.images.map((image) => ({ name: image.name, base64: Buffer.from(image.bytes).toString('base64') }))
+      }
+    })
+    ipcMain.handle(GITHUB_ISSUE_REMEMBERED_CHANNEL, (event, payload: unknown) => {
+      const row = onlyKey(payload, 'missionId')
+      if (!fromOwnWindow(event) || row === undefined || typeof row.missionId !== 'string') return undefined
+      return githubIssues.remembered(row.missionId)
+    })
     ipcMain.handle(RUNTIME_UPDATES_CHANNEL, (event) =>
       fromOwnWindow(event) ? runtimeUpdates.state().then(toldHere) : { automatic: false, checkedAt: undefined, agents: [] }
     )
@@ -4021,6 +4060,7 @@ if (!ownsSingleInstanceLock) {
       // on Linux; zero after a settled one). The timer was the only caller
       // of the kill, and there is no timer once the app has gone.
       probeRunner.dispose()
+      sessionProbeRunner.dispose()
     })
     // A run that ended waiting for the person -- a question card, an account
     // limit -- is said to the desk the way an approval is (parity row 62).
@@ -4741,14 +4781,30 @@ if (!ownsSingleInstanceLock) {
      * title are taken from the file, never from the window.
      */
     let lastListing: readonly ImportableSession[] = []
+    const cursorSessionHome = join(homedir(), '.cursor')
+    const openCodeSessions = createOpenCodeSessionReader(executableLocator, sessionProbeRunner)
     ipcMain.handle(SESSION_IMPORT_LIST_CHANNEL, async (event) => {
       if (!fromOwnWindow(event)) return { ok: false, message: 'That request was rejected.' } as const
       try {
         // Sessions Locust already holds: every one read through before.
         const held = await readFile(terminalImportsFile, 'utf8').then((text) => Object.keys(JSON.parse(text) as Record<string, unknown>), () => [] as string[])
-        lastListing = await listImportableSessions(sessionPlaces, { skip: new Set(held) })
+        const warnings: string[] = []
+        const otherSessions = [
+          ...await openCodeSessions.list().catch(() => { warnings.push('OpenCode sessions could not be listed. Your other sessions are still shown.'); return [] }),
+          ...await listCursorSessions(cursorSessionHome).catch(() => { warnings.push('Cursor Agent sessions could not be listed. Your other sessions are still shown.'); return [] })
+        ]
+        // These CLIs do not label a session as Locust-owned. Exclude the
+        // thread IDs already recorded here before offering outside chats.
+        if (otherSessions.length > 0) {
+          for (const mission of (await missionLedger.listMissions()).missions) {
+            const id = runtimeThreadIdOf(mission)
+            if (id !== undefined) held.push(id)
+          }
+        }
+        lastListing = await listImportableSessions(sessionPlaces, { skip: new Set(held), otherSessions })
         return {
           ok: true,
+          warnings,
           sessions: lastListing.map((session) => ({ ...session, folderName: basename(session.cwd) || session.cwd }))
         } as const
       } catch {
@@ -4767,6 +4823,7 @@ if (!ownsSingleInstanceLock) {
         sameFolder: (cwd) => folders.sameAs(cwd),
         learnFolder: (id, path) => folders.learn([{ id, path }]),
         nameConversation: (missionId, title) => teammates.renameMission(missionId, title),
+        readExchanges: (session) => session.runtime === 'cursor' ? cursorExchanges(cursorSessionHome, session) : openCodeSessions.exchanges(session.sessionId),
         pathOf: (runtime, sessionId) => transcriptPathFor(runtime, sessionId, sessionPlaces)
       }).catch((error: unknown) => ({ ok: false, message: error instanceof Error ? `It could not be brought in: ${error.message}` : 'It could not be brought in.' }) as const)
       if (result.ok) {
@@ -8709,6 +8766,10 @@ if (!ownsSingleInstanceLock) {
       const managed = policyTurnRefusal(organizationPolicy, { runtime, model, mode, cloud: payload.cloud === true })
       if (managed !== undefined) return { ok: false, error: { code: 'POLICY_REFUSED', message: managed } } as const
       const peer = await peerContextFor(payload.teammateId)
+      const startingIssue = startedIssue((payload as { issue?: unknown }).issue)
+      if (startingIssue !== undefined && peer?.cwd !== undefined && peer.repositoryRoot !== undefined) {
+        await checkoutIssueBranch((args, cwd) => gitText(ownGitArgs(args), cwd), peer.cwd, startingIssue.number, startingIssue.title).catch(() => undefined)
+      }
       // An agent being updated is being replaced on disk: a run started on
       // it now would start on half of one (runtime-updates.ts).
       if (runtimeUpdates.updating() === runtime) {
@@ -8846,11 +8907,17 @@ if (!ownsSingleInstanceLock) {
       }
       return startMission(request, update => {
         if (!owner.isDestroyed() && !owner.webContents.isDestroyed()) owner.webContents.send(CODEX_MISSION_UPDATE_CHANNEL, update)
-      }).then((response) => {
+      }).then(async (response) => {
         // A turn the person sent from the chat box: the only kind carried on without a press when its plan runs out
         // (0.774). Not one on the cloud computer, whose session cannot be carried to another agent here.
         const cloud = typeof request === 'object' && request !== null && (request as { readonly cloud?: unknown }).cloud === true
         if (response.ok && !cloud) rememberSentByPerson(response.data.missionId)
+        if (response.ok) {
+          const issue = startedIssue((request as { issue?: unknown }).issue)
+          const follow = (request as { followUpOf?: unknown }).followUpOf
+          if (issue !== undefined) await githubIssues.remember(response.data.missionId, issue).catch(() => undefined)
+          else if (typeof follow === 'string') await githubIssues.copy(follow, response.data.missionId).catch(() => undefined)
+        }
         return response
       })
     })

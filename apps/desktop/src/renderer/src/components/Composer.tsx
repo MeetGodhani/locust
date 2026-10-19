@@ -59,6 +59,8 @@ import type { SlashCommand } from '../slashCommands.js'
 import { RoutePicker } from './RoutePicker.js'
 import { policyFeatureRefusal, policyModeAllowed, policyTerminalRefusal } from '../../../shared/organization-policy.js'
 import { CommandAsk, CommandModeNote } from './OwnCommand.js'
+import { IssueList } from './IssueList.js'
+import type { ListedIssue } from '../../../shared/github-issue.js'
 import { ManagedPolicyNote, useOrganizationPolicy } from '../organizationPolicy.js'
 import type { ComparePicking } from './RoutePicker.js'
 import { MAX_COMPARE_SLOTS, MIN_COMPARE_SLOTS, versusLabel } from '../../../shared/compare.js'
@@ -442,6 +444,12 @@ export interface ComposerProps {
   readonly onRunCommand?: (command: string) => void
   /** A project command's `!` lines, waiting for a yes. */
   readonly commandAsk?: { readonly lines: readonly string[]; readonly onAllow: () => void; readonly onNotNow: () => void }
+  /** The folder is a GitHub repository, so `/issue` is in the menu. */
+  readonly issues?: boolean
+  /** Open the issue list. Choosing one fills the box, and nothing is sent. */
+  readonly onPickIssue?: () => void
+  /** The open list, drawn above the field. */
+  readonly issueList?: { readonly issues: readonly ListedIssue[]; readonly empty?: string; readonly onChoose: (number: number) => void; readonly onClose: () => void }
 }
 
 /**
@@ -578,7 +586,10 @@ export function Composer({
   ownCommands,
   onChooseOwnCommand,
   onRunCommand,
-  commandAsk
+  commandAsk,
+  issues,
+  onPickIssue,
+  issueList
 }: ComposerProps): ReactElement {
   const policy = useOrganizationPolicy()
   const cloudManaged = policyFeatureRefusal(policy, 'cloud') !== undefined
@@ -829,7 +840,8 @@ export function Composer({
         ...availableCommands({
           modes: modesFor(route.runtime, platform).filter((value) => policyModeAllowed(policy, value)),
           running,
-          canSwarm: !running
+          canSwarm: !running,
+          issues
         }),
         ...yours,
         ...runtimeRows
@@ -927,6 +939,12 @@ export function Composer({
     if (command.action.kind === 'own') {
       const choice = ownCommandChoice(command.name, command.action.source, argumentsOfOwnCommand(value, [command.name])?.args ?? '')
       onChooseOwnCommand?.(choice.fill.name, choice.fill.source, choice.fill.args)
+      return
+    }
+    // The issue list. Choosing one fills the box. Nothing is sent.
+    if (command.action.kind === 'issues') {
+      setValue('')
+      onPickIssue?.()
       return
     }
     // A runtime's own command is written into the box, where its arguments
@@ -1115,7 +1133,7 @@ export function Composer({
   const queueing = useRef(false)
   const submit = (submitEvent: FormEvent<HTMLFormElement>): void => {
     submitEvent.preventDefault()
-    if (queueing.current || commandAsk !== undefined) return
+    if (queueing.current || commandAsk !== undefined || issueList !== undefined) return
     const drafted = bangDraft(value)
     if (!terminalOff && drafted !== undefined) {
       if (drafted.command.length > 0) onRunCommand?.(drafted.command)
@@ -1314,6 +1332,16 @@ export function Composer({
       if (keyEvent.key === 'Escape') {
         keyEvent.preventDefault()
         commandAsk.onNotNow()
+      } else if (keyEvent.key === 'Enter' && !keyEvent.shiftKey) {
+        keyEvent.preventDefault()
+      }
+      return
+    }
+    // The issue list has the keys. Enter here must not send what was already in the box.
+    if (issueList !== undefined) {
+      if (keyEvent.key === 'Escape') {
+        keyEvent.preventDefault()
+        issueList.onClose()
       } else if (keyEvent.key === 'Enter' && !keyEvent.shiftKey) {
         keyEvent.preventDefault()
       }
@@ -2062,6 +2090,7 @@ export function Composer({
         )}
         <form ref={formRef} className="command-dock lc-composer__form" onSubmit={submit}>
           {commandAsk !== undefined && <CommandAsk lines={commandAsk.lines} onAllow={commandAsk.onAllow} onNotNow={commandAsk.onNotNow} />}
+          {issueList !== undefined && <IssueList issues={issueList.issues} onChoose={issueList.onChoose} onClose={issueList.onClose} {...(issueList.empty === undefined ? {} : { empty: issueList.empty })} />}
           {cloud?.on === true && cloud.where === 'claude' && cloud.environment !== undefined && <CloudEnvironmentField {...cloud.environment} />}
           <VoiceBeam className={`lc-composerbeam${voice === 'listening' ? ' is-listening' : ''}`} active={voice === 'listening'} level={glowLevel} theme="auto" colorVariant="colorful" reach={1.5}>
           <div className="lc-composer__box" onMouseDown={pressBox}>

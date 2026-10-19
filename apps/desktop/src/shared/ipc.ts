@@ -4,6 +4,7 @@ import type { ReverseChange } from './reverse-diff.js'
 import type { AwaySummaryCounts } from './away.js'
 import type { RemoteControlState } from './claude-remote-control.js'
 import type { CommitResult, CommitThen, FolderChanges } from './folder-commit.js'
+import type { ListedIssue, StartedIssue } from './github-issue.js'
 import type { BackgroundStartRequest, BackgroundStartResponse, PublicBackgroundRun } from './background.js'
 import type { MissionRuntimeId, NormalizedRuntimeEvent } from '@teammate/runtime-adapters'
 import type { QueuedMessagesResponse, SavedQueuedMessage } from './queued-messages.js'
@@ -782,7 +783,7 @@ export const TERMINAL_CATCH_UP_CHANNEL = 'mission:terminal-catch-up'
 export const SESSION_IMPORT_LIST_CHANNEL = 'session-import:list'
 export const SESSION_IMPORT_CHANNEL = 'session-import:import'
 export interface ImportableSessionView {
-  readonly runtime: 'claude' | 'codex'
+  readonly runtime: 'claude' | 'codex' | 'cursor' | 'opencode'
   readonly sessionId: string
   readonly title: string
   readonly cwd: string
@@ -790,8 +791,9 @@ export interface ImportableSessionView {
   readonly updatedAt: string
   readonly bytes: number
   readonly openNow: boolean
+  readonly folderMissing?: boolean
 }
-export type SessionImportListResponse = { readonly ok: true; readonly sessions: readonly ImportableSessionView[] } | { readonly ok: false; readonly message: string }
+export type SessionImportListResponse = { readonly ok: true; readonly sessions: readonly ImportableSessionView[]; readonly warnings?: readonly string[] } | { readonly ok: false; readonly message: string }
 export type SessionImportResponse = { readonly ok: true; readonly missionId: string; readonly turns: number; readonly skipped: number } | { readonly ok: false; readonly message: string }
 /** The team as a picture of itself (shared/team-card.ts, 0.398). */
 export const TEAM_CARD_SAVE_CHANNEL = 'team-card:save'
@@ -3022,6 +3024,12 @@ export interface CodexMissionStartRequest {
    */
   readonly followUpOf?: string
   /**
+   * Filled from a GitHub issue. The host checks the branch out in a worktree
+   * teammate's copy and remembers the issue. The words in `prompt` stay the
+   * issue's own text. Nothing here is sent until the person presses Send.
+   */
+  readonly issue?: StartedIssue
+  /**
    * Started again from an edited earlier message (0.498). `followUpOf` is
    * then the turn BEFORE the edited one (absent when the first message was
    * edited), and `tip` the conversation's latest turn, which the new branch
@@ -3854,7 +3862,7 @@ export interface DesktopApi {
   /** What changed about the watched pull request (0.731). */
   onPullRequestNews(listener: (news: PullRequestNews) => void): () => void
   /** Commit it all as the person, then push or open a pull request when asked. */
-  commitFolder(message: string, then: CommitThen, shown: readonly string[]): Promise<CommitResult>
+  commitFolder(message: string, then: CommitThen, shown: readonly string[], fixes?: number): Promise<CommitResult>
   /** Background turns (W10): Claude Code runs them, Locust watches. */
   backgroundRuns(): Promise<readonly PublicBackgroundRun[]>
   startBackground(request: BackgroundStartRequest): Promise<BackgroundStartResponse>
@@ -3878,7 +3886,7 @@ export interface DesktopApi {
   catchUpTerminal(missionId: string): Promise<TerminalCatchUpResponse>
   /** Sessions a person had in Claude Code or Codex, to bring in (session-import.ts). */
   listImportableSessions(): Promise<SessionImportListResponse>
-  importSession(runtime: 'claude' | 'codex', sessionId: string): Promise<SessionImportResponse>
+  importSession(runtime: ImportableSessionView['runtime'], sessionId: string): Promise<SessionImportResponse>
   saveTeamCard(rect: TeamCardRect): Promise<TeamCardSaveResponse>
   /** Save a conversation's record as one Markdown file (mission-export.ts). */
   saveMissionRecord(request: MissionRecordSaveRequest): Promise<MissionRecordSaveResponse>
@@ -4013,6 +4021,13 @@ export interface DesktopApi {
    * collision.
    */
   attachPasted(name: string, bytes: Uint8Array): Promise<AttachFilesResponse>
+  /** This folder's open GitHub issues, through the person's own gh. The window never names a folder or a URL. */
+  githubIssues: {
+    ready(): Promise<boolean>
+    list(): Promise<readonly ListedIssue[]>
+    open(number: number): Promise<{ readonly brief: string; readonly issue: StartedIssue; readonly images: readonly { readonly name: string; readonly base64: string }[] } | undefined>
+    remembered(missionId: string): Promise<StartedIssue | undefined>
+  }
   /** Point at a part of the running page; answers when it is clicked, or cancelled (0.484). */
   pickInPage(request: PagePickRequest): Promise<PagePickResponse>
   cancelPagePick(pageUrl: string): Promise<void>

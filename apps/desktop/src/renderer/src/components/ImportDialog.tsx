@@ -4,11 +4,12 @@ import { useModal } from '../useModal.js'
 
 import type { ImportableSessionView, SessionImportListResponse, SessionImportResponse } from '../../../shared/ipc.js'
 import { RuntimeMark } from './RuntimeMark.js'
+import { runtimeDisplayName } from '../../../shared/runtimes.js'
 
 /**
  * IMPORT A CONVERSATION (main/session-import.ts).
  *
- * The sessions a person had in Claude Code or Codex in the last 30 days,
+ * The sessions a person had in Claude Code, Codex, OpenCode or Cursor Agent (0.799) in the last 30 days,
  * newest first, each with its folder and when it was last used. Choosing one
  * brings its exchanges in as a conversation; the next message there resumes
  * the same session, in its own folder. A session written to in the last two
@@ -39,7 +40,10 @@ export function ImportDialog({
     let live = true
     void onList().then((answer) => {
       if (!live) return
-      if (answer.ok) setSessions(answer.sessions)
+      if (answer.ok) {
+        setSessions(answer.sessions)
+        if (answer.warnings?.length) setProblem(answer.warnings.join(' '))
+      }
       else {
         setSessions([])
         setProblem(answer.message)
@@ -71,7 +75,7 @@ export function ImportDialog({
       <div ref={box} className="lc-dialog lc-importdialog" role="dialog" aria-modal="true" aria-label="Import a conversation">
         <div className="lc-dialog__head">
           <span className="lc-dialog__title">Import a conversation</span>
-          <span className="lc-dialog__sub lc-mono">from Claude Code or Codex, the last 30 days</span>
+          <span className="lc-dialog__sub lc-mono">the last 30 days</span>
           <button type="button" className="lc-dialog__close" aria-label="Close" onClick={onCancel}>
             ×
           </button>
@@ -87,11 +91,11 @@ export function ImportDialog({
           />
           {problem !== undefined && <p className="lc-importdialog__problem" role="alert">{problem}</p>}
           {sessions === undefined ? (
-            <p className="lc-importdialog__empty">Looking for your sessions…</p>
+            <p className="lc-importdialog__empty">Looking for your Claude Code, Codex, OpenCode and Cursor Agent sessions…</p>
           ) : shown.length === 0 ? (
             <p className="lc-importdialog__empty">
               {sessions.length === 0
-                ? 'No Claude Code or Codex sessions from the last 30 days to bring in. Ones already in Locust are not listed.'
+                ? 'No sessions from the last 30 days to bring in. Ones already in Locust are not listed.'
                 : 'Nothing matches that.'}
             </p>
           ) : (
@@ -102,15 +106,16 @@ export function ImportDialog({
                   <span className="lc-importdialog__what">
                     <span className="lc-importdialog__title">{session.title}</span>
                     <span className="lc-importdialog__meta lc-mono" title={session.cwd}>
-                      {session.folderName} · {ageOf(session.updatedAt, now())}
+                      {runtimeDisplayName(session.runtime)} · {session.folderName} · {ageOf(session.updatedAt, now())}
+                      {session.folderMissing ? ' · folder no longer available' : ''}
                       {session.openNow ? ' · probably still open in a terminal' : ''}
                     </span>
                   </span>
                   <button
                     type="button"
                     className="lc-button"
-                    disabled={importing !== undefined}
-                    title={session.openNow ? 'It was written to in the last two minutes. Close it in the terminal first, or both will write to it.' : 'Bring it in. Your next message there continues this same session.'}
+                    disabled={importing !== undefined || session.folderMissing === true}
+                    title={session.folderMissing ? 'Restore its folder and open this list again to continue this conversation.' : session.openNow ? 'It was written to in the last two minutes. Close it in the terminal first, or both will write to it.' : 'Bring it in. Your next message there continues this same session.'}
                     onClick={() => void bring(session)}
                   >
                     {importing === session.sessionId ? 'Importing…' : 'Import'}

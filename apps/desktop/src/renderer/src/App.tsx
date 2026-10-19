@@ -11,6 +11,7 @@ import { BOT_SIZE } from './botSizes.js'
 import { OrganizationPolicyContext, OrganizationPolicyNotice } from './organizationPolicy.js'
 import { POLICY_MODE_ORDER, policyModeAllowed } from '../../shared/organization-policy.js'
 import { commandsStillToCarry, promptWithCommands } from '../../shared/own-commands.js'
+import type { ListedIssue, StartedIssue } from '../../shared/github-issue.js'
 import type { ConversationCommand, ListedCommand, OwnCommandResult } from '../../shared/own-commands.js'
 import { CommandEntry } from './components/OwnCommand.js'
 import type { ReactElement } from 'react'
@@ -2808,6 +2809,59 @@ export default function App(): ReactElement {
   const pendingKeyCounter = useRef(0)
 
   const liveRun = shownKey === undefined ? undefined : runs.get(shownKey)
+  const [githubReady, setGithubReady] = useState(false)
+  const [issuePicker, setIssuePicker] = useState<readonly ListedIssue[]>()
+  const [issueEmpty, setIssueEmpty] = useState<string>()
+  const [shownIssue, setShownIssue] = useState<StartedIssue>()
+  const pendingIssueRef = useRef<StartedIssue | undefined>(undefined)
+  useEffect(() => {
+    const bridge = window.desktop?.githubIssues
+    if (bridge === undefined || workspacePath === undefined) {
+      setGithubReady(false)
+      setIssuePicker(undefined)
+      return
+    }
+    let gone = false
+    void bridge.ready().then((yes) => {
+      if (gone) return
+      setGithubReady(yes === true)
+      if (yes !== true) setIssuePicker(undefined)
+    })
+    return () => { gone = true }
+  }, [workspacePath])
+  const issueMissionId = liveRun?.data?.missionId ?? liveRun?.restoredMission?.missionId
+  useEffect(() => {
+    if (issueMissionId === undefined) { setShownIssue(undefined); return }
+    let gone = false
+    void window.desktop?.githubIssues?.remembered(issueMissionId).then((issue) => { if (!gone) setShownIssue(issue) })
+    return () => { gone = true }
+  }, [issueMissionId])
+  const openIssueList = (): void => {
+    setIssueEmpty(undefined)
+    void window.desktop?.githubIssues?.list().then((issues) => {
+      setIssuePicker(issues)
+    }).catch(() => {
+      setIssuePicker([])
+      setIssueEmpty('The issues could not be read. The box is unchanged.')
+    })
+  }
+  const chooseIssue = (number: number): void => {
+    void window.desktop?.githubIssues?.open(number).then(async (opened) => {
+      if (opened === undefined) {
+        setIssueEmpty('That issue could not be read. The box is unchanged.')
+        return
+      }
+      const paths: string[] = []
+      for (const image of opened.images) {
+        const raw = Uint8Array.from(atob(image.base64), (char) => char.charCodeAt(0))
+        const attached = await window.desktop?.attachPasted(image.name, raw).catch(() => undefined)
+        if (attached?.ok === true) paths.push(...attached.paths)
+      }
+      pendingIssueRef.current = opened.issue
+      setHandBack({ text: opened.brief, attachments: paths })
+      setIssuePicker(undefined)
+    }).catch(() => setIssueEmpty('That issue could not be read. The box is unchanged.'))
+  }
   /**
    * The shown run as of the LAST render, for handlers that run after an
    * await. A handoff is decided inside an async callback, and reading state
@@ -5228,6 +5282,9 @@ export default function App(): ReactElement {
     }
   ): Promise<boolean> => {
     const carryKey = options?.fromComposer === true ? draftKeyRef.current : options?.requeue?.origin === 'person' ? options.requeue.key : undefined
+    const pendingIssue = options?.fromComposer === true ? pendingIssueRef.current : options?.requeue?.issue
+    if (options?.fromComposer === true) pendingIssueRef.current = undefined
+    const issue = pendingIssue !== undefined && (options?.requeue !== undefined || prompt.includes(`GitHub issue #${String(pendingIssue.number)}`)) ? pendingIssue : undefined
     if (carryKey !== undefined) prompt = claimCommands(prompt, carryKey)
     const as = options?.as
     const route = as?.route ?? composerRoute
@@ -5367,6 +5424,7 @@ export default function App(): ReactElement {
         ...(continuing === undefined ? {} : { followUpOf: continuing.data!.missionId }),
         ...(continuing === undefined || options?.leaveOut === undefined ? {} : { leaveOut: options.leaveOut }),
         ...(options?.cloud === true ? { cloud: true as const } : {}),
+        ...(issue === undefined ? {} : { issue }),
         ...(rewind === undefined ? {} : { ...(rewind.before === undefined ? {} : { followUpOf: rewind.before }), rewind: { tip: rewind.tip, ...(rewind.setAside === undefined ? {} : { setAside: rewind.setAside }) } })
       })
       if (!response.ok) {
@@ -5414,7 +5472,7 @@ export default function App(): ReactElement {
             return false
           }
           if (inFront !== undefined) {
-            return await setQueued((rows) => [...rows, { id: `q_${String(rows.length)}_${inFront}`, key: inFront, text: prompt, origin: 'person' as const }])
+            return await setQueued((rows) => [...rows, { id: `q_${String(rows.length)}_${inFront}`, key: inFront, text: prompt, origin: 'person' as const, ...(issue === undefined ? {} : { issue }) }])
           }
           // Nothing of theirs is on screen to wait behind -- the cap is full,
           // or the run belongs to a window this one cannot see. The words go
@@ -9302,6 +9360,7 @@ export default function App(): ReactElement {
                   if (starter.mode !== undefined) setMode(starter.mode)
                   setComposerFill((current) => ({ text: starter.prompt, seq: (current?.seq ?? 0) + 1 }))
                 }}
+                {...(githubReady ? { onStartFromIssue: openIssueList } : {})}
                 onCompareStarter={(starter) => {
                   setCompareOn(true)
                   // The work (each model in its own copy) or the answers, as the starter asks.
@@ -9509,6 +9568,11 @@ export default function App(): ReactElement {
                     * two and says who it goes to before you commit.
                     */}
                   {/* The folder's pull request (0.720): only while its branch has one on GitHub. */}
+                  {shownIssue !== undefined && (
+                    <button type="button" className="lc-issuechip" title={shownIssue.title} onClick={() => void window.desktop?.openLink(shownIssue.url).catch(() => undefined)}>
+                      #{shownIssue.number}
+                    </button>
+                  )}
                   {workspacePath !== undefined && pickedTeammate?.worktree !== true && liveRun !== undefined && <PullRequestChip running={running} />}
                   {/* Commit (0.680): the folder's own changes. A teammate on its own branch has Review and Land instead. */}
                   {workspacePath !== undefined && pickedTeammate?.worktree !== true && liveRun !== undefined && (
@@ -9517,6 +9581,7 @@ export default function App(): ReactElement {
                       {...((liveRun.data?.missionId ?? liveRun.restoredMission?.missionId) === undefined ? {} : { of: (liveRun.data?.missionId ?? liveRun.restoredMission?.missionId)! })}
                       asks={[...(liveRun.earlierTurns ?? []).map((turn) => turn.prompt), liveRun.prompt].map((prompt) => splitAttachments(prompt).text).slice(-5)}
                       {...(pickedTeammate === undefined ? {} : { teammate: pickedTeammate.name })}
+                      {...(shownIssue === undefined ? {} : { fixes: shownIssue.number })}
                       onCommitted={() => setCommits((count) => count + 1)}
                     />
                   )}
@@ -9936,6 +10001,9 @@ export default function App(): ReactElement {
             onChooseOwnCommand={chooseOwnCommand}
             onRunCommand={runOwnCommand}
             {...(commandAsk === undefined ? {} : { commandAsk: { lines: commandAsk.lines, onAllow: allowCommandAsk, onNotNow: () => setCommandAsk(undefined) } })}
+            issues={githubReady}
+            onPickIssue={openIssueList}
+            {...(issuePicker === undefined ? {} : { issueList: { issues: issuePicker, onChoose: chooseIssue, onClose: () => setIssuePicker(undefined), ...(issueEmpty === undefined ? {} : { empty: issueEmpty }) } })}
             // Talk in a teammate's conversation is a call with them, into it (0.746).
             // With the call drawn in this conversation, a connector's question is a card in it (0.749).
             {...(talkTo === undefined ? {} : { talkTo: { ...talkTo, asksInThread: threadCalls.some((call) => 'live' in call && call.live) } })}
@@ -10182,9 +10250,11 @@ export default function App(): ReactElement {
               // the live run on screen, else the addressed teammate's busy run.
               const key = queueKey
               if (key !== undefined) {
+                const queuedIssue = pendingIssueRef.current !== undefined && text !== '/compact' && text.includes(`GitHub issue #${String(pendingIssueRef.current.number)}`) ? pendingIssueRef.current : undefined
+                if (queuedIssue !== undefined) pendingIssueRef.current = undefined
                 const saved = await setQueued((rows) => [
                   ...rows,
-                  { id: `q_${String(rows.length)}_${key}`, key, text, origin: 'person' as const, ...(attachments.length === 0 ? {} : { attachments }), ...(waitForKey === undefined ? {} : { waitFor: waitForKey }) }
+                  { id: `q_${String(rows.length)}_${key}`, key, text, origin: 'person' as const, ...(attachments.length === 0 ? {} : { attachments }), ...(waitForKey === undefined ? {} : { waitFor: waitForKey }), ...(queuedIssue === undefined ? {} : { issue: queuedIssue }) }
                 ])
                 // Ctrl+Enter: stop the run on screen and send this at once.
                 if (saved && now === true && key === liveOnScreen) {

@@ -28,7 +28,7 @@ import type { TerminalExchange, TerminalImports } from './terminal-catch-up.js'
  * the chosen file line by line and keeps only the words of each exchange.
  */
 
-export type ImportRuntime = 'claude' | 'codex'
+export type ImportRuntime = 'claude' | 'codex' | 'cursor' | 'opencode'
 
 export interface ImportableSession {
   readonly runtime: ImportRuntime
@@ -40,6 +40,7 @@ export interface ImportableSession {
   readonly bytes: number
   /** Written to in the last two minutes: probably still open in a terminal. */
   readonly openNow: boolean
+  readonly folderMissing?: boolean
 }
 
 export interface SessionPlaces {
@@ -189,12 +190,12 @@ async function codexNames(codexHome: string): Promise<ReadonlyMap<string, string
  */
 export async function listImportableSessions(
   places: SessionPlaces,
-  options: { readonly now?: Date; readonly days?: number; readonly skip?: ReadonlySet<string> } = {}
+  options: { readonly now?: Date; readonly days?: number; readonly skip?: ReadonlySet<string>; readonly otherSessions?: readonly ImportableSession[] } = {}
 ): Promise<readonly ImportableSession[]> {
   const now = (options.now ?? new Date()).getTime()
   const since = now - (options.days ?? 30) * 86_400_000
   const skip = options.skip ?? new Set<string>()
-  const found: ImportableSession[] = []
+  const found: ImportableSession[] = [...(options.otherSessions ?? [])].filter(session => !skip.has(session.sessionId) && Date.parse(session.updatedAt) >= since)
 
   const projects = join(places.claudeHome, 'projects')
   for (const folder of await readdir(projects).catch(() => [] as string[])) {
@@ -227,11 +228,11 @@ export async function listImportableSessions(
       }
     }
   }
-  // Only where it can go on: a session whose folder is gone could be read,
-  // never continued, and the list is of conversations to carry on.
+  // Keep missing folders visible, with a reason the conversation cannot continue.
   const kept: ImportableSession[] = []
   for (const session of found) {
-    if (await stat(session.cwd).then((folder) => folder.isDirectory(), () => false)) kept.push(session)
+    const exists = await stat(session.cwd).then((folder) => folder.isDirectory(), () => false)
+    kept.push({ ...session, ...(exists ? {} : { folderMissing: true }) })
   }
   return kept.sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
 }
@@ -241,7 +242,7 @@ export async function listImportableSessions(
  * the exchange readers use -- who spoke, when, and the words -- so a gigabyte
  * of tool output never sits in memory at once.
  */
-export async function sessionExchanges(runtime: ImportRuntime, path: string): Promise<readonly TerminalExchange[]> {
+export async function sessionExchanges(runtime: 'claude' | 'codex', path: string): Promise<readonly TerminalExchange[]> {
   const kept: string[] = []
   const lines = createInterface({ input: createReadStream(path, { encoding: 'utf8' }), crlfDelay: Infinity })
   for await (const line of lines) {
@@ -302,6 +303,7 @@ export interface ImportFacts {
   readonly learnFolder: (id: string, path: string) => Promise<void>
   readonly nameConversation: (missionId: string, title: string) => Promise<void>
   readonly pathOf: (runtime: ImportRuntime, sessionId: string) => Promise<string | undefined>
+  readonly readExchanges?: (session: Pick<ImportableSession, 'runtime' | 'sessionId' | 'cwd'>) => Promise<readonly TerminalExchange[]>
   readonly createId?: () => string
 }
 
@@ -315,13 +317,20 @@ export type ImportResult =
  * reply resumes it. The session is then marked read through, so what is done
  * in its terminal later comes back as it does for any Locust conversation.
  */
-export async function importSession(session: Pick<ImportableSession, 'runtime' | 'sessionId' | 'cwd' | 'title'> & { readonly account?: string }, facts: ImportFacts): Promise<ImportResult> {
+export async function importSession(session: Pick<ImportableSession, 'runtime' | 'sessionId' | 'cwd' | 'title' | 'folderMissing'> & { readonly account?: string }, facts: ImportFacts): Promise<ImportResult> {
+  if (session.folderMissing) return { ok: false, message: 'Its folder is no longer available. Nothing was imported; restore the folder and open the list again.' }
   if ((await facts.imports.read(session.sessionId)) !== undefined) {
     return { ok: false, message: 'That conversation is already in Locust.' }
   }
-  const path = await facts.pathOf(session.runtime, session.sessionId)
-  if (path === undefined) return { ok: false, message: 'Its file could not be found. It may have been deleted or moved.' }
-  const all = await sessionExchanges(session.runtime, path).catch(() => undefined)
+  let all: readonly TerminalExchange[] | undefined
+  if (session.runtime === 'cursor' || session.runtime === 'opencode') {
+    if (!(await stat(session.cwd).then(folder => folder.isDirectory(), () => false))) return { ok: false, message: 'Its folder is no longer available. Nothing was imported; restore the folder and open the list again.' }
+    try { all = await facts.readExchanges?.(session) } catch (error) { return { ok: false, message: error instanceof Error ? error.message : 'Its session could not be read. Nothing was imported.' } }
+  } else {
+    const path = await facts.pathOf(session.runtime, session.sessionId)
+    if (path === undefined) return { ok: false, message: 'Its file could not be found. It may have been deleted or moved.' }
+    all = await sessionExchanges(session.runtime, path).catch(() => undefined)
+  }
   if (all === undefined) return { ok: false, message: 'Its file could not be read.' }
   if (all.length === 0) return { ok: false, message: 'It has no finished exchange to bring in yet.' }
   const exchanges = all.slice(-MAX_IMPORTED_EXCHANGES)
@@ -330,9 +339,8 @@ export async function importSession(session: Pick<ImportableSession, 'runtime' |
   const workspaceId = facts.workspaceIdFor(cwd)
   await facts.learnFolder(workspaceId, cwd).catch(() => undefined)
   const runtime = session.runtime
-  const route = runtime === 'claude'
-    ? { model: 'account-default', requestedRouteId: 'claude', resolvedRouteId: `claude-account:${session.account ?? 'default'}` }
-    : { model: 'account-default', requestedRouteId: 'codex', resolvedRouteId: `codex-account:${session.account ?? 'default'}` }
+  // Account default leaves --model out, including on Cursor resumes.
+  const route = { model: 'account-default', requestedRouteId: runtime, resolvedRouteId: `${runtime}-account:${session.account ?? 'default'}` }
   let previous: string | undefined
   let first: string | undefined
   let count = 0

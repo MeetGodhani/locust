@@ -33,7 +33,10 @@ until it is listed here.
 | A web page a teammate made, open in the preview | eight public hosts, for libraries and fonts only | While the page is open |
 | A voice call (Talk, beside the microphone) | OpenAI's voice service, at the media address the call's answer names | On Windows, only while a call you started is on |
 | Scout's looks (a teammate that keeps watch) | GitHub, through your own GitHub CLI; then Scout's own model, through its agent (free: OpenCode's) | Only after you turn Scout on, every 10, 30 or 60 minutes while Locust runs, and its model only when something is new |
+| Pictures on a GitHub issue | `github.com/user-attachments` and `githubusercontent.com` only | When you choose an issue, so its pictures can sit in the chat box |
 | Your cloud computer (a teammate's turn sent with Cloud, or with Cloud computer) | GitHub, through your own GitHub CLI: Codespaces, and the codespace itself over `gh codespace ssh`; from there, the teammate's model, through its agent (OpenCode, Claude Code or Codex) | Only after you pick Cloud for an OpenCode teammate, or Cloud computer for a Claude Code or Codex teammate, and press Set it up, and then for each turn you send there |
+
+**Pictures on a GitHub issue.** When you choose an issue, Locust reads its text through your own `gh` and fetches at most four pictures, each from `github.com/user-attachments` or `githubusercontent.com`. A redirect is followed only while the next address stays on those hosts. The fetch sends no token. `gh` keeps the sign-in it already has, and Locust never prints it.
 
 **Its own updates.** A plain request for the files of the newest release in a
 public repository that holds only Locust's installers: `latest.yml`, then the

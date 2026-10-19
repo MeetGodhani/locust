@@ -1,9 +1,13 @@
+import { startedIssue, type StartedIssue } from './github-issue.js'
+
 /** Person-written follow-ups, beside the profile's conversation ledger. */
 export interface SavedQueuedMessage {
   readonly id: string
   readonly key: string
   readonly text: string
   readonly attachments?: readonly string[]
+  /** The issue the message was filled from, kept so a restart still says Fixes #n. */
+  readonly issue?: StartedIssue
 }
 
 export const QUEUED_MESSAGES_READ_CHANNEL = 'queued-messages:read'
@@ -27,9 +31,11 @@ export function savedQueuedMessages(value: unknown): readonly SavedQueuedMessage
       || !row.attachments.every((path: unknown) => typeof path === 'string' && path.length > 0 && path.length <= 4096))) {
       throw new Error('Invalid queue attachments')
     }
+    const issue = startedIssue(row.issue)
     return {
       id: row.id, key: row.key, text: row.text,
-      ...(row.attachments === undefined ? {} : { attachments: row.attachments as readonly string[] })
+      ...(row.attachments === undefined ? {} : { attachments: row.attachments as readonly string[] }),
+      ...(issue === undefined ? {} : { issue })
     }
   })
 }

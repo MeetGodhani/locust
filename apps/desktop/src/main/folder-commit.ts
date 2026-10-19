@@ -10,6 +10,7 @@ import { githubRepoOf } from './cloud-tasks.js'
 import { PULL_REQUEST_FIELDS, pullRequestOf, type FolderPullRequest } from '../shared/pull-request.js'
 import { FOLDER_DIFF_MAX_BYTES, FOLDER_DIFF_MAX_NEW_FILE_BYTES, FOLDER_DIFF_MAX_NEW_FILES, type FolderCommitRow, type FolderDiff } from '../shared/folder-diff.js'
 import { MAX_DRAFT_DIFF_CHARS, type PendingChanges } from '../shared/commit-draft.js'
+import { withFixesLine } from '../shared/github-issue.js'
 
 /**
  * COMMIT, PUSH, PULL REQUEST (0.680): the folder's changes, saved in git by
@@ -170,7 +171,7 @@ export function createFolderCommits(options: FolderCommitOptions = {}) {
     }
   }
 
-  const commit = async (folder: string, message: string, then: CommitThen, shown?: readonly string[]): Promise<CommitResult> => {
+  const commit = async (folder: string, message: string, then: CommitThen, shown?: readonly string[], fixes?: number): Promise<CommitResult> => {
     const now = await changes(folder)
     if (now.kind !== 'changes') {
       return { kind: 'refused', message: now.kind === 'none' ? 'There is nothing to commit in this folder now.' : blockedSentence(now.why) }
@@ -266,7 +267,7 @@ export function createFolderCommits(options: FolderCommitOptions = {}) {
     const body = rest.join('\n').trim()
     try {
       // Each value joined to its flag, so none of them can be read as a flag of its own.
-      const said = await runNetwork('gh', ['pr', 'create', `--title=${subject}`, `--body=${body.length > 0 ? body : subject}`, `--head=${branch}`, `--base=${now.remote!.defaultBranch}`], folder)
+      const said = await runNetwork('gh', ['pr', 'create', `--title=${subject}`, `--body=${withFixesLine(body.length > 0 ? body : subject, fixes)}`, `--head=${branch}`, `--base=${now.remote!.defaultBranch}`], folder)
       const url = /https:\/\/\S+\/pull\/\d+/.exec(said)?.[0]
       // The header asks for the new one at once, not after the minute its last look is kept.
       pullRequests.delete(folder)

@@ -55,6 +55,7 @@ const LISTED: Readonly<Record<string, { readonly places: number; readonly said: 
   'own-models.ts': { places: 2, said: ['Testing one of your own models', 'When you press Test'] },
   // The default fetch, and the one request every look and keep goes through.
   'skill-library.ts': { places: 2, said: ['Skills from GitHub', 'Redirects are followed only to those two hosts'] },
+  'github-issues.ts': { places: 1, said: ['Pictures on a GitHub issue', 'github.com/user-attachments', 'githubusercontent.com', 'When you choose an issue'] },
   // A free port picked on 127.0.0.1 for the tunnel to OpenCode's server on the codespace (0.761); a sign-in's port
   // checked free here, and one request through its tunnel to the agent's own server there (0.768).
   'cloud-computer.ts': { places: 3, said: ['Your cloud computer', 'Locust picks a free port on `127.0.0.1`', 'checks that port is free here', 'asks the agent\'s own server there once'] }
