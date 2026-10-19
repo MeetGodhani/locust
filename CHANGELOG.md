@@ -11,6 +11,19 @@ Settings shows this file as What's new. An entry may group its changes under
 about when they arrive on it carries `<!-- big -->` on the line under its
 heading: the home screen then shows it once, as a splash.
 
+## 0.799.0 - 2026-10-19
+<!-- big -->
+
+### New
+
+- **Start a conversation from a GitHub issue.** In a folder that is a GitHub repository, Start from an issue sits beside Compare models on Home. It lists the folder's open issues, and choosing one fills the chat box with the task, its link, the issue's text and its last three comments, marked as written by other people. Its pictures come along too, from GitHub's own image hosts only. A teammate working in its own copy gets a branch named after the issue, and a pull request from that conversation says which issue it fixes. Nothing is sent until you press Send.
+- **Bring in OpenCode and Cursor Agent conversations.** Import a conversation now lists your OpenCode and Cursor Agent sessions from the last 30 days, beside Claude Code and Codex, each marked with its agent. Your next message continues the same session. Cursor's chats are only read, never changed.
+
+### Improved
+
+- **Home fits on one screen.** Your connected accounts and usage now sit under the cover, then your team, then the starters, two to a row. Scout's watch is the line on its own card, with Look now as the eye in its corner, instead of a row of its own. With six teammates, Home no longer scrolls at 1205x803, 1366x768 or 1440x900.
+- **Ask for a review is one row.** In a conversation's More actions, it opens your reviewers beside it, with two teammates on different agents below them. One reviewer is still one row that names them.
+
 ## 0.798.0 - 2026-10-19
 <!-- big -->
 
