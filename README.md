@@ -4,7 +4,7 @@
 
 A local-first desktop app that runs AI coding agents as a team you can watch,
 on runtimes and models you choose, with a durable record of everything they did.
-(Not the Python load-testing tool of the same name, which is unrelated.)
+
 
 **Download the latest build** at [locust.lol](https://locust.lol), for Windows,
 Mac and Linux, or from [Releases](https://github.com/StopBanning/locust/releases),
