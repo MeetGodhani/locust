@@ -8605,6 +8605,44 @@ textarea {
   cursor: default;
 }
 
+/* The ring as a button (0.797): pressed, it opens what it says and Compact
+   now. Padded no more than the row's height allows, round like the ring. */
+.lc-contextring__button {
+  padding: 3px;
+  border-radius: 999px;
+}
+
+.lc-contextring__button .lc-contextring {
+  cursor: pointer;
+}
+
+.lc-contextring__button:focus-visible {
+  outline: 2px solid var(--lc-border-strong);
+  outline-offset: 1px;
+}
+
+/* Its menu: the reading first, as the hover says it, then the one action. */
+.lc-menu--context {
+  width: 300px;
+}
+
+.lc-menu__head {
+  margin: 0;
+  padding: var(--lc-space-4) var(--lc-space-5);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border-bottom: 1px solid var(--lc-border-hairline);
+  font-size: var(--lc-text-control);
+  color: var(--lc-text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.lc-menu__headnote {
+  font-size: var(--lc-text-description);
+  color: var(--lc-text-muted);
+}
+
 /* A folder name is no shorter than a model id -- a scratch workspace is
    `locust-drive-relay-ws-j4Nz3T` -- and it broke the same row the same way
    (Colin, 2026-09-06: "maybe got to auto shorten file text as well"). Wider

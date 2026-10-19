@@ -1,7 +1,10 @@
 import type { ReactElement } from 'react'
 
+import { compactAfterTurn, compactConsequence } from '../compactNow.js'
+import type { CompactOffer } from '../compactNow.js'
 import { contextSentence } from '../cost.js'
 import type { ContextReading } from '../cost.js'
+import { Icon } from './Icon.js'
 
 /**
  * How full this conversation's context is, as a ring.
@@ -84,5 +87,47 @@ export function ContextRing({
         {slice !== undefined && <path d={slice} fill={tone} />}
       </svg>
     </span>
+  )
+}
+
+/**
+ * What a press on the ring opens (0.797): what the ring says, then Compact
+ * now. See compactNow.ts for when it is offered and when it waits.
+ */
+export function ContextRingMenu({
+  reading,
+  conversationCost,
+  offer,
+  runtimeName,
+  onCompact
+}: {
+  readonly reading: ContextReading
+  readonly conversationCost?: string
+  readonly offer: CompactOffer
+  readonly runtimeName: string
+  readonly onCompact: () => void
+}): ReactElement {
+  return (
+    <div className="lc-menu lc-menu--right lc-menu--context" role="menu" aria-label="Context">
+      <p className="lc-menu__head">
+        <span>{contextSentence(reading)}</span>
+        {conversationCost !== undefined && <span className="lc-menu__headnote">This conversation: {conversationCost}</span>}
+      </p>
+      <button
+        type="button"
+        role="menuitem"
+        className="lc-menu__item"
+        disabled={offer.kind === 'refused'}
+        onClick={onCompact}
+      >
+        <Icon name="collapse" size={14} />
+        <span className="lc-menu__text">
+          <span className="lc-menu__name">{offer.kind === 'after-turn' ? 'Compact when this turn ends' : 'Compact now'}</span>
+          <span className="lc-menu__desc">
+            {offer.kind === 'refused' ? offer.reason : offer.kind === 'after-turn' ? compactAfterTurn(runtimeName) : compactConsequence(runtimeName)}
+          </span>
+        </span>
+      </button>
+    </div>
   )
 }

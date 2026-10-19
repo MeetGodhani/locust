@@ -247,8 +247,17 @@ export function latestContext(
   for (const turn of newestFirst) {
     const reading = contextReading(runCostOf(turn))
     if (reading !== undefined) return reading
+    // A compaction since, with no reading after it (0.797): an older reading
+    // describes a conversation that is no longer there. A `/compact` turn
+    // makes no model call of its own to read, so the ring waits for the next.
+    if (compactedIn(turn)) return undefined
   }
   return undefined
+}
+
+/** Whether a turn's runtime summarized the conversation, asked or on its own. */
+function compactedIn(events: readonly NormalizedRuntimeEvent[]): boolean {
+  return events.some((event) => event.type === 'adapter.diagnostic' && event.payload.code.endsWith('.context_compacted'))
 }
 
 export function contextReading(cost: RunCost | undefined): ContextReading | undefined {

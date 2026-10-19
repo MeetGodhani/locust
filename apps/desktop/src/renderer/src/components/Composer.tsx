@@ -32,7 +32,8 @@ import { AttachedImage } from './AttachedImage.js'
 import { MetalSend } from './MetalSend.js'
 import type { MetalMotion, MetalPreset, MetalStrength } from '../../../shared/ipc.js'
 import { isImagePath } from '../../../shared/image-files.js'
-import { ContextRing } from './ContextRing.js'
+import { ContextRing, ContextRingMenu } from './ContextRing.js'
+import { compactOffer } from '../compactNow.js'
 import { ArrowUpGlyph, ChevronGlyph } from './ChatGlyphs.js'
 import { PlusMenu } from './PlusMenu.js'
 import type { ContextReading } from '../cost.js'
@@ -651,6 +652,8 @@ export function Composer({
   const [chatModeOpen, setChatModeOpen] = useState(false)
   /** The folder chip's menu (0.458). */
   const [folderOpen, setFolderOpen] = useState(false)
+  // The context ring's menu (0.797): what it says, and Compact now.
+  const [contextOpen, setContextOpen] = useState(false)
   /** Which comparison column's picker is open, or the + for a third (0.460). */
   const [slotPicker, setSlotPicker] = useState<number | 'add' | undefined>(undefined)
   /** Which comparison column's effort panel is open (0.490). */
@@ -748,6 +751,9 @@ export function Composer({
   const closePicker = useCallback(() => setPickerOpen(false), [])
   const closeEffort = useCallback(() => setEffortOpen(false), [])
   useDismissOnOutsidePress(modeOpen, closeMode, modeAnchor)
+  const contextAnchor = useRef<HTMLSpanElement>(null)
+  const closeContext = useCallback(() => setContextOpen(false), [])
+  useDismissOnOutsidePress(contextOpen, closeContext, contextAnchor)
   const closeChatMode = useCallback(() => setChatModeOpen(false), [])
   useDismissOnOutsidePress(chatModeOpen, closeChatMode, chatModeAnchor)
   useDismissOnOutsidePress(pickerOpen, closePicker, pickerAnchor)
@@ -941,6 +947,17 @@ export function Composer({
   // message already says when it goes: the box says how to change it.
   // Compare (0.441): the ticked models, or the comparison on screen, speak for the route chip.
   const comparing = asking !== undefined || (compare?.on === true && compare.picks.length > 0)
+  // Compact now, from the ring (0.797, compactNow.ts): named for the conversation's runtime, not the chip's.
+  const compactName = runtimeDisplayName(activeRoute?.runtime ?? route.runtime)
+  const compact = context === undefined ? undefined : compactOffer({
+    runtime: activeRoute?.runtime,
+    nextRuntime: route.runtime,
+    runtimeName: compactName,
+    commands: runtimeCommands,
+    running: workingNow,
+    queued: queued !== undefined,
+    elsewhere: comparing || cloud?.on === true || cloud?.computer?.on === true || background?.on === true || editingEarlier !== undefined
+  })
   /** Setting up a comparison (not asking one on screen): a chip per model, as Arena (0.460). */
   /*
    * Not while the picker is open on fewer than two (0.678): the chips took its place at the first tick, the
@@ -1406,7 +1423,17 @@ export function Composer({
   const runtimeLabel = shortRuntimeName(shownRuntime)
   // The whole thing, for the tooltip: a chip drops repetition, and the exact
   // string you would type somewhere else must still be reachable.
-  const exactRoute = `${shownRuntimeStatus?.displayName ?? runtimeDisplayName(shownRuntime)} / ${shownModel}`
+  /*
+   * WHICH MODEL "ITS DEFAULT" IS, once a run has said (0.797). A route on the account's default reads as the runtime
+   * alone, "Claude" (0.723) -- and a turn Locust carried on when Codex's plan ran out read "Claude  High" with nothing
+   * to say what it ran on (Colin, 2026-10-19: "why does it just say claude high when i do a handoff?"). The runtime
+   * reports the model its default turned out to be on every run (resolvedModels), so the chip names it.
+   */
+  const defaultResolvedId = shownModel === 'account-default' ? resolvedModels.get(`${shownRuntime}:account-default`) : undefined
+  const defaultModelName = defaultResolvedId === undefined ? undefined : routeModelName(shownRuntime, defaultResolvedId)
+  const exactRoute = shownModel === 'account-default'
+    ? `${shownRuntimeStatus?.displayName ?? runtimeDisplayName(shownRuntime)} / its own default model${defaultModelName === undefined ? '' : `, ${defaultModelName} on its last run`}`
+    : `${shownRuntimeStatus?.displayName ?? runtimeDisplayName(shownRuntime)} / ${shownModel}`
   // A family known only through its effort variants is listed under its
   // family name; showing the stand-in variant's id ("cursor-grok-4.6-high-fast")
   // beside "effort · low" read as two different answers (2026-09-06). Found
@@ -2259,9 +2286,40 @@ export function Composer({
               </span>
             </div>
             <div className="lc-composer__group">
-              {context !== undefined ? (
+              {context !== undefined && compact === undefined ? (
                 <span className="lc-composer__context">
                   <ContextRing reading={context} {...(conversationCost === undefined ? {} : { conversationCost })} />
+                </span>
+              ) : context !== undefined && compact !== undefined ? (
+                <span className="lc-control__anchor lc-composer__context" ref={contextAnchor}>
+                  {contextOpen && (
+                    <ContextRingMenu
+                      reading={context}
+                      {...(conversationCost === undefined ? {} : { conversationCost })}
+                      offer={compact}
+                      runtimeName={compactName}
+                      onCompact={() => {
+                        setContextOpen(false)
+                        // As typing it would send it, with the box left as it is; in line behind a running turn.
+                        if (compact.kind === 'after-turn') {
+                          void Promise.resolve(onQueue('/compact', [], false))
+                          return
+                        }
+                        void onStart('/compact').then((started) => {
+                          if (typeof started === 'string') setNote(started)
+                        })
+                      }}
+                    />
+                  )}
+                  <button
+                    type="button"
+                    className="lc-control lc-contextring__button"
+                    aria-haspopup="menu"
+                    aria-expanded={contextOpen}
+                    onClick={() => setContextOpen(!contextOpen)}
+                  >
+                    <ContextRing reading={context} {...(conversationCost === undefined ? {} : { conversationCost })} />
+                  </button>
                 </span>
               ) : null}
               {slotsShown && compare !== undefined ? (
@@ -2498,8 +2556,15 @@ export function Composer({
                   {comparing ? null : nothingConnected ? (
                     <span className="lc-control__model">No AI agent</span>
                   ) : shownModel === 'account-default' && !ownModel ? (
-                    // The account's own default is the runtime alone, "Claude", as every other surface says it (0.723).
-                    runtimeLabel
+                    // The account's own default is the runtime alone, "Claude", as every other surface says it (0.723)
+                    // -- with the model it turned out to be once a run has said (0.797, above).
+                    defaultModelName === undefined ? runtimeLabel : (
+                      <>
+                        {runtimeLabel}
+                        <span className="lc-separator">/</span>
+                        <span className="lc-control__mono lc-control__model">{defaultModelName}</span>
+                      </>
+                    )
                   ) : (
                     <>
                       {!ownModel && (
