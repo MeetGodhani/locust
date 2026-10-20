@@ -68,6 +68,23 @@ const MEASURE = `(() => {
 
 try {
   await drive.capture('launch', () => drive.ready())
+  // Before Scout is decided Home offers it (0.808): the offer stood four lines tall above the team and Home scrolled at
+  // 1205x803, which this drive never saw -- it turned Scout on first. Now it is a card in Scout's place on the team.
+  await drive.waitFor(`document.querySelector('.lc-hometeam__card.is-invite') !== null`, { timeoutMs: 20_000, what: 'Scout offered on the team' })
+  for (const [width, height] of [[1205, 803], [1366, 768], [1440, 900]]) {
+    await drive.resize(width, height)
+    await sleep(1500)
+    const measured = JSON.parse(String(await drive.capture(`Home offering Scout at ${width}x${height}`, () => drive.evaluate(MEASURE))))
+    say(JSON.stringify(measured))
+    check(`${width}x${height}, offering Scout: no scrolling`, measured.overflowPx <= 0, `overflow ${measured.overflowPx}px`)
+  }
+  // The offered seat in light, where a dashed edge on paper is the faintest it gets.
+  await drive.evaluate(`window.desktop.setTheme('light')`)
+  await drive.resize(1205, 803)
+  await sleep(800)
+  const light = JSON.parse(String(await drive.capture('Home offering Scout, light, at 1205x803', () => drive.evaluate(MEASURE))))
+  check('1205x803 light, offering Scout: no scrolling', light.overflowPx <= 0, `overflow ${light.overflowPx}px`)
+  await drive.evaluate(`window.desktop.setTheme('dark')`)
   // Turned on the way Home's Meet Scout does: Scout joins the team as its sixth, on the free route.
   const turned = String(await drive.evaluate(`window.desktop.scout.turnOn(${JSON.stringify(FREE_ROUTE)}).then((s) => JSON.stringify(s.settings))`))
   check('Scout is on, on the team', /"on":true/.test(turned) && /"teammateId":"/.test(turned), turned)

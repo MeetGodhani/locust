@@ -11,7 +11,7 @@ import type { AwaySummary } from '../../../shared/away.js'
 import type { PublicTeammate } from '../../../shared/ipc.js'
 import { RuntimeMark } from './RuntimeMark.js'
 import { AgentMark } from './AgentMark.js'
-import type { HomeTeammate, HomeTeamWatch } from './HomeTeam.js'
+import type { HomeTeamInvite, HomeTeammate, HomeTeamWatch } from './HomeTeam.js'
 import { TeamTemplates } from './TeamTemplates.js'
 import type { TeamTemplate } from '../../../shared/team-templates.js'
 import { Icon } from './Icon.js'
@@ -75,6 +75,7 @@ function vendorUrl(runtime: string): string | undefined {
 export function FirstLaunch({
   scout,
   teamWatch,
+  teamInvite,
   runtimes,
   limitedRuntimes,
   usageWindows,
@@ -158,6 +159,8 @@ export function FirstLaunch({
   readonly scout?: ReactNode
   /** Scout keeping watch with nothing to say (0.799): its line and Look now on its own team card (HomeTeam). */
   readonly teamWatch?: HomeTeamWatch
+  /** Scout, offered on the team's grid until it is decided (0.808). */
+  readonly teamInvite?: HomeTeamInvite
   /** Since you were away (0.590): what ended while nobody was here, when there is something to say. */
   readonly away?: AwaySummary
   readonly awayTeammates?: readonly PublicTeammate[]
@@ -946,7 +949,7 @@ export function FirstLaunch({
         )}
 
         {discoveryPhase === 'ready' && team.length > 0 && onMessageTeammate !== undefined && (
-          <HomeTeam team={team} onMessage={onMessageTeammate} {...(onNewTeammate === undefined ? {} : { onNewTeammate })} {...(teamWatch === undefined ? {} : { watch: teamWatch })} />
+          <HomeTeam team={team} onMessage={onMessageTeammate} {...(onNewTeammate === undefined ? {} : { onNewTeammate })} {...(teamWatch === undefined ? {} : { watch: teamWatch })} {...(teamInvite === undefined ? {} : { invite: teamInvite })} />
         )}
 
         {rosterUnreadable && (

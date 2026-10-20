@@ -7267,8 +7267,11 @@ export default function App(): ReactElement {
   }
   const scoutNotNowPressed = (): void => {
     setScoutNotNow(true)
+    setScoutInviteOpen(false)
     try { window.localStorage.setItem(SCOUT_NOT_NOW, '1') } catch { /* asked again next time */ }
   }
+  /** Meet Scout, open over Home (0.808): opened from Scout's offered card on the team. */
+  const [scoutInviteOpen, setScoutInviteOpen] = useState(false)
   const openScoutCard = (open: ScoutOpen): void => {
     if (open.kind === 'conversation') openMission(open.missionId)
     else void window.desktop?.openLink(open.url).catch(() => undefined)
@@ -9289,9 +9292,17 @@ export default function App(): ReactElement {
                   }
                   // Met once is enough: a Scout turned off, or taken off the team, is turned on again from Settings.
                   if (scout.settings.teammateId !== undefined || scoutNotNow || scoutModel === undefined || workspacePath === undefined) return undefined
-                  return <ScoutInvite model={scoutModelWords({ runtime: 'opencode', model: scoutModel })} onTurnOn={() => { void turnOnScout() }} onNotNow={scoutNotNowPressed} busy={scoutBusy}
-                    {...(scoutMessage === undefined ? {} : { message: scoutMessage })} />
+                  // Offered as a card on the team (teamInvite below); its words open over Home and take no row (0.808).
+                  if (!scoutInviteOpen) return undefined
+                  return <ScoutInvite model={scoutModelWords({ runtime: 'opencode', model: scoutModel })} onTurnOn={() => { void turnOnScout() }} onNotNow={scoutNotNowPressed}
+                    onClose={() => { setScoutInviteOpen(false) }} busy={scoutBusy} {...(scoutMessage === undefined ? {} : { message: scoutMessage })} />
                 })())}
+                {...(() => {
+                  // The same condition as the offer above: a team, a folder, a free model, and Scout never decided.
+                  if (runtimeState.phase !== 'ready' || scout === undefined || teammates.length === 0 || scout.settings.on) return {}
+                  if (scout.settings.teammateId !== undefined || scoutNotNow || scoutModel === undefined || workspacePath === undefined) return {}
+                  return { teamInvite: { onOpen: () => { setScoutInviteOpen(true) }, onNotNow: scoutNotNowPressed } }
+                })()}
                 {...(() => {
                   // Scout keeping watch with nothing to say: its line on its own team card (0.799).
                   const scoutId = scout?.settings.on === true && scout.cards.length === 0 ? scout.settings.teammateId : undefined

@@ -54,16 +54,28 @@ export interface HomeTeamWatch {
   readonly onLookNow: () => void
 }
 
+/**
+ * Scout, offered and not yet decided (0.808): a card in the slot Scout takes once it is on, so the offer costs Home no
+ * row of its own. Pressing it opens Meet Scout (ScoutCards.tsx), which says what Scout reads before it is on; the x is
+ * Not now.
+ */
+export interface HomeTeamInvite {
+  readonly onOpen: () => void
+  readonly onNotNow: () => void
+}
+
 export function HomeTeam({
   team,
   onMessage,
   onNewTeammate,
-  watch
+  watch,
+  invite
 }: {
   readonly team: readonly HomeTeammate[]
   readonly onMessage: (teammateId: string) => void
   readonly onNewTeammate?: () => void
   readonly watch?: HomeTeamWatch
+  readonly invite?: HomeTeamInvite
 }): ReactElement {
   return (
     <section className="lc-hometeam" aria-label="Your team">
@@ -164,6 +176,26 @@ export function HomeTeam({
             </div>
           )
         })}
+        {invite !== undefined && (
+          <div className="lc-hometeam__slot">
+            <button type="button" className="lc-hometeam__card is-invite" aria-haspopup="dialog" onClick={invite.onOpen}>
+              <span className="lc-hometeam__tile is-invite" aria-hidden="true">
+                <Icon name="eye" size={16} />
+              </span>
+              <span className="lc-hometeam__text">
+                <span className="lc-hometeam__name">Meet Scout</span>
+                <span className="lc-hometeam__role">Keeps watch for you</span>
+                <span className="lc-hometeam__route">Never acts by itself</span>
+              </span>
+              <span className="lc-hometeam__go" aria-hidden="true">
+                <Icon name="chevron-right" size={13} />
+              </span>
+            </button>
+            <button type="button" className="lc-hometeam__look" aria-label="Not now: do not offer Scout again" title="Not now" onClick={invite.onNotNow}>
+              <Icon name="close" size={12} />
+            </button>
+          </div>
+        )}
       </div>
     </section>
   )

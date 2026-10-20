@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { ReactElement } from 'react'
 
 import type { PublicTeammate } from '../../../shared/ipc.js'
 import type { ScoutCard, ScoutDraft, ScoutOpen, ScoutState } from '../../../shared/scout.js'
 import { Icon } from './Icon.js'
 import { TeammateBot } from './TeammateBot.js'
+import { useModal } from '../useModal.js'
 
 /*
  * WHAT SCOUT NOTICED, ON HOME (0.756, shared/scout.ts; the design: https://claude.ai/artifact/2BMzn1KUaZNnNvJzBHgEfG).
@@ -139,25 +140,40 @@ export function ScoutLooked({ state, looking, now: fixed }: {
 /*
  * MEET SCOUT (0.756): the one press that adds it to the team, on the best free model, for a person with a team and a
  * folder. It says what Scout reads, what it sends and to whom, before it is on -- and that it never acts by itself.
+ *
+ * A DIALOG, OPENED FROM SCOUT'S PLACE ON THE TEAM (0.808). It stood on Home as a card four lines tall above the team,
+ * and Home scrolled at 1205x803 (148px), 1366x768 (183px) and even 1440x900 (51px) -- against "is there a way to fit
+ * all this in one screen with no scrolling" (Colin, 2026-10-19). Now the offer is a card in the team's grid, in the
+ * slot Scout takes once it is on (HomeTeam's `invite`), and its words are here, read before the press that turns it on.
  */
-export function ScoutInvite({ model, onTurnOn, onNotNow, busy, message }: {
+export function ScoutInvite({ model, onTurnOn, onNotNow, onClose, busy, message }: {
   /** The model Scout would read with, as a person reads it: "Space Bunny through OpenCode, free". */
   readonly model: string
   readonly onTurnOn: () => void
   readonly onNotNow: () => void
+  readonly onClose: () => void
   readonly busy?: boolean
   readonly message?: string
 }): ReactElement {
-  return <section className="lc-card lc-scoutinvite" aria-label="Meet Scout">
-    <div className="lc-scoutinvite__text">
-      <h2 className="lc-scoutinvite__title">Meet Scout, a teammate that keeps watch</h2>
-      <p className="lc-scoutinvite__lede">Scout looks at your pull requests and their checks, the reviews asked of you and your teammates’ turns every 10 minutes, and tells you here what needs you, with the next step drafted. It never sends, merges or changes anything: you press.</p>
-      <p className="lc-scoutinvite__sends">{`When something is new, Scout’s model reads it: titles, check names, a waiting teammate’s question. That model is ${model}. Change it like any teammate’s.`}</p>
-      {message !== undefined && <p className="lc-scoutinvite__message" role="status">{message}</p>}
-      <div className="lc-scoutinvite__acts">
+  const box = useRef<HTMLDivElement>(null)
+  useModal(box, onClose)
+  return <div className="lc-scrim">
+    <div ref={box} className="lc-dialog lc-scoutinvite" role="dialog" aria-modal="true" aria-label="Meet Scout">
+      <div className="lc-dialog__head">
+        <span className="lc-dialog__title">Meet Scout, a teammate that keeps watch</span>
+        <button type="button" className="lc-dialog__close" aria-label="Close" onClick={onClose}>
+          <Icon name="close" size={13} />
+        </button>
+      </div>
+      <div className="lc-dialog__body lc-scoutinvite__text">
+        <p className="lc-scoutinvite__lede">Scout looks at your pull requests and their checks, the reviews asked of you and your teammates’ turns every 10 minutes, and tells you here what needs you, with the next step drafted. It never sends, merges or changes anything: you press.</p>
+        <p className="lc-scoutinvite__sends">{`When something is new, Scout’s model reads it: titles, check names, a waiting teammate’s question. That model is ${model}. Change it like any teammate’s.`}</p>
+        {message !== undefined && <p className="lc-scoutinvite__message" role="status">{message}</p>}
+      </div>
+      <div className="lc-dialog__foot">
+        <button type="button" className="lc-button" onClick={onNotNow}>Not now</button>
         <button type="button" className="lc-primarybutton" disabled={busy === true} onClick={onTurnOn}>Turn on Scout</button>
-        <button type="button" className="lc-ghostbutton" onClick={onNotNow}>Not now</button>
       </div>
     </div>
-  </section>
+  </div>
 }

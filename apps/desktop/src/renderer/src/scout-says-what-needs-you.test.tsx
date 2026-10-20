@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { seedAvatar } from '../../shared/avatar.js'
 import { DEFAULT_SCOUT_SETTINGS, type ScoutCard, type ScoutState } from '../../shared/scout.js'
 import { ScoutCards, ScoutInvite, ScoutWatching } from './components/ScoutCards.js'
+import { HomeTeam } from './components/HomeTeam.js'
 import { ScoutSetting } from './components/ScoutSetting.js'
 
 /*
@@ -66,12 +67,29 @@ describe('Scout’s cards on Home', () => {
 
 describe('meeting Scout', () => {
   it('says what it reads, with which model, and that it never acts by itself', () => {
-    const html = renderToStaticMarkup(createElement(ScoutInvite, { model: 'Space Bunny Free through OpenCode', onTurnOn: vi.fn(), onNotNow: vi.fn() }))
+    const html = renderToStaticMarkup(createElement(ScoutInvite, { model: 'Space Bunny Free through OpenCode', onTurnOn: vi.fn(), onNotNow: vi.fn(), onClose: vi.fn() }))
     expect(html).toContain('Meet Scout, a teammate that keeps watch')
+    // A dialog over Home (0.808), not a row on it.
+    expect(html).toContain('role="dialog" aria-modal="true" aria-label="Meet Scout"')
     expect(html).toContain('It never sends, merges or changes anything: you press.')
     expect(html).toContain('That model is Space Bunny Free through OpenCode.')
     expect(html).toContain('>Turn on Scout<')
     expect(html).toContain('>Not now<')
+  })
+
+  /*
+   * OFFERED IN SCOUT'S PLACE ON THE TEAM (0.808): as a card four lines tall above the team, the offer made Home scroll
+   * at 1205x803, 1366x768 and 1440x900. Now it is a card in the slot Scout takes once it is on, and costs no row.
+   */
+  it('is offered as a card on the team, in the slot Scout will take, with Not now as its x', () => {
+    const team = [{ teammateId: 'tm_wren', name: 'Wren', hue: 'lime' as const, avatar: seedAvatar('tm_wren'), role: 'Code', working: false }]
+    const html = renderToStaticMarkup(createElement(HomeTeam, { team, onMessage: vi.fn(), invite: { onOpen: vi.fn(), onNotNow: vi.fn() } }))
+    expect(html).toContain('class="lc-hometeam__card is-invite" aria-haspopup="dialog"')
+    expect(html).toContain('>Meet Scout<')
+    expect(html).toContain('aria-label="Not now: do not offer Scout again"')
+    // After the teammates, inside the same grid.
+    expect(html.indexOf('is-invite')).toBeGreaterThan(html.indexOf('Message Wren'))
+    expect(renderToStaticMarkup(createElement(HomeTeam, { team, onMessage: vi.fn() }))).not.toContain('is-invite')
   })
 })
 

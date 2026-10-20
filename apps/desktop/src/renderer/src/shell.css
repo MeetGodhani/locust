@@ -6831,13 +6831,23 @@ textarea {
 .lc-scoutcard__drafttext { margin: 0; font-size: var(--lc-text-body); color: var(--lc-text-secondary); white-space: pre-wrap; overflow-wrap: anywhere; }
 .lc-scoutcard__acts { display: flex; flex-wrap: wrap; align-items: center; gap: var(--lc-space-3); }
 .lc-scoutcard__dismiss { margin-left: auto; }
-.lc-scoutinvite { display: flex; padding: var(--lc-space-5) var(--lc-space-6); }
+/* Meet Scout is a dialog (0.808), opened from its card on the team. */
+.lc-scoutinvite { width: min(520px, calc(100vw - 48px)); }
 .lc-scoutinvite__text { display: flex; flex-direction: column; gap: var(--lc-space-3); min-width: 0; }
-.lc-scoutinvite__title { margin: 0; font-size: var(--lc-text-section); font-weight: 600; color: var(--lc-text-name); }
 .lc-scoutinvite__lede { margin: 0; font-size: var(--lc-text-body); color: var(--lc-text-secondary); text-wrap: pretty; }
 .lc-scoutinvite__sends { margin: 0; font-size: var(--lc-text-description); color: var(--lc-text-muted); text-wrap: pretty; }
 .lc-scoutinvite__message { margin: 0; font-size: var(--lc-text-description); color: var(--lc-amber-text); }
-.lc-scoutinvite__acts { display: flex; flex-wrap: wrap; align-items: center; gap: var(--lc-space-3); }
+
+/* Scout, offered, in its place on the team (0.808): dashed, the way an empty seat is drawn on the Team board, so it
+   reads as an offer and not as a teammate yet. */
+.lc-hometeam__card.is-invite {
+  border-style: dashed;
+  background: transparent;
+}
+
+.lc-hometeam__tile.is-invite {
+  color: var(--lc-text-secondary);
+}
 
 .lc-away {
   display: flex;

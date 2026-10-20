@@ -50,21 +50,24 @@ const CARDS = `JSON.stringify([...document.querySelectorAll('[data-scout-card]')
 try {
   await drive.ready()
   await drive.resize(1215, 860)
-  // Home offers Scout to a person with a team and a folder.
+  // Home offers Scout to a person with a team and a folder: a card in Scout's place on the team, whose press opens
+  // Meet Scout (0.808).
+  await drive.waitFor(`document.querySelector('.lc-hometeam__card.is-invite') !== null`, { timeoutMs: 30_000, what: 'Scout offered on the team' })
+  await drive.evaluate(`document.querySelector('.lc-hometeam__card.is-invite').click()`)
   let invite = ''
-  for (let i = 0; i < 60 && invite === ''; i += 1) {
-    await sleep(500)
-    invite = String(await drive.evaluate(`document.querySelector('section[aria-label="Meet Scout"]')?.innerText.replace(/\\s+/g, ' ') ?? ''`))
+  for (let i = 0; i < 20 && invite === ''; i += 1) {
+    await sleep(250)
+    invite = String(await drive.evaluate(`document.querySelector('[role="dialog"][aria-label="Meet Scout"]')?.innerText.replace(/\\s+/g, ' ') ?? ''`))
   }
   await drive.capture('Home offers Scout', () => invite)
   check('Home says what Scout would read with, by its name, and that it is free', /Meet Scout/.test(invite) && /That model is [A-Z][\w .]* Free through OpenCode\./.test(invite) && /never sends, merges or changes anything/.test(invite), invite)
 
-  await drive.evaluate(`[...document.querySelectorAll('section[aria-label="Meet Scout"] button')].find((b) => b.innerText.trim() === 'Turn on Scout')?.click()`)
+  await drive.evaluate(`[...document.querySelectorAll('[role="dialog"][aria-label="Meet Scout"] button')].find((b) => b.innerText.trim() === 'Turn on Scout')?.click()`)
   let on = await state()
   for (let i = 0; i < 40 && !(on.settings.on && on.settings.teammateId); i += 1) { await sleep(250); on = await state() }
   const team = JSON.parse(String(await drive.evaluate(`JSON.stringify([...document.querySelectorAll('.lc-hometeam__name, .lc-teamcard__name, [class*="hometeam"] [class*="name"]')].map((n) => n.innerText.trim()))`)))
   check('Turn on Scout puts Scout on the team, on', on.settings.on === true && typeof on.settings.teammateId === 'string', JSON.stringify(on.settings))
-  check('and the invitation goes', String(await drive.evaluate(`document.querySelector('section[aria-label="Meet Scout"]') === null`)) === 'true', team.join(', '))
+  check('and the invitation goes', String(await drive.evaluate(`document.querySelector('[aria-label="Meet Scout"], .lc-hometeam__card.is-invite') === null`)) === 'true', team.join(', '))
 
   // Wren's turn fails at OpenCode: the model does not exist.
   say(`open Wren: ${String(await drive.evaluate(openTeammateScript('Wren')))}`)
@@ -107,7 +110,7 @@ try {
     line = String(await drive.evaluate(`document.querySelector('[data-setting="scout"]')?.innerText.replace(/\\s+/g, ' ') ?? ''`))
   }
   await drive.capture('Scout in Settings', () => line)
-  check('Settings says Scout is on, what it reads with, and what it watches', /Scout keeps watch/.test(line) && /^.*On\. Scout looks every 10 minutes/.test(line) && /It reads with Space Bunny Free through OpenCode/.test(line) && /Pull requests and their checks/.test(line) && /Tell me in Windows/.test(line), line)
+  check('Settings says Scout is on, what it reads with, and what it watches', /Scout keeps watch/.test(line) && /^.*On\. Scout looks every 10 minutes/.test(line) && /It reads with [A-Z][\w .]* Free through OpenCode/.test(line) && /Pull requests and their checks/.test(line) && /Tell me in Windows/.test(line), line)
   // Its model is changed where any teammate's is (Colin: "allow the user to change the model of proactive teammate").
   await drive.evaluate(`[...document.querySelectorAll('[data-setting="scout"] button')].find((b) => b.innerText.trim() === 'Change its model')?.click()`)
   let dialog = { text: '', name: '' }
@@ -120,7 +123,7 @@ try {
     })())`)))
   }
   await drive.capture('Change its model', () => JSON.stringify(dialog).slice(0, 300))
-  check('Change its model opens Scout’s own Edit teammate, with its Model row', dialog.name === 'Scout' && /Model/i.test(dialog.text) && /Space Bunny/.test(dialog.text), JSON.stringify(dialog).slice(0, 300))
+  check('Change its model opens Scout’s own Edit teammate, with its Model row', dialog.name === 'Scout' && /Model/i.test(dialog.text) && / Free\b/.test(dialog.text), JSON.stringify(dialog).slice(0, 300))
 } catch (error) {
   failures += 1
   say(`drive failed: ${error instanceof Error ? error.message : String(error)}`)
