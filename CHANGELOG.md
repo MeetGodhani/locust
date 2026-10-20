@@ -11,6 +11,21 @@ Settings shows this file as What's new. An entry may group its changes under
 about when they arrive on it carries `<!-- big -->` on the line under its
 heading: the home screen then shows it once, as a splash.
 
+## 0.807.0 - 2026-10-19
+
+### Improved
+
+- **The Team board says what a teammate is waiting on.** A teammate who needs you shows the question they asked, worded as Home words it, with Answer to open that conversation. Their last run reads whole ("15 minutes ago" was cut short), and Message, Edit and Remove show faintly before you hover. The sidebar's Team button lights up while the board is open.
+- **The model picker is shorter to read.** A model no longer repeats its group's name under it, and READY is gone, since the dot already says it. Only tags with news stay, such as SIGN IN or QUOTA EXCEEDED, so more models fit before scrolling.
+- **Steps line up.** In an opened list of steps, commands start on the same edge as file names, with their result after them.
+- **A decision card looks like it is waiting, and nothing looks chosen.** The card sits raised, each option's number is drawn as a key you can press, and option 1 no longer wears a focus ring before you choose anything.
+- **The + menu says what each button does.** Open, its two buttons are labeled Attach files and Choose a folder.
+- **Home folds your accounts sooner.** With a team, an agent that is still being checked no longer holds the full accounts list open; the line says "6 ready · checking OpenCode" until it answers.
+
+### Fixed
+
+- **Share your team, Save the record and Your cloud computer close with Escape.** They also keep the keyboard inside while open, and each has a close button like the other dialogs.
+
 ## 0.806.0 - 2026-10-19
 <!-- big -->
 
