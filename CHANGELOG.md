@@ -11,6 +11,12 @@ Settings shows this file as What's new. An entry may group its changes under
 about when they arrive on it carries `<!-- big -->` on the line under its
 heading: the home screen then shows it once, as a splash.
 
+## 0.808.0 - 2026-10-20
+
+### Improved
+
+- **Home fits on one screen while Scout is on offer.** Meet Scout was a large card above your team, and Home scrolled at common window sizes until you decided. Now Scout is offered in its own place on your team, the seat it takes once it is on. Press it to read what Scout reads and with which model, then turn it on. Its x means Not now.
+
 ## 0.807.0 - 2026-10-19
 
 ### Improved
