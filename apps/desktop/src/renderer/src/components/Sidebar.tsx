@@ -1270,7 +1270,7 @@ export function Sidebar({
               +{restOfTeam}
             </button>
           )}
-          <button type="button" className="lc-faces__team" onClick={onOpenTeammates} title="Team (Ctrl 2)">
+          <button type="button" className="lc-faces__team" aria-current={screenKey === 'teammates' ? 'page' : undefined} onClick={onOpenTeammates} title="Team (Ctrl 2)">
             <Icon name="users" size={13} />
             <span>Team</span>
           </button>

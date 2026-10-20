@@ -2,6 +2,8 @@ import { AgentAccountsSettings } from './AgentAccountsSettings.js'
 import { Fragment, useEffect, useRef, useState } from 'react'
 import { BOT_SIZE } from '../botSizes.js'
 import { boardSectionOf, teamBoard } from '../teamBoard.js'
+import { waitingLine } from '../homeTeamState.js'
+import type { NeedsYouItem } from '../needsYou.js'
 import { durationText, runSpanMs } from '../missionView.js'
 import { WhatsNew } from './WhatsNew.js'
 import { RemoteControlSetting } from './RemoteControlSetting.js'
@@ -598,7 +600,8 @@ export function TeammatesScreen({
   onAddTeamFromCard,
   teamNotice,
   finishedUnseen,
-  runningMissionIds
+  runningMissionIds,
+  needsYou = []
 }: {
   /**
    * Missions with a live run in this window. The record calls a mission that
@@ -607,6 +610,8 @@ export function TeammatesScreen({
    * already takes this; the Team screen now does too.
    */
   readonly runningMissionIds?: ReadonlySet<string>
+  /** The same waits Home reads, in the same order: approvals before questions. */
+  readonly needsYou?: readonly NeedsYouItem[]
   /** 0.380: teammates whose run ended while nobody was looking -- the board's "Just finished". */
   readonly finishedUnseen?: ReadonlySet<string>
   /** M30: why a routine's Run did not start, said where it was pressed. */
@@ -650,6 +655,8 @@ export function TeammatesScreen({
     const month = monthSpendLine(spendByTeammate[teammate.teammateId], teammate.monthlyLimitUsd)
     const theirRoutines = routines.filter((routine) => routine.teammateId === teammate.teammateId)
     const replaying = routineStepByTeammate[teammate.teammateId]
+    const waiting = needsYou.find((item) => item.kind !== 'memory' && item.teammateId === teammate.teammateId)
+    const question = waiting === undefined ? undefined : waitingLine(waiting)
     return (
       <div className={`lc-rostercard lc-rostercard--${boardSectionOf(viewByTeammate[teammate.teammateId], finishedUnseen?.has(teammate.teammateId) === true)}`} key={teammate.teammateId}>
         <div className="lc-rostercard__head">
@@ -728,6 +735,14 @@ export function TeammatesScreen({
             </span>
             <span>{modeLabel(teammate.route.mode)}</span>
           </div>
+        )}
+        {/* Home's words, with a way to the exact turn that wants an answer,
+            not the teammate's most recently opened conversation. */}
+        {waiting !== undefined && waiting.kind !== 'memory' && question !== undefined && (
+          <button type="button" className="lc-rostercard__waiting" onClick={() => onOpenMission(waiting.missionId)}>
+            <span className="lc-rostercard__question" title={question}>{question}</span>
+            <span className="lc-rostercard__answer">Answer <Icon name="chevron-right" size={13} /></span>
+          </button>
         )}
         <dl className="lc-rostercard__stats">
           <div className="lc-rostercard__stat">

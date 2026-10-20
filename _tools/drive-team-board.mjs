@@ -1,6 +1,9 @@
 // The Team screen as a board (0.380): four teammates, four states at once.
 //
 //   node _tools/drive-team-board.mjs [--packaged <exe>] [--tag <name>]
+//   node _tools/drive-team-board.mjs --seeded [--packaged <exe>] [--tag <name>]
+// --seeded checks the waiting card in both themes and sizes, without a model turn.
+// --seeded --negative-control restores the old drawn rules and must fail all four checks.
 //
 // Free model. Wren is asked to run a command in Approve each and left waiting
 // (Needs you); Sable is given a long job (Working); Juno is asked for one word
@@ -13,6 +16,11 @@ import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 
 import { openTeammateScript, recordRoot, say, scratchRepository, sleep, startDrive } from './drive-lib.mjs'
+
+if (process.argv.includes('--seeded')) {
+  await import('./team-board-seeded.mjs')
+  process.exit(process.exitCode ?? 0)
+}
 
 const arg = (name) => (process.argv.includes(name) ? process.argv[process.argv.indexOf(name) + 1] : undefined)
 const packaged = arg('--packaged')

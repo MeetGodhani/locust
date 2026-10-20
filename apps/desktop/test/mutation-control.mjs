@@ -67,6 +67,16 @@ const ORG_VIEW_TEST = 'src/renderer/src/managed-controls-say-who-set-them.test.t
 
 const MUTATIONS = [
   ...[
+    ['the waiting words are omitted', 'renderer/src/components/Screens.tsx', 'const question = waiting === undefined ? undefined : waitingLine(waiting)', 'const question = undefined', 'uses the same waiting words as Home, for a question, a command and another approval'],
+    ['the wrong conversation opens', 'renderer/src/components/Screens.tsx', 'onOpenMission(waiting.missionId)', 'onOpenMission(teammate.teammateId)', 'opens the waiting conversation, not whichever conversation was most recent'],
+    ['the shell drops the waiting list', 'renderer/src/App.tsx', 'needsYou={needsYouItems}', 'needsYou={[]}', 'opens the waiting conversation, not whichever conversation was most recent'],
+    ['the question takes more than two lines', 'renderer/src/shell.css', '-webkit-line-clamp: 2;\n  overflow: hidden;\n  overflow-wrap: anywhere;', '-webkit-line-clamp: 3;\n  overflow: hidden;\n  overflow-wrap: anywhere;', 'shows up to two lines of the question and leaves the full words available'],
+    ['another teammate supplies the wait', 'renderer/src/components/Screens.tsx', "needsYou.find((item) => item.kind !== 'memory' && item.teammateId === teammate.teammateId)", "needsYou.find((item) => item.kind !== 'memory')", 'keeps Home’s priority, ignores memory and other teammates, and offers one Answer button'],
+    ['Last run clips', 'renderer/src/shell.css', '  overflow-wrap: anywhere;\n  color: var(--lc-text-primary);\n}\n\n/* A wait is one button', '  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n  color: var(--lc-text-primary);\n}\n\n/* A wait is one button', 'never cuts off Last run and gives it more space than Runs'],
+    ['actions disappear at rest', 'renderer/src/shell.css', 'opacity: 0.45;\n  transition: opacity 120ms ease;', 'opacity: 0;\n  transition: opacity 120ms ease;', 'leaves the actions visible at rest, and full on hover or keyboard focus'],
+    ['Team never marks the current screen', 'renderer/src/components/Sidebar.tsx', "aria-current={screenKey === 'teammates' ? 'page' : undefined}", 'aria-current={undefined}', 'is current only on the Team screen, with the existing selected surface']
+  ].map(([name, file, from, to, expected]) => ({ name: `team-board: ${name}`, file: join(ROOT, 'src', file), from, to, expect: expected, tests: ['src/renderer/src/a-team-card-says-what-it-waits-on.test.tsx'] })),
+  ...[
     ['Auto references are omitted', 'shared/references.ts', "if (mode === 'auto') return { include: true", "if (mode === 'auto') return { include: false", 'full-access modes keep the reference with a plain write warning'],
     ['a restricted extra folder becomes writable', 'shared/references.ts', "return { include: false, note: 'Not shared in this mode", "return { include: true, note: 'Not shared in this mode", 'a restricted runtime omits a grant that would make the reference writable and says why'],
     ['an unextended runtime loses a harmless brief reference', 'shared/references.ts', "return { include: true, note: 'Named in the brief", "return { include: false, note: 'Named in the brief", 'names references without changing an unextended runtime or inventing a write-access reason to omit them'],

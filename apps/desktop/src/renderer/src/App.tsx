@@ -8848,6 +8848,7 @@ export default function App(): ReactElement {
               {...(teamNotice === undefined ? {} : { teamNotice })}
               finishedUnseen={finishedUnseen}
               runningMissionIds={runningMissionIds}
+              needsYou={needsYouItems}
               {...(routineNotice === undefined ? {} : { routineNotice })}
               onDismissRoutineNotice={() => setRoutineNotice(undefined)}
               teammates={teammates}
