@@ -1602,6 +1602,8 @@ textarea {
   nothing is being held. A neutral card with the accent reserved for the
   option buttons, which are the only things to act on.
 */
+/* Raised, because it blocks the run (the card-weight rule in tokens.css), and still neutral: it is a fork, not
+   something held against the workspace, so it never takes the approval card's amber (design pass, 2026-10-19). */
 .lc-decision {
   display: flex;
   flex-direction: column;
@@ -1609,7 +1611,13 @@ textarea {
   padding: var(--lc-space-5);
   border: 1px solid var(--lc-border-card);
   border-radius: var(--lc-radius-card);
-  background: transparent;
+  background: var(--lc-bg-pending);
+  box-shadow: var(--lc-shadow-pending);
+}
+
+/* The card holds the focus only so the number keys reach it; the ring belongs to the option Tab lands on. */
+.lc-decision:focus {
+  outline: none;
 }
 
 .lc-decision__head {
@@ -1714,11 +1722,24 @@ textarea {
   min-width: 0;
 }
 
-.lc-decision__key {
+/* A key that chooses has to look like a key (design pass, 2026-10-19): a bare "1" beside the label read as a list
+   number, and nobody pressed it. Shared with the question card's keys below. */
+.lc-decision__key,
+.lc-question__key {
   flex: none;
-  min-width: 1ch;
-  color: var(--lc-text-muted);
-  font-size: var(--lc-text-mono-caption);
+  display: inline-grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border: 1px solid var(--lc-border-control);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  background: var(--lc-bg-window);
+  color: var(--lc-text-secondary);
+  font-family: var(--lc-font-mono);
+  font-size: var(--lc-text-mono-label);
+  line-height: 1;
 }
 
 .lc-decision__foot {
@@ -18250,13 +18271,6 @@ textarea.lc-compare__judgecriteria {
   min-width: 0;
 }
 
-.lc-question__key {
-  flex: none;
-  min-width: 1ch;
-  color: var(--lc-text-muted);
-  font-size: var(--lc-text-mono-caption);
-}
-
 .lc-question__option.is-chosen .lc-question__key {
   color: inherit;
 }
@@ -21261,6 +21275,50 @@ textarea.lc-compare__judgecriteria {
   transform: rotate(45deg);
 }
 
+/* What each satellite does, beside it: the liquid's own surface and shadow, so
+   it reads as part of the menu, but outside the goo. Placed from the seat's
+   corner by the satellite's offset in PlusMenu.tsx (attach 0,-64; folder
+   54,-34), 8px clear of its 36px droplet. */
+.lc-plusmenu__label {
+  position: absolute;
+  z-index: 5;
+  transform: translateY(-50%);
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: var(--lc-plusmenu-fill);
+  box-shadow: var(--lc-plusmenu-shadow);
+  color: var(--lc-chip-text);
+  font-family: var(--lc-font-ui);
+  font-size: var(--lc-text-description);
+  line-height: 1.35;
+  white-space: nowrap;
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease;
+}
+
+.lc-plusmenu__label[data-satellite='attach'] {
+  left: 44px;
+  top: -46px;
+}
+
+.lc-plusmenu__label[data-satellite='folder'] {
+  left: 98px;
+  top: -16px;
+}
+
+.lc-plusmenu__label.is-open {
+  opacity: 1;
+  pointer-events: auto;
+  /* The icons' 180ms: --lc-plusmenu-icon-dur lives on the liquid, not on these siblings of it. */
+  transition-duration: 180ms;
+}
+
+.lc-plusmenu__label:hover {
+  color: var(--lc-text-primary);
+}
+
 /* Closing dips the surface, and the + riding it, toward the returning
    satellites, then settles. */
 .lc-plusmenu.is-anticipating [data-gooey-svg],
@@ -21282,7 +21340,8 @@ textarea.lc-compare__judgecriteria {
 
 @media (prefers-reduced-motion: reduce) {
   .lc-plusmenu__plus,
-  .lc-plusmenu__icon {
+  .lc-plusmenu__icon,
+  .lc-plusmenu__label {
     transition: none;
   }
 

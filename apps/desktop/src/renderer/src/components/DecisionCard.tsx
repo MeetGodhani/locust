@@ -49,13 +49,16 @@ export function DecisionCard({
    * Never from a text field -- "2" typed into the chat box is a 2 -- and never while a question card waits, which is
    * answered first. The card takes the focus only from an empty chat box or from nothing, and a letter typed while it
    * holds the focus goes to the chat box: the reply below is still one keystroke away.
+   *
+   * The CARD takes it, not option 1 (design pass, 2026-10-19): a focus ring on the first choice read as a choice already
+   * made, on a card whose whole rule is that it nominates nothing. Tab still reaches each option in order.
    */
   useEffect(() => {
     const element = box.current
     if (element === null || busy) return undefined
     const active = document.activeElement
     const idle = active === null || active === document.body || (active instanceof HTMLTextAreaElement && active.value.trim().length === 0 && active.closest('form.command-dock') !== null)
-    if (idle && document.querySelector('.lc-decision') === element) element.querySelector<HTMLButtonElement>('.lc-decision__option')?.focus({ preventScroll: true })
+    if (idle && document.querySelector('.lc-decision') === element) element.focus({ preventScroll: true })
     return undefined
   }, [busy])
   useEffect(() => {
@@ -85,7 +88,7 @@ export function DecisionCard({
     return () => window.removeEventListener('keydown', onKey)
   }, [busy, onChoose, request.options])
   return (
-    <div className="lc-decision" role="group" aria-label="A decision is needed to continue" ref={box}>
+    <div className="lc-decision" role="group" aria-label="A decision is needed to continue" tabIndex={-1} ref={box}>
       <div className="lc-decision__head">
         <span className="lc-decision__title">
           <Icon name="diff" size={13} /> {title}

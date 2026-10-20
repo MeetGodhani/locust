@@ -28,6 +28,7 @@ import { agentNamed } from '../../../shared/runtimes.js'
 import { CHATGPT_VOICES, isChatGptVoice, voiceName } from '../../../shared/voice-call.js'
 import { Select } from './Select.js'
 import { VoicePlay } from './VoicePlay.js'
+import { Icon } from './Icon.js'
 
 /** What the dialog hands back. A limit is `null` when an edit removes one. */
 export interface TeammateDraft {
@@ -432,7 +433,7 @@ export function NewTeammateDialog({
           <span className="lc-dialog__title">{editing ? 'Edit teammate' : 'New teammate'}</span>
           <span className="lc-dialog__sub lc-mono">lives on this machine</span>
           <button type="button" className="lc-dialog__close" aria-label="Close" onClick={onCancel}>
-            ✕
+            <Icon name="close" size={13} />
           </button>
         </div>
 

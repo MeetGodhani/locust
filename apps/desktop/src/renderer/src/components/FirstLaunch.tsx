@@ -616,20 +616,35 @@ export function FirstLaunch({
      * (Colin, 2026-09-19: "maybe even ask them how to get the other
      * agents working").
      */
-    const everyInstalledReady = shown.every((row) => !row.runtime.installed || row.connected)
+    /*
+     * A CHECK STILL RUNNING DOES NOT HOLD THE LIST OPEN, ONCE THERE IS A TEAM
+     * (design pass, 2026-10-19). OpenCode's first start installs its plugin
+     * for 48-89 s, and for that minute Home showed all seven rows -- six of
+     * them Ready -- above the team, because one dot was still grey. A check
+     * is a moment, not a thing to act on: the line says it ("6 ready ·
+     * checking OpenCode") and the list opens again only if the answer needs
+     * the person. Before a team, the list is still how a person meets the
+     * agents, and it waits for every answer.
+     */
+    const foldsWhileChecking = team.length > 0
+    const everyInstalledReady = shown.every((row) => !row.runtime.installed || row.connected || (foldsWhileChecking && isChecking(row)))
     const everyAgentReady = shown.every((row) => row.connected)
     const folded =
-      !agentsOpen && connected > 0 && !checkingAny && !stuckAny && installingName === undefined && everyInstalledReady && (team.length > 0 || everyAgentReady)
+      !agentsOpen && connected > 0 && (foldsWhileChecking || !checkingAny) && !stuckAny && installingName === undefined && everyInstalledReady && (team.length > 0 || everyAgentReady)
     if (folded) {
       startersShown = true
       const ready = shown.filter((row) => row.connected)
+      const stillChecking = shown.filter(isChecking)
+      const checkingSaid =
+        stillChecking.length === 0 ? undefined : stillChecking.length === 1 ? `checking ${stillChecking[0]?.runtime.displayName ?? ''}` : `checking ${String(stillChecking.length)} more`
       return (
         <>
         {/* The accounts and their usage, one block: the line costs no gap of Home's (0.714). */}
         <div className="lc-accountsblock">
         <div className="lc-agenthead is-folded">
           <span className="lc-agenthead__label">Connected accounts</span>
-          <span className="lc-agenthead__note is-green">{headNote}</span>
+          <span className="lc-agenthead__note is-green">{`${String(connected)} ready`}</span>
+          {checkingSaid !== undefined && <span className="lc-agenthead__note">{`· ${checkingSaid}`}</span>}
           {/*
             * THEIR MARKS, NOT A LIST OF NAMES (0.383). "Codex CLI ·
             * Claude Code · Cursor Agent · ..." was a sentence to read

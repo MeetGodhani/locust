@@ -11,6 +11,7 @@ import {
   type CloudSignInStep
 } from '../../../shared/cloud-computer.js'
 import { Icon } from './Icon.js'
+import { useModal } from '../useModal.js'
 
 /**
  * YOUR CLOUD COMPUTER, THE FIRST TIME (0.761). Asked when Cloud is first picked for a teammate whose maker has no
@@ -121,6 +122,12 @@ export function CloudSetupDialog({
   const at = state.phase === 'working' ? steps.findIndex((entry) => entry.step === state.step) : state.phase === 'ready' ? steps.length : -1
   const signSteps = state.phase === 'signing-in' || state.phase === 'signed-in' ? signInSteps(state.agent, state.woke === true) : []
   const signAt = state.phase === 'signing-in' ? signSteps.findIndex((entry) => entry.step === state.step) : signSteps.length
+  // Escape is the x, and does what the x does in each phase (design pass, 2026-10-19): it had none, and Tab walked out
+  // to the page behind the scrim.
+  useModal(box, () => {
+    if (signingIn) onStopSignIn()
+    else if (!busy) onClose()
+  })
 
   return (
     <div className="lc-scrim">

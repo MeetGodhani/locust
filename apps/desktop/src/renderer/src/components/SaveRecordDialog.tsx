@@ -1,5 +1,8 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import type { ReactElement } from 'react'
+
+import { useModal } from '../useModal.js'
+import { Icon } from './Icon.js'
 
 /**
  * SAVE THE RECORD (0.575): one conversation as one Markdown file.
@@ -13,6 +16,9 @@ import type { ReactElement } from 'react'
 export const RECORD_CLAIM = 'This file contains the conversation. Read it before you send it.'
 
 export function SaveRecordDialog({ missionId, onClose }: { readonly missionId: string; readonly onClose: () => void }): ReactElement {
+  // It had no Escape, no x and no focus held inside (design pass, 2026-10-19), like Share your team.
+  const box = useRef<HTMLDivElement>(null)
+  useModal(box, onClose)
   const [includeRaw, setIncludeRaw] = useState(false)
   const [busy, setBusy] = useState(false)
   const [said, setSaid] = useState<string>()
@@ -37,9 +43,12 @@ export function SaveRecordDialog({ missionId, onClose }: { readonly missionId: s
   }
   return (
     <div className="lc-scrim">
-      <div className="lc-dialog lc-saverecord" role="dialog" aria-modal="true" aria-label="Save the record">
+      <div ref={box} className="lc-dialog lc-saverecord" role="dialog" aria-modal="true" aria-label="Save the record">
         <div className="lc-dialog__head">
           <span className="lc-dialog__title">Save the record</span>
+          <button type="button" className="lc-dialog__close" aria-label="Close" onClick={onClose}>
+            <Icon name="close" size={13} />
+          </button>
         </div>
         <div className="lc-dialog__body lc-saverecord__body">
           <p className="lc-saverecord__claim">{RECORD_CLAIM}</p>

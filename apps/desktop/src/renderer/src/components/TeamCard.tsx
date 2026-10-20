@@ -4,8 +4,10 @@ import type { ReactElement } from 'react'
 import type { PublicTeammate } from '../../../shared/ipc.js'
 import { roleLabelOf } from '../../../shared/ipc.js'
 import { routeModelName } from '../routeName.js'
+import { useModal } from '../useModal.js'
 import { RuntimeMark } from './RuntimeMark.js'
 import { TeammateBot } from './TeammateBot.js'
+import { Icon } from './Icon.js'
 
 /**
  * THE TEAM AS A PICTURE OF ITSELF (0.398; shared/team-card.ts).
@@ -49,6 +51,10 @@ export function TeamCardView({ teammates }: { readonly teammates: readonly Publi
 
 export function ShareTeamDialog({ teammates, onClose }: { readonly teammates: readonly PublicTeammate[]; readonly onClose: () => void }): ReactElement {
   const card = useRef<HTMLDivElement>(null)
+  // The one dialog that had no Escape, no focus held inside and no x (design pass, 2026-10-19): the 60 review frames
+  // showed it still open over every screen captured after it.
+  const box = useRef<HTMLDivElement>(null)
+  useModal(box, onClose)
   const [busy, setBusy] = useState(false)
   const [said, setSaid] = useState<string>()
   const save = async (): Promise<void> => {
@@ -69,9 +75,12 @@ export function ShareTeamDialog({ teammates, onClose }: { readonly teammates: re
   }
   return (
     <div className="lc-scrim">
-      <div className="lc-dialog lc-shareteam" role="dialog" aria-modal="true" aria-label="Share your team">
+      <div ref={box} className="lc-dialog lc-shareteam" role="dialog" aria-modal="true" aria-label="Share your team">
         <div className="lc-dialog__head">
           <span className="lc-dialog__title">Share your team</span>
+          <button type="button" className="lc-dialog__close" aria-label="Close" onClick={onClose}>
+            <Icon name="close" size={13} />
+          </button>
         </div>
         <div className="lc-dialog__body lc-shareteam__body">
           <div ref={card} className="lc-shareteam__frame">

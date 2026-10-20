@@ -92,6 +92,32 @@ describe('Home', () => {
     // And a signed-out one opens it again, team or not.
     expect(home([ready('codex', 'Codex CLI'), signedOut('claude', 'Claude Code')], [])).toContain('lc-runtimepanel')
   }, 10_000)
+
+  /*
+   * A CHECK STILL RUNNING IS A MOMENT, NOT A THING TO ACT ON (design pass, 2026-10-19): OpenCode's first start ran a
+   * minute, and Home held seven rows open above the team for one grey dot.
+   */
+  it('with a team, folds while an agent is still being checked, and says which', () => {
+    const checking: PublicRuntimeStatus = { id: 'opencode', displayName: 'OpenCode', installed: true, version: null, auth: 'not-applicable', ready: false, status: 'probe-failed', checking: true }
+    const html = home([ready('codex', 'Codex CLI'), ready('claude', 'Claude Code'), checking])
+    expect(html).toContain('lc-agenthead is-folded')
+    expect(html).not.toContain('lc-runtimepanel')
+    expect(html).toContain('>2 ready<')
+    expect(html).toContain('>· checking OpenCode<')
+    // Two at once are counted, not listed.
+    const two = home([ready('codex', 'Codex CLI'), checking, { ...checking, id: 'cursor', displayName: 'Cursor Agent' }])
+    expect(two).toContain('>· checking 2 more<')
+    // Before a team, the list still waits for every answer.
+    expect(home([ready('codex', 'Codex CLI'), ready('claude', 'Claude Code'), checking], [])).toContain('lc-runtimepanel')
+    // And an answer that needs the person opens it again.
+    expect(home([ready('codex', 'Codex CLI'), checking, signedOut('claude', 'Claude Code')])).toContain('lc-runtimepanel')
+  }, 10_000)
+
+  it('says nothing of checking once every answer is in', () => {
+    const html = home([ready('codex', 'Codex CLI'), ready('claude', 'Claude Code')])
+    expect(html).toContain('>2 ready<')
+    expect(html).not.toContain('checking')
+  }, 10_000)
 })
 
   it('says where each teammate stands, beside the name, and reads it aloud with the card (0.606)', () => {

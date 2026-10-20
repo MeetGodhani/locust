@@ -24,6 +24,7 @@ import {
   streakText
 } from '../usageView.js'
 import { RuntimeMark } from './RuntimeMark.js'
+import { Icon } from './Icon.js'
 
 /**
  * USAGE, ACROSS EVERY AGENT AND MODEL (0.714).
@@ -98,7 +99,7 @@ export function UsageDialog({
             ))}
           </div>
           <button type="button" className="lc-dialog__close" aria-label="Close" onClick={onClose}>
-            ×
+            <Icon name="close" size={13} />
           </button>
         </div>
         <div className="lc-dialog__body lc-usage__body">

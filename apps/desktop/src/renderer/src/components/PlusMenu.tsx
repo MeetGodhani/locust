@@ -25,6 +25,11 @@ import { useDrawnTheme } from '../drawnTheme.js'
  *
  * `liquid-gooey` 0.2.1: the goo runs on a silhouette layer, the buttons stay
  * real DOM (focus, labels, handlers), and it sleeps when nothing moves.
+ *
+ * Each satellite SAYS what it does (design pass, 2026-10-19): two bare icons
+ * were a guess, and the words lived only in a hover. The words sit beside the
+ * droplets, outside the liquid so the goo never melts them, and choose what
+ * their droplet chooses.
  */
 
 const EASE_BOUNCY = 'cubic-bezier(0.34, 1.56, 0.64, 1)'
@@ -150,6 +155,11 @@ export function PlusMenu({
     ? { duration: OPEN.duration, ease: EASE_BOUNCY, stagger: OPEN.stagger }
     : { duration: CLOSE.duration, ease: EASE_SNAPPY, stagger: CLOSE.stagger }
   const { fill, shadow } = liquidSurface(theme)
+  const choose = (key: Satellite['key']): void => {
+    close()
+    if (key === 'attach') onAttach()
+    else onChooseFolder()
+  }
 
   return (
     <span className="lc-plusmenu__seat" ref={seat}>
@@ -178,11 +188,7 @@ export function PlusMenu({
               title={satellite.label}
               tabIndex={open ? 0 : -1}
               aria-hidden={!open}
-              onClick={() => {
-                close()
-                if (satellite.key === 'attach') onAttach()
-                else onChooseFolder()
-              }}
+              onClick={() => choose(satellite.key)}
             >
               <span
                 className="lc-plusmenu__icon"
@@ -210,6 +216,18 @@ export function PlusMenu({
           </button>
         </Liquid.Item>
       </Liquid>
+      {SATELLITES.map((satellite, index) => (
+        <span
+          key={satellite.key}
+          className={`lc-plusmenu__label${open ? ' is-open' : ''}`}
+          data-satellite={satellite.key}
+          aria-hidden="true"
+          style={{ transitionDelay: open ? `${String(ICON.delay + index * phase.stagger)}ms` : '0ms' }}
+          onClick={() => choose(satellite.key)}
+        >
+          {satellite.label}
+        </span>
+      ))}
     </span>
   )
 }

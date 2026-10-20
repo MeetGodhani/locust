@@ -4,6 +4,7 @@ import type { ReactElement } from 'react'
 import type { AppChangelog, AppChangelogEntry } from '../../../shared/ipc.js'
 import { useModal } from '../useModal.js'
 import { AgentText } from './ThreadItems.js'
+import { Icon } from './Icon.js'
 
 /**
  * WHAT'S NEW -- the whole changelog, the way Claude Code shows its own.
@@ -100,7 +101,7 @@ export function WhatsNewSplash({
             What’s new in Locust
           </span>
           <button type="button" className="lc-dialog__close" aria-label="Close" onClick={onClose}>
-            ×
+            <Icon name="close" size={13} />
           </button>
         </div>
         <div className="lc-dialog__body">
