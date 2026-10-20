@@ -64,6 +64,22 @@ export interface ComparePicking {
 
 const samePick = (a: RouteChoice, b: RouteChoice): boolean => a.runtime === b.runtime && a.model === b.model && a.account === b.account
 
+/**
+ * Words a detail may use while still only naming the group it sits under.
+ * "Through Antigravity CLI" and "Antigravity model tier" say the heading
+ * again; "Free · no sign-in" and a reset time do not.
+ */
+const DETAIL_FILLER = new Set(['through', 'via', 'cli', 'model', 'models', 'tier', 'tiers', 'the', 'a', 'an', 'its', 'and', 'of', 'on', 'with', 'your', 'own', 'account'])
+
+/** True when the line only repeats the runtime the group heading already names. */
+export function rowDetailRepeatsHeading(detail: string, group: string): boolean {
+  const words = (text: string): string[] => text.toLowerCase().split(/[^a-z0-9]+/).filter((word) => word.length > 0)
+  const said = words(detail).filter((word) => !DETAIL_FILLER.has(word))
+  if (said.length === 0) return detail.trim().length > 0
+  const named = new Set(words((group.split(' · ')[0] ?? group)))
+  return said.every((word) => named.has(word))
+}
+
 interface RouteRow {
   readonly account?: string
   readonly key: string
@@ -480,6 +496,14 @@ export function RoutePicker({
         ? undefined
         : slot.refusal(choice) ?? (slot.taken.some((other) => samePick(other, choice)) ? 'Already in this comparison.' : undefined)
     const full = comparing && !picked && (compare?.picks.length ?? 0) >= MAX_COMPARE_SLOTS
+    // Choosing what to compare: the model's own record, where it has one (0.449).
+    const past = comparing ? compare?.record?.get(`${row.runtime}:${row.model}`) : undefined
+    const spoken = past === undefined ? row.detail : `kept ${String(past.kept)} of ${String(past.compared)}`
+    // A line that only names the group again is the heading, said twice.
+    // A limit, a reset, an endpoint, or a comparison record is news, and stays.
+    const showDetail = !recent && spoken.trim().length > 0 && (past !== undefined || !rowDetailRepeatsHeading(spoken, row.group))
+    // READY is the dot. Every other tag says something the dot does not.
+    const showTag = !recent && row.tag !== 'READY'
     // Which runtime the canonical row below sits under, so a recent row can
     // say why it appears twice.
     const pointsAt = recent
@@ -488,7 +512,7 @@ export function RoutePicker({
     return (
       <button
         type="button"
-        className={`lc-picker__row${isActive ? ' is-active' : ''}${recent ? ' is-recent' : ''}${picked ? ' is-picked' : ''}`}
+        className={`lc-picker__row${isActive ? ' is-active' : ''}${recent ? ' is-recent' : ''}${picked ? ' is-picked' : ''}${!recent && !showDetail ? ' is-plain' : ''}`}
         disabled={!row.selectable || refused !== undefined || full}
         aria-current={isActive}
         {...(comparing ? { 'aria-pressed': picked } : {})}
@@ -524,15 +548,7 @@ export function RoutePicker({
           {/* A shortcut row carries neither detail nor tag: the
             * canonical row below owns those, so ACTIVE appears exactly
             * once on screen. */}
-          {!recent && (
-            <span className="lc-picker__detail lc-mono">
-              {(() => {
-                // Choosing what to compare: the model's own record in your comparisons, where it has one (0.449).
-                const past = comparing ? compare?.record?.get(`${row.runtime}:${row.model}`) : undefined
-                return past === undefined ? row.detail : `kept ${String(past.kept)} of ${String(past.compared)}`
-              })()}
-            </span>
-          )}
+          {showDetail && <span className="lc-picker__detail lc-mono">{spoken}</span>}
         </span>
         {recent ? (
           pointsAt === undefined ? null : (
@@ -542,7 +558,7 @@ export function RoutePicker({
               {pointsAt}
             </span>
           )
-        ) : (
+        ) : showTag ? (
         <span
           className={`lc-picker__tag lc-mono ${
             row.tag === 'ACTIVE'
@@ -556,7 +572,7 @@ export function RoutePicker({
         >
           {row.tag}
         </span>
-        )}
+        ) : null}
       </button>
     )
   }

@@ -31,6 +31,12 @@ const rowsNow = `(() => {
   return rows.length + ' rows :: ' + rows.map(r => r.innerText.split(String.fromCharCode(10))[0]).slice(0, 6).join(', ')
 })()`
 
+let failures = 0
+const check = (what, ok, detail) => {
+  if (!ok) failures += 1
+  say(`  [${ok ? 'PASS' : 'FAIL'}] ${what}${detail === undefined ? '' : ` -- ${String(detail).slice(0, 400)}`}`)
+}
+
 try {
   await drive.capture('open the picker and wait for it to settle', async () => {
     await drive.ready()
@@ -62,8 +68,57 @@ try {
     const rows = [...(picker?.querySelectorAll('.lc-picker__row') ?? [])]
     return rows.length + ' rows :: ' + rows.map(r => r.innerText.split(String.fromCharCode(10))[0]).slice(0, 6).join(', ')
   })()`))
+
+  const quiet = `(() => {
+    const filler = new Set(['through', 'via', 'cli', 'model', 'models', 'tier', 'tiers', 'the', 'a', 'an', 'its', 'and', 'of', 'on', 'with', 'your', 'own', 'account'])
+    const words = (text) => text.toLowerCase().split(/[^a-z0-9]+/).filter((word) => word.length > 0 && !filler.has(word))
+    const ready = [...document.querySelectorAll('.lc-picker__tag')].filter((el) => (el.textContent ?? '').trim() === 'READY').length
+    const plain = [...document.querySelectorAll('.lc-picker__row.is-plain')]
+    const short = plain.filter((row) => row.getBoundingClientRect().height < 31.5).length
+    const repeated = []
+    let group = ''
+    for (const node of document.querySelectorAll('.lc-picker__group, .lc-picker__row:not(.is-recent)')) {
+      if (node.classList.contains('lc-picker__group')) {
+        group = (node.innerText ?? '').split('\\n')[0] ?? ''
+        continue
+      }
+      const detail = node.querySelector('.lc-picker__detail')
+      if (detail === null) continue
+      const said = words(detail.innerText ?? '')
+      const named = new Set(words((group.split(' · ')[0] ?? group)))
+      if (said.length > 0 && said.every((word) => named.has(word))) repeated.push(group + ' / ' + (detail.innerText ?? ''))
+    }
+    const kept = [...document.querySelectorAll('.lc-picker__detail')].map((el) => (el.innerText ?? '').replace(/\\s+/g, ' ').trim()).filter((text) => text.length > 0)
+    return JSON.stringify({ ready, plain: plain.length, short, repeated, kept: kept.slice(0, 8), rows: document.querySelectorAll('.lc-picker__row').length, theme: document.documentElement.dataset.theme ?? '' })
+  })()`
+  const show = async (width, height, theme) => {
+    await drive.resize(width, height)
+    await drive.evaluate(`window.desktop.setTheme(${JSON.stringify(theme)})`)
+    await drive.waitFor(`document.documentElement.dataset.theme === ${JSON.stringify(theme)}`, { what: `${theme} theme` })
+    return JSON.parse(String(await drive.capture(`picker ${theme} ${String(width)}`, () => drive.evaluate(`(async () => {
+      const box = document.querySelector('.lc-picker__input')
+      if (box) {
+        const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set
+        set.call(box, '')
+        box.dispatchEvent(new Event('input', { bubbles: true }))
+        await new Promise((r) => setTimeout(r, 200))
+      }
+      return ${quiet}
+    })()`))))
+  }
+  for (const [width, height] of [[1440, 900], [1205, 803]]) {
+    for (const theme of ['dark', 'light']) {
+      const seen = await show(width, height, theme)
+      check(`at ${theme} ${String(width)} the picker is open`, seen.rows > 0, JSON.stringify(seen))
+      check(`at ${theme} ${String(width)} no row says READY`, seen.ready === 0, JSON.stringify(seen))
+      check(`at ${theme} ${String(width)} no detail only repeats its heading`, seen.repeated.length === 0, JSON.stringify(seen.repeated))
+      check(`at ${theme} ${String(width)} a plain row is at least 32px`, seen.short === 0, JSON.stringify(seen))
+    }
+  }
 } catch (error) {
+  failures += 1
   say(`drive failed: ${error instanceof Error ? error.message : String(error)}`)
 } finally {
-  await drive.finish({ intro: 'Build: whatever `pnpm build` last wrote to out/. The picker searched the way the diff smoke searches it.' })
+  await drive.finish({ intro: 'Build: whatever `pnpm build` last wrote to out/. The picker searched the way the diff smoke searches it, then at 1440x900 and 1205x803 in both themes.' })
+  process.exitCode = failures === 0 ? 0 : 1
 }

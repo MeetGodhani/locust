@@ -137,6 +137,43 @@ try {
   await sleep(600)
   const rows = JSON.parse(String(await drive.evaluate(`JSON.stringify([...document.querySelectorAll('.lc-thread .lc-filerow')].map((row) => row.innerText.replace(/\\s+/g, ' ').trim()))`)))
   check('opened, a row still carries the whole file name', rows.some((text) => text.includes(LONG_NAME)), JSON.stringify(rows).slice(0, 300))
+  const edges = async () => JSON.parse(String(await drive.evaluate(`(() => {
+    const rows = [...document.querySelectorAll('.lc-thread .lc-filerow')]
+    const left = (row) => {
+      const path = row.querySelector('.lc-filerow__path')
+      return path === null ? null : Math.round(path.getBoundingClientRect().left)
+    }
+    const file = rows.filter((row) => !row.classList.contains('is-shell')).map(left).find((n) => n !== null) ?? null
+    const shell = rows.find((row) => row.classList.contains('is-shell'))
+    const path = shell?.querySelector('.lc-filerow__path')
+    const badge = shell?.querySelector('.lc-shellbadge')
+    return JSON.stringify({
+      file,
+      shell: shell === undefined ? null : left(shell),
+      badgeAfter: path !== undefined && badge !== undefined && badge.getBoundingClientRect().left >= path.getBoundingClientRect().left + 8,
+      badge: (badge?.innerText ?? '').replace(/\\s+/g, ' ').trim(),
+      theme: document.documentElement.dataset.theme ?? ''
+    })
+  })()`)))
+  const linedUp = async (where) => {
+    await drive.evaluate(openAllStepsScript())
+    const measured = await edges()
+    await drive.capture(`opened steps, ${where}`, async () => JSON.stringify(measured))
+    check(`at ${where} a command and a path start on one edge`, measured.file !== null && measured.shell !== null && Math.abs(measured.file - measured.shell) <= 2, JSON.stringify(measured))
+    check(`at ${where} the result badge follows the command`, measured.badgeAfter === true && /exit 0|done|refused|running/.test(measured.badge), measured.badge)
+  }
+  await drive.resize(1440, 900)
+  await drive.evaluate(`window.desktop.setTheme('dark')`)
+  await drive.waitFor(`document.documentElement.dataset.theme === 'dark'`, { what: 'dark theme' })
+  await linedUp('dark 1440')
+  await drive.evaluate(`window.desktop.setTheme('light')`)
+  await drive.waitFor(`document.documentElement.dataset.theme === 'light'`, { what: 'light theme' })
+  await linedUp('light 1440')
+  await drive.resize(1205, 803)
+  await linedUp('light 1205')
+  await drive.evaluate(`window.desktop.setTheme('dark')`)
+  await drive.waitFor(`document.documentElement.dataset.theme === 'dark'`, { what: 'dark theme again' })
+  await linedUp('dark 1205')
   await drive.evaluate(openAllStepsScript())
   await drive.resize(1440, 900)
   await sleep(1200)

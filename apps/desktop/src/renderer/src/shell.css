@@ -12937,10 +12937,12 @@ textarea {
 }
 
 /*
- * The exit code, at the HEAD of the command line.
+ * The exit code, at the RIGHT end of the command line.
  *
- * It sat at the far right, which is where the eye arrives last for the fact
- * that decides whether the output below is worth reading at all.
+ * It used to lead, so the command began a badge's width to the right of the
+ * file names under it and the eye could not run down one edge. The badge's
+ * colour, wording and hover are unchanged; only its place moved, to where a
+ * read row already says done.
  */
 /*
  * A command the runtime was told not to wait for. Muted rather than
@@ -13600,6 +13602,14 @@ textarea {
 .lc-picker__row:disabled {
   cursor: default;
   opacity: 0.75;
+}
+
+/* A row whose second line only repeated its heading. One line, still a
+   finger's target: 32px is the floor, the heading already said the rest. */
+.lc-picker__row.is-plain {
+  min-height: 32px;
+  padding-top: var(--lc-space-2);
+  padding-bottom: var(--lc-space-2);
 }
 
 /*

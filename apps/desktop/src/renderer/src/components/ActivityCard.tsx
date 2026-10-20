@@ -666,13 +666,13 @@ export function ActivityCard({
                  * paid for twice. The chevron follows the evidence.
                  */
                 /*
-                 * The exit code leads, as a badge.
+                 * The exit code sits at the right end, as a badge.
                  *
-                 * It used to sit at the far right of the command line, which
-                 * is where the eye arrives LAST for the fact that decides
-                 * whether any of the output below is worth reading (design,
-                 * 2026-09-08). Green for a clean exit, red for a failure, and
-                 * it arrives before the thing it is a verdict on.
+                 * It used to lead the row, so `rg …` began about a badge's
+                 * width to the right of the file names under it and the eye
+                 * could not run down one edge. A read row already says
+                 * `done` at that end. The badge's colour, wording and hover
+                 * are the same; only its place changed.
                  *
                  * A command that printed NOTHING is a static row saying so.
                  * It used to open onto an empty box, which reads as "the app
@@ -694,7 +694,6 @@ export function ActivityCard({
                 (entry.output === undefined || entry.output.trim() === '') && entry.title === undefined ? (
                   <div className="lc-filerow is-shell is-static">
                     <Icon name="terminal" size={14} />
-                    <span className={`lc-shellbadge ${shellResultClass(entry, finished)}`} title={refusedWhy(entry)}>{shellResult(entry, finished)}</span>
                     {/* Nothing printed and nothing said about it, so nothing
                       * to open onto -- the command is the row. */}
                     <span
@@ -707,6 +706,7 @@ export function ActivityCard({
                     </span>
                     <BackgroundBadge entry={entry} />
                     <ReachBadge entry={entry} />
+                    <span className={`lc-shellbadge ${shellResultClass(entry, finished)}`} title={refusedWhy(entry)}>{shellResult(entry, finished)}</span>
                     {entry.output !== undefined && entry.settled && (
                       <span className="lc-filerow__result is-muted">no output</span>
                     )}
@@ -716,7 +716,6 @@ export function ActivityCard({
                   <>
                     <button type="button" className="lc-filerow is-shell" onClick={() => toggle(entry)} aria-expanded={isOpen(entry)}>
                       <Icon name="terminal" size={14} />
-                      <span className={`lc-shellbadge ${shellResultClass(entry, finished)}`} title={refusedWhy(entry)}>{shellResult(entry, finished)}</span>
                       {/*
                         * What it was DOING, where the runtime says so.
                         *
@@ -755,6 +754,7 @@ export function ActivityCard({
                       <BackgroundBadge entry={entry} />
                       <ReachBadge entry={entry} />
                       <SandboxBadge entry={entry} />
+                      <span className={`lc-shellbadge ${shellResultClass(entry, finished)}`} title={refusedWhy(entry)}>{shellResult(entry, finished)}</span>
                       {entry.output !== undefined && entry.output.trim() === '' && entry.settled && (
                         <span className="lc-filerow__result is-muted">no output</span>
                       )}

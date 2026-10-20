@@ -41,25 +41,23 @@ const render = (details: readonly ActivityDetail[]): string =>
   )
 
 describe('the four command cases the design drew', () => {
-  it('a clean run leads with a green exit badge, before the command', () => {
+  it('a clean run keeps a green exit badge, after the command', () => {
     /*
-     * THE positional claim. The exit code used to sit at the far right of the
-     * row, which is where the eye arrives last for the fact that decides
-     * whether the output below is worth reading at all.
-     *
+     * THE positional claim. The badge used to lead, so the command began a
+     * badge's width to the right of the file names in the rows under it.
      * Asserted by INDEX in the markup rather than by presence, because "the
      * badge exists" was true before the change too.
      */
     const html = render([shell({ name: 'seq 1 300', output: '1\n2\n3', exitCode: 0 })])
     const badge = html.indexOf('lc-shellbadge')
     const command = html.indexOf('seq 1 300')
-    expect(badge).toBeGreaterThan(-1)
-    expect(badge).toBeLessThan(command)
+    expect(command).toBeGreaterThan(-1)
+    expect(command).toBeLessThan(badge)
     expect(html).toContain('is-ok')
     expect(html).toContain('exit 0')
   })
 
-  it('a failing run is red at the head', () => {
+  it('a failing run is red, and still says so', () => {
     const html = render([
       shell({ name: 'pnpm test billing', output: 'FAIL src/billing.test.ts', exitCode: 1, failed: true })
     ])
